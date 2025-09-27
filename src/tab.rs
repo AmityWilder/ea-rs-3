@@ -104,13 +104,7 @@ impl EditorTab {
                 let mut d = d.begin_mode2D(camera);
                 if camera.zoom.recip() >= f32::from(GRID_SIZE) {
                     // size of 1 pixel is smaller than a grid
-                    d.draw_rectangle(
-                        start.x,
-                        start.y,
-                        end.x - start.x,
-                        end.y - start.y,
-                        theme.background1,
-                    );
+                    d.clear_background(theme.background1);
                 } else {
                     for y in (start.y..=end.y).step_by(GRID_SIZE as usize) {
                         d.draw_line(start.x, y, end.x, y, theme.background1);

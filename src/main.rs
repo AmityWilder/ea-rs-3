@@ -1,106 +1,17 @@
 use crate::{
+    console::Console,
     input::Bindings,
+    ivec::{IBounds, IRect, IVec2},
     tab::{EditorTab, Tab, TabList},
     theme::Theme,
 };
 use raylib::prelude::*;
 
+mod console;
 mod input;
+mod ivec;
 mod tab;
 mod theme;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct IVec2 {
-    pub x: i32,
-    pub y: i32,
-}
-
-impl IVec2 {
-    pub const fn as_vec2(self) -> Vector2 {
-        Vector2 {
-            x: self.x as f32,
-            y: self.y as f32,
-        }
-    }
-
-    pub const fn from_vec2(value: Vector2) -> Self {
-        Self {
-            x: value.x as i32,
-            y: value.y as i32,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct IRect {
-    pub x: i32,
-    pub y: i32,
-    pub w: i32,
-    pub h: i32,
-}
-
-impl IRect {
-    pub fn as_rect(&self) -> Rectangle {
-        Rectangle {
-            x: self.x as f32,
-            y: self.y as f32,
-            width: self.w as f32,
-            height: self.h as f32,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct IBounds {
-    pub min: IVec2,
-    pub max: IVec2,
-}
-
-impl From<IBounds> for IRect {
-    fn from(value: IBounds) -> Self {
-        IRect {
-            x: value.min.x,
-            y: value.min.y,
-            w: value.max.x - value.min.x,
-            h: value.max.y - value.min.y,
-        }
-    }
-}
-
-impl From<IRect> for IBounds {
-    fn from(value: IRect) -> Self {
-        IBounds {
-            min: IVec2 {
-                x: value.x,
-                y: value.y,
-            },
-            max: IVec2 {
-                x: value.x + value.w,
-                y: value.y + value.h,
-            },
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Console {
-    content: String,
-    colors: Vec<(std::ops::Range<usize>, Color)>,
-}
-
-impl Console {
-    pub fn text_blocks(
-        &self,
-    ) -> impl ExactSizeIterator<Item = (&str, Color)>
-    + DoubleEndedIterator
-    + Clone
-    + std::iter::FusedIterator {
-        self.colors
-            .iter()
-            .cloned()
-            .map(|(range, color)| (&self.content[range], color))
-    }
-}
 
 pub const GRID_SIZE: u8 = 8;
 
@@ -126,30 +37,39 @@ fn main() {
 
     let theme = Theme::default();
     let bindings = Bindings::default();
+
     let mut tabs = TabList::from([Tab::Editor(
         EditorTab::new(
             &mut rl,
             &thread,
-            IBounds {
-                min: IVec2 { x: 0, y: 0 },
-                max: IVec2 { x: 1280, y: 720 },
-            },
+            IBounds::new(IVec2::zero(), IVec2::new(1280, 720)),
         )
         .unwrap(),
     )]);
+
+    let mut console = Console::new(
+        IBounds::new(IVec2::new(0, 520), IVec2::new(1280, 720)),
+        4096,
+    );
+
+    console
+        .log([
+            (format_args!("squeak squeak\n:3"), theme.caution),
+            (format_args!("ee"), theme.input),
+            (format_args!("ee!"), theme.input),
+            (format_args!("^w^"), theme.special),
+        ])
+        .unwrap();
 
     while !rl.window_should_close() {
         if let Some(tab) = tabs.focused_tab_mut() {
             match tab {
                 Tab::Editor(tab) => {
                     if rl.is_window_resized() {
-                        let bounds = IBounds {
-                            min: IVec2 { x: 0, y: 0 },
-                            max: IVec2 {
-                                x: rl.get_screen_width(),
-                                y: rl.get_screen_height(),
-                            },
-                        };
+                        let bounds = IBounds::new(
+                            IVec2::zero(),
+                            IVec2::new(rl.get_screen_width(), rl.get_screen_height()),
+                        );
                         tab.update_bounds(&mut rl, &thread, bounds).unwrap();
                     }
 
@@ -172,16 +92,34 @@ fn main() {
                 Tab::Editor(tab) => {
                     let IRect { x, y, w, h } = IRect::from(*tab.bounds());
                     let mut d = d.begin_scissor_mode(x, y, w, h);
-                    let tex = tab.grid_tex();
                     d.draw_texture_pro(
-                        tex,
-                        Rectangle::new(0.0, 0.0, tex.width() as f32, -tex.height() as f32),
-                        Rectangle::new(0.0, 0.0, tex.width() as f32, tex.height() as f32),
+                        tab.grid_tex(),
+                        rrect(x, y, w, -h),
+                        rrect(x, y, w, h),
                         Vector2::zero(),
                         0.0,
                         Color::WHITE,
                     );
                     let mut d = d.begin_mode2D(tab.camera());
+                }
+            }
+        }
+
+        // console
+        {
+            let IRect { x, y, w, h } = IRect::from(*console.bounds());
+            let mut d = d.begin_scissor_mode(x, y, w, h);
+            d.clear_background(theme.background2);
+            let mut x = x + 5;
+            let mut y = y + 5;
+            let left = x;
+            for (text, color) in console.content() {
+                d.draw_text(text, x, y, 10, color);
+                if text.contains('\n') {
+                    y += i32::try_from((text.lines().count() - 1) * 12).unwrap();
+                    x = left + d.measure_text(text.lines().last().unwrap(), 10) + 1;
+                } else {
+                    x += d.measure_text(text, 10) + 1;
                 }
             }
         }
