@@ -186,10 +186,8 @@ fn main() {
             } in console.content()
             {
                 // assumes h is never negative and bounds.max >= bounds.min
-                if y + h >= console.bounds.min.y && y <= console.bounds.max.y {
+                if y + h >= console.bounds.min.y + 5 && y <= console.bounds.max.y - 5 {
                     d.draw_text(text, x, y, theme.console_font_size, color.get(&theme));
-                } else {
-                    println!("({color:?}, {text:?})");
                 }
                 if is_y_changing {
                     y += height
