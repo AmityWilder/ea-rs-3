@@ -6,6 +6,7 @@ use crate::{
     theme::{ColorId, Theme},
 };
 use raylib::prelude::*;
+use rl_input::Event;
 
 mod console;
 mod input;
@@ -36,7 +37,7 @@ fn main() {
     }
 
     let theme = Theme::default();
-    let input = Bindings::default();
+    let binds = Bindings::default();
 
     let mut tabs = TabList::from([Tab::Editor(
         EditorTab::new(
@@ -48,9 +49,16 @@ fn main() {
     )]);
 
     let mut console = Console::new(
-        IBounds::new(IVec2::new(0, 520), IVec2::new(1280, 720)),
         4096,
+        IBounds::new(IVec2::new(0, 520), IVec2::new(1280, 720)),
+        true,
+        false,
+        true,
+        true,
     );
+
+    let mut hovering_console_top = Event::Inactive;
+    let mut dragging_console_top = Event::Inactive;
 
     log!(
         console,
@@ -62,6 +70,36 @@ fn main() {
     .unwrap();
 
     while !rl.window_should_close() {
+        // Tick
+
+        hovering_console_top.step();
+        dragging_console_top.step();
+
+        let input = binds.get_all(&rl);
+
+        if rl.is_window_resized() {
+            let window_width = rl.get_screen_width();
+            let window_height = rl.get_screen_height();
+            if console.right_anchored {
+                if console.left_anchored {
+                    console.bounds.max.x = window_width;
+                } else {
+                    let width = console.bounds.max.x - console.bounds.min.x;
+                    console.bounds.min.x = window_width - width;
+                    console.bounds.max.x = window_width;
+                }
+            }
+            if console.bottom_anchored {
+                if console.top_anchored {
+                    console.bounds.max.y = window_width;
+                } else {
+                    let height = console.bounds.max.y - console.bounds.min.y;
+                    console.bounds.min.y = window_height - height;
+                    console.bounds.max.y = window_height;
+                }
+            }
+        }
+
         if let Some(tab) = tabs.focused_tab_mut() {
             match tab {
                 Tab::Editor(tab) => {
@@ -73,7 +111,7 @@ fn main() {
                         tab.update_bounds(&mut rl, &thread, bounds).unwrap();
                     }
 
-                    tab.zoom(input.zoom.get(&rl));
+                    tab.zoom(input.zoom);
                 }
             }
         }
@@ -83,6 +121,30 @@ fn main() {
                 Tab::Editor(tab) => tab.refresh_grid(&mut rl, &thread, &theme),
             }
         }
+
+        // TODO: does it make more sense to have dedicated inputs for this?
+        if (console.bounds.min.y..console.bounds.min.y + 3).contains(&(input.cursor.y as i32)) {
+            hovering_console_top.activate();
+            if input.primary.is_starting() {
+                dragging_console_top.activate();
+            }
+        } else if dragging_console_top.is_inactive() {
+            hovering_console_top.deactivate();
+        }
+        if dragging_console_top.is_active() && input.primary.is_ending() {
+            dragging_console_top.deactivate();
+        }
+        if dragging_console_top.is_active() {
+            console.bounds.min.y = input.cursor.y as i32;
+        }
+
+        if hovering_console_top == Event::Starting {
+            rl.set_mouse_cursor(MouseCursor::MOUSE_CURSOR_RESIZE_NS);
+        } else if hovering_console_top == Event::Ending {
+            rl.set_mouse_cursor(MouseCursor::MOUSE_CURSOR_DEFAULT);
+        }
+
+        // Draw
 
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(theme.background);
@@ -107,10 +169,11 @@ fn main() {
 
         // console
         {
-            let IRect { x, y, w, h } = IRect::from(*console.bounds());
+            let IRect { x, y, w, h } = IRect::from(console.bounds);
             let mut d = d.begin_scissor_mode(x, y, w, h);
             d.clear_background(theme.background2);
-            let mut x = x + 5;
+            d.draw_rectangle(x + 2, y + 2, w - 4, h - 4, theme.background1);
+            let mut x = x + 5 + 10;
             let mut y = y + 5;
             let left = x;
             for (color, text) in console.content() {
@@ -135,20 +198,20 @@ fn main() {
                 input.cursor:\n  {:?}\n  {:?}\n\
                 input.pan:\n  {:?}\n  {:?}\
                 ",
-                &input.primary,
-                input.primary.is_active(&d),
-                &input.secondary,
-                input.secondary.is_active(&d),
-                &input.alternate,
-                input.alternate.is_active(&d),
-                &input.parallel,
-                input.parallel.is_active(&d),
-                &input.zoom,
-                input.zoom.get(&d),
-                &input.cursor,
-                input.cursor.get(&d),
-                &input.pan,
-                input.pan.get(&d),
+                &binds.primary,
+                input.primary,
+                &binds.secondary,
+                input.secondary,
+                &binds.alternate,
+                input.alternate,
+                &binds.parallel,
+                input.parallel,
+                &binds.zoom,
+                input.zoom,
+                &binds.cursor,
+                input.cursor,
+                &binds.pan,
+                input.pan,
             ),
             5,
             5,

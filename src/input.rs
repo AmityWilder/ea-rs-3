@@ -1,5 +1,16 @@
 use raylib::prelude::*;
-use rl_input::{AxisSource, EventSource, VectorSource};
+use rl_input::{AxisSource, Event, EventSource, VectorSource};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Inputs {
+    pub primary: Event,
+    pub secondary: Event,
+    pub alternate: Event,
+    pub parallel: Event,
+    pub zoom: f32,
+    pub cursor: Vector2,
+    pub pan: Vector2,
+}
 
 #[derive(Debug, Clone)]
 pub struct Bindings {
@@ -41,6 +52,20 @@ impl Default for Bindings {
                     VectorSource::Constant(rvec2(0, 1)),
                 ),
             ])),
+        }
+    }
+}
+
+impl Bindings {
+    pub fn get_all(&self, rl: &RaylibHandle) -> Inputs {
+        Inputs {
+            primary: self.primary.get(rl),
+            secondary: self.secondary.get(rl),
+            alternate: self.alternate.get(rl),
+            parallel: self.parallel.get(rl),
+            zoom: self.zoom.get(rl),
+            cursor: self.cursor.get(rl),
+            pan: self.pan.get(rl),
         }
     }
 }

@@ -1,6 +1,6 @@
 use crate::{
     ivec::IBounds,
-    theme::{Theme, ColorId},
+    theme::{ColorId, Theme},
 };
 use raylib::prelude::*;
 use std::{collections::VecDeque, fmt::Write};
@@ -36,17 +36,32 @@ impl From<Color> for ColorRef {
 pub struct Console {
     content: String,
     colors: VecDeque<(usize, ColorRef)>,
-    bounds: IBounds,
     capacity: usize,
+    pub bounds: IBounds,
+    pub left_anchored: bool,
+    pub top_anchored: bool,
+    pub right_anchored: bool,
+    pub bottom_anchored: bool,
 }
 
 impl Console {
-    pub const fn new(bounds: IBounds, capacity: usize) -> Self {
+    pub const fn new(
+        capacity: usize,
+        bounds: IBounds,
+        left_anchored: bool,
+        top_anchored: bool,
+        right_anchored: bool,
+        bottom_anchored: bool,
+    ) -> Self {
         Self {
             content: String::new(),
             colors: VecDeque::new(),
-            bounds,
             capacity,
+            bounds,
+            left_anchored,
+            top_anchored,
+            right_anchored,
+            bottom_anchored,
         }
     }
 
@@ -89,10 +104,6 @@ impl Console {
             *end += len;
             Some((color, &self.content[start..*end]))
         })
-    }
-
-    pub fn bounds(&self) -> &IBounds {
-        &self.bounds
     }
 }
 

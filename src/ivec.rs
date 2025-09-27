@@ -89,4 +89,12 @@ impl IBounds {
     pub const fn new(min: IVec2, max: IVec2) -> Self {
         Self { min, max }
     }
+
+    pub fn y(&self) -> std::ops::RangeInclusive<i32> {
+        self.min.y..=self.max.y
+    }
+
+    pub fn x(&self) -> std::ops::RangeInclusive<i32> {
+        self.min.x..=self.max.x
+    }
 }

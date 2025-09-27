@@ -1,5 +1,73 @@
 use raylib::prelude::*;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Event {
+    Inactive,
+    Starting,
+    Active,
+    Ending,
+}
+
+impl Event {
+    #[inline]
+    pub fn is_active(self) -> bool {
+        matches!(self, Self::Active | Self::Starting)
+    }
+
+    #[inline]
+    pub fn is_inactive(self) -> bool {
+        matches!(self, Self::Inactive | Self::Ending)
+    }
+
+    #[inline]
+    pub fn is_starting(self) -> bool {
+        matches!(self, Self::Starting)
+    }
+
+    #[inline]
+    pub fn is_ending(self) -> bool {
+        matches!(self, Self::Ending)
+    }
+
+    #[inline]
+    pub fn is_changing(self) -> bool {
+        matches!(self, Self::Starting | Self::Ending)
+    }
+
+    /// Set to [`Event::Starting`] if currently [inactive](Self::is_inactive), and [`Event::Active`] otherwise
+    #[inline]
+    pub fn activate(&mut self) {
+        *self = match *self {
+            Self::Inactive | Self::Ending => Self::Starting,
+            Self::Active | Self::Starting => Self::Active,
+        };
+    }
+
+    /// Set to [`Event::Ending`] if currently [inactive](Self::is_active), and [`Event::Inactive`] otherwise
+    #[inline]
+    pub fn deactivate(&mut self) {
+        *self = match *self {
+            Self::Active | Self::Starting => Self::Ending,
+            Self::Inactive | Self::Ending => Self::Inactive,
+        };
+    }
+
+    /// Downgrades [`Event::Starting`] to [`Event::Active`] and [`Event::Ending`] to [`Event::Inactive`]
+    #[inline]
+    pub fn next(self) -> Self {
+        match self {
+            Self::Starting | Self::Active => Self::Active,
+            Self::Ending | Self::Inactive => Self::Inactive,
+        }
+    }
+
+    /// Sets to the output of [`Self::next`]
+    #[inline]
+    pub fn step(&mut self) {
+        *self = self.next();
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Combo<T> {
     /// Equivalent to `Or`
@@ -12,16 +80,17 @@ pub enum Combo<T> {
 
 #[derive(Debug, Clone)]
 pub enum EventSource {
-    Always,
+    Constant(Event),
     Keyboard(KeyboardKey),
     Mouse(MouseButton),
     Combo(Combo<Self>),
 }
 
 impl EventSource {
+    #[inline]
     pub fn is_active(&self, rl: &RaylibHandle) -> bool {
         match self {
-            Self::Always => true,
+            Self::Constant(event) => event.is_active(),
             Self::Keyboard(key) => rl.is_key_down(*key),
             Self::Mouse(button) => rl.is_mouse_button_down(*button),
             Self::Combo(Combo::Add(items)) => items.iter().any(|x| x.is_active(rl)),
@@ -30,9 +99,10 @@ impl EventSource {
         }
     }
 
+    #[inline]
     pub fn is_starting(&self, rl: &RaylibHandle) -> bool {
         match self {
-            Self::Always => false,
+            Self::Constant(event) => event.is_starting(),
             Self::Keyboard(key) => rl.is_key_pressed(*key),
             Self::Mouse(button) => rl.is_mouse_button_pressed(*button),
             Self::Combo(Combo::Add(items)) => items.iter().any(|x| x.is_starting(rl)),
@@ -43,9 +113,10 @@ impl EventSource {
         }
     }
 
+    #[inline]
     pub fn is_ending(&self, rl: &RaylibHandle) -> bool {
         match self {
-            Self::Always => false,
+            Self::Constant(event) => event.is_ending(),
             Self::Keyboard(key) => rl.is_key_released(*key),
             Self::Mouse(button) => rl.is_mouse_button_released(*button),
             Self::Combo(Combo::Add(items)) => {
@@ -61,6 +132,24 @@ impl EventSource {
             Self::Combo(Combo::Neg(item)) => !item.is_ending(rl),
         }
     }
+
+    /// Prefer calling [`Self::is_active`], [`Self::is_starting`], or [`Self::is_ending`] if you only need one
+    #[inline]
+    pub fn get(&self, rl: &RaylibHandle) -> Event {
+        if let Self::Constant(event) = self {
+            *event
+        } else if self.is_active(rl) {
+            if self.is_starting(rl) {
+                Event::Starting
+            } else {
+                Event::Active
+            }
+        } else if self.is_ending(rl) {
+            Event::Ending
+        } else {
+            Event::Inactive
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -72,6 +161,7 @@ pub enum AxisSource {
 }
 
 impl AxisSource {
+    #[inline]
     pub fn get(&self, rl: &RaylibHandle) -> f32 {
         match self {
             Self::Constant(x) => *x,
@@ -99,6 +189,7 @@ pub enum VectorSource {
 }
 
 impl VectorSource {
+    #[inline]
     pub fn get(&self, rl: &RaylibHandle) -> Vector2 {
         match self {
             Self::Constant(v) => *v,
