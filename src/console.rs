@@ -23,13 +23,13 @@ impl Console {
     /// NOTE: You will need to append with newline
     pub fn log<'a>(
         &mut self,
-        text: impl IntoIterator<Item = (std::fmt::Arguments<'a>, Color)>,
+        text: impl IntoIterator<Item = (Color, std::fmt::Arguments<'a>)>,
     ) -> std::fmt::Result {
         let it = text.into_iter();
         let (size_min, size_max) = it.size_hint();
         self.colors.reserve(size_max.unwrap_or(size_min));
         // cant reserve content because we dont know the len of each element without consuming the iterator
-        for (args, color) in it {
+        for (color, args) in it {
             let start = self.content.len();
             self.content.write_fmt(args)?;
             let end = self.content.len();
@@ -53,16 +53,22 @@ impl Console {
         Ok(())
     }
 
-    pub fn content(&self) -> impl Iterator<Item = (&str, Color)> {
-        let mut end = 0;
+    pub fn content(&self) -> impl Iterator<Item = (Color, &str)> {
         self.colors.iter().scan(0, move |end, &(len, color)| {
             let start = *end;
             *end += len;
-            Some((&self.content[start..*end], color))
+            Some((color, &self.content[start..*end]))
         })
     }
 
     pub fn bounds(&self) -> &IBounds {
         &self.bounds
     }
+}
+
+#[macro_export]
+macro_rules! log {
+    ($console:expr, $(($color:expr, $($args:tt)+)),+ $(,)?) => {
+        $crate::Console::log(&mut $console, [$(($color, format_args!($($args)+))),+])
+    };
 }

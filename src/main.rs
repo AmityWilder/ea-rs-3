@@ -52,14 +52,14 @@ fn main() {
         4096,
     );
 
-    console
-        .log([
-            (format_args!("squeak squeak\n:3"), theme.caution),
-            (format_args!("ee"), theme.input),
-            (format_args!("ee!"), theme.input),
-            (format_args!("^w^"), theme.special),
-        ])
-        .unwrap();
+    log!(
+        console,
+        (theme.caution, "squeak squeak\n:3"),
+        (theme.input, " ee"),
+        (theme.input, "ee!\n"),
+        (theme.special, "^w^"),
+    )
+    .unwrap();
 
     while !rl.window_should_close() {
         if let Some(tab) = tabs.focused_tab_mut() {
@@ -113,11 +113,11 @@ fn main() {
             let mut x = x + 5;
             let mut y = y + 5;
             let left = x;
-            for (text, color) in console.content() {
+            for (color, text) in console.content() {
                 d.draw_text(text, x, y, 10, color);
                 if text.contains('\n') {
-                    y += i32::try_from((text.lines().count() - 1) * 12).unwrap();
-                    x = left + d.measure_text(text.lines().last().unwrap(), 10) + 1;
+                    y += i32::try_from((text.split('\n').count() - 1) * 12).unwrap();
+                    x = left + d.measure_text(text.split('\n').next_back().unwrap(), 10) + 1;
                 } else {
                     x += d.measure_text(text, 10) + 1;
                 }
