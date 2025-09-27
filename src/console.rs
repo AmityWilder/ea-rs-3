@@ -32,11 +32,32 @@ impl From<Color> for ColorRef {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RichChunk<'a> {
+    pub text: &'a str,
+    pub color: ColorRef,
+    pub x_change: i32,
+    pub height: i32,
+    /// Whether to add `height` to your `y`
+    pub is_y_changing: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RichChunkData {
+    pub len: usize,
+    pub color: ColorRef,
+    pub x_change: i32,
+    pub height: i32,
+    /// Whether to add `height` to your `y`
+    pub is_y_changing: bool,
+}
+
 #[derive(Debug)]
 pub struct Console {
     content: String,
-    colors: VecDeque<(usize, ColorRef)>,
+    colors: VecDeque<RichChunkData>,
     capacity: usize,
+    end_x: i32,
     pub bounds: IBounds,
     pub left_anchored: bool,
     pub top_anchored: bool,
@@ -57,6 +78,7 @@ impl Console {
             content: String::new(),
             colors: VecDeque::new(),
             capacity,
+            end_x: 0,
             bounds,
             left_anchored,
             top_anchored,
@@ -66,8 +88,11 @@ impl Console {
     }
 
     /// NOTE: You will need to append with newline
+    /// NOTE: Remember to call [`Self::refresh_chunk_sizes`] if the font size has changed
     pub fn log<'a>(
         &mut self,
+        rl: &RaylibHandle,
+        theme: &Theme,
         text: impl IntoIterator<Item = (ColorRef, std::fmt::Arguments<'a>)>,
     ) -> std::fmt::Result {
         let it = text.into_iter();
@@ -78,13 +103,22 @@ impl Console {
             let start = self.content.len();
             self.content.write_fmt(args)?;
             let end = self.content.len();
-            self.colors.push_back((end - start, color));
+            let (x_change, height, is_y_changing) =
+                Self::measure_chunk(rl, theme, &self.content[start..end], self.end_x);
+            self.end_x += x_change;
+            self.colors.push_back(RichChunkData {
+                len: end - start,
+                color,
+                x_change,
+                height,
+                is_y_changing,
+            });
             let mut total_size = 0;
             let (sum, count) = self
                 .colors
                 .iter()
                 .rev()
-                .map(|(size, _)| *size)
+                .map(|chunk| chunk.len)
                 .skip_while(|&size| {
                     total_size += size;
                     total_size <= self.capacity
@@ -98,20 +132,59 @@ impl Console {
         Ok(())
     }
 
-    pub fn content(&self) -> impl Iterator<Item = (ColorRef, &str)> {
-        self.colors.iter().scan(0, move |end, &(len, color)| {
+    /// `(x_change, height, is_y_changing)`
+    fn measure_chunk(rl: &RaylibHandle, theme: &Theme, s: &str, x: i32) -> (i32, i32, bool) {
+        if s.contains('\n') {
+            (
+                rl.measure_text(s.split('\n').next_back().unwrap(), theme.console_font_size) + 1
+                    - x,
+                i32::try_from((s.split('\n').count() - 1) * 12).unwrap(),
+                true,
+            )
+        } else {
+            (rl.measure_text(s, theme.console_font_size) + 1, 12, false)
+        }
+    }
+
+    /// Call this when font size changes
+    pub fn refresh_chunk_sizes(&mut self, rl: &RaylibHandle, theme: &Theme) {
+        self.end_x = 0;
+        for (chunk, s) in self.colors.iter_mut().scan(0, |end, chunk| {
             let start = *end;
-            *end += len;
-            Some((color, &self.content[start..*end]))
+            *end += chunk.len;
+            Some((chunk, &self.content[start..*end]))
+        }) {
+            let (x_change, height, is_y_changing) = Self::measure_chunk(rl, theme, s, self.end_x);
+            self.end_x += x_change;
+            chunk.x_change = x_change;
+            chunk.height = height;
+            chunk.is_y_changing = is_y_changing;
+        }
+    }
+
+    pub fn content(&self) -> impl Iterator<Item = RichChunk<'_>> {
+        self.colors.iter().scan(0, |end, &chunk| {
+            let start = *end;
+            *end += chunk.len;
+            Some(RichChunk {
+                text: &self.content[start..*end],
+                color: chunk.color,
+                x_change: chunk.x_change,
+                height: chunk.height,
+                is_y_changing: chunk.is_y_changing,
+            })
         })
     }
 }
 
 #[macro_export]
 macro_rules! log {
-    ($console:expr, $(($color:expr, $($args:tt)+)),+ $(,)?) => {
-        $crate::console::Console::log(&mut $console, [$(
-            ($crate::console::ColorRef::from($color), format_args!($($args)+))
-        ),+])
+    ($console:expr, $rl:expr, $theme:expr, $(($color:expr, $($args:tt)+)),+ $(,)?) => {
+        $crate::console::Console::log(
+            &mut $console,
+            &$rl,
+            &$theme,
+            [$( ($crate::console::ColorRef::from($color), format_args!($($args)+)) ),+]
+        )
     };
 }

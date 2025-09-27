@@ -1,5 +1,5 @@
 use crate::{
-    console::Console,
+    console::{Console, RichChunk},
     input::Bindings,
     ivec::{IBounds, IRect, IVec2},
     tab::{EditorTab, Tab, TabList},
@@ -62,6 +62,8 @@ fn main() {
 
     log!(
         console,
+        rl,
+        theme,
         (theme.caution, "squeak squeak\n:3"),
         (theme.input, " ee"),
         (ColorId::Input, "ee!\n"),
@@ -135,7 +137,7 @@ fn main() {
             dragging_console_top.deactivate();
         }
         if dragging_console_top.is_active() {
-            console.bounds.min.y = input.cursor.y as i32;
+            console.bounds.min.y = (input.cursor.y as i32).min(console.bounds.max.y - 20);
         }
 
         if hovering_console_top == Event::Starting {
@@ -170,20 +172,29 @@ fn main() {
         // console
         {
             let IRect { x, y, w, h } = IRect::from(console.bounds);
-            let mut d = d.begin_scissor_mode(x, y, w, h);
-            d.clear_background(theme.background2);
-            d.draw_rectangle(x + 2, y + 2, w - 4, h - 4, theme.background1);
-            let mut x = x + 5 + 10;
+            d.draw_rectangle(x, y, w, h, theme.background2);
+            d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, theme.background1);
+            let mut x = x + 15;
             let mut y = y + 5;
-            let left = x;
-            for (color, text) in console.content() {
-                d.draw_text(text, x, y, 10, color.get(&theme));
-                if text.contains('\n') {
-                    y += i32::try_from((text.split('\n').count() - 1) * 12).unwrap();
-                    x = left + d.measure_text(text.split('\n').next_back().unwrap(), 10) + 1;
+            let mut d = d.begin_scissor_mode(x, y, w - 30, h - 10);
+            for RichChunk {
+                text,
+                color,
+                x_change,
+                height,
+                is_y_changing,
+            } in console.content()
+            {
+                // assumes h is never negative and bounds.max >= bounds.min
+                if y + h >= console.bounds.min.y && y <= console.bounds.max.y {
+                    d.draw_text(text, x, y, theme.console_font_size, color.get(&theme));
                 } else {
-                    x += d.measure_text(text, 10) + 1;
+                    println!("({color:?}, {text:?})");
                 }
+                if is_y_changing {
+                    y += height
+                }
+                x += x_change;
             }
         }
 

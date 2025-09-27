@@ -33,6 +33,7 @@ pub struct Theme {
     pub special: Color,
     pub caution: Color,
     pub blueprints_background: Color,
+    pub console_font_size: i32,
 }
 
 impl Default for Theme {
@@ -56,6 +57,7 @@ impl Default for Theme {
             special: Color::VIOLET,
             caution: CAUTION_YELLOW,
             blueprints_background: Color::new(10, 15, 30, 255),
+            console_font_size: 10,
         }
     }
 }
