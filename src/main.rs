@@ -3,7 +3,7 @@ use crate::{
     input::Bindings,
     ivec::{IBounds, IRect, IVec2},
     tab::{EditorTab, Tab, TabList},
-    theme::Theme,
+    theme::{ColorId, Theme},
 };
 use raylib::prelude::*;
 
@@ -56,7 +56,7 @@ fn main() {
         console,
         (theme.caution, "squeak squeak\n:3"),
         (theme.input, " ee"),
-        (theme.input, "ee!\n"),
+        (ColorId::Input, "ee!\n"),
         (theme.special, "^w^"),
     )
     .unwrap();
@@ -114,7 +114,7 @@ fn main() {
             let mut y = y + 5;
             let left = x;
             for (color, text) in console.content() {
-                d.draw_text(text, x, y, 10, color);
+                d.draw_text(text, x, y, 10, color.get(&theme));
                 if text.contains('\n') {
                     y += i32::try_from((text.split('\n').count() - 1) * 12).unwrap();
                     x = left + d.measure_text(text.split('\n').next_back().unwrap(), 10) + 1;

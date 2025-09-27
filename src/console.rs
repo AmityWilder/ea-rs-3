@@ -1,11 +1,41 @@
-use crate::ivec::IBounds;
+use crate::{
+    ivec::IBounds,
+    theme::{Theme, ColorId},
+};
 use raylib::prelude::*;
 use std::{collections::VecDeque, fmt::Write};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColorRef {
+    Theme(ColorId),
+    Exact(Color),
+}
+
+impl ColorRef {
+    pub fn get(self, theme: &Theme) -> Color {
+        match self {
+            Self::Theme(id) => theme[id],
+            Self::Exact(color) => color,
+        }
+    }
+}
+
+impl From<ColorId> for ColorRef {
+    fn from(value: ColorId) -> Self {
+        Self::Theme(value)
+    }
+}
+
+impl From<Color> for ColorRef {
+    fn from(value: Color) -> Self {
+        Self::Exact(value)
+    }
+}
 
 #[derive(Debug)]
 pub struct Console {
     content: String,
-    colors: VecDeque<(usize, Color)>,
+    colors: VecDeque<(usize, ColorRef)>,
     bounds: IBounds,
     capacity: usize,
 }
@@ -23,7 +53,7 @@ impl Console {
     /// NOTE: You will need to append with newline
     pub fn log<'a>(
         &mut self,
-        text: impl IntoIterator<Item = (Color, std::fmt::Arguments<'a>)>,
+        text: impl IntoIterator<Item = (ColorRef, std::fmt::Arguments<'a>)>,
     ) -> std::fmt::Result {
         let it = text.into_iter();
         let (size_min, size_max) = it.size_hint();
@@ -53,7 +83,7 @@ impl Console {
         Ok(())
     }
 
-    pub fn content(&self) -> impl Iterator<Item = (Color, &str)> {
+    pub fn content(&self) -> impl Iterator<Item = (ColorRef, &str)> {
         self.colors.iter().scan(0, move |end, &(len, color)| {
             let start = *end;
             *end += len;
@@ -69,6 +99,8 @@ impl Console {
 #[macro_export]
 macro_rules! log {
     ($console:expr, $(($color:expr, $($args:tt)+)),+ $(,)?) => {
-        $crate::Console::log(&mut $console, [$(($color, format_args!($($args)+))),+])
+        $crate::console::Console::log(&mut $console, [$(
+            ($crate::console::ColorRef::from($color), format_args!($($args)+))
+        ),+])
     };
 }
