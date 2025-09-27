@@ -1,8 +1,9 @@
 use std::sync::{Arc, RwLock};
 
 use crate::{
-    console::{Console, RichChunk},
+    console::{Console, LogType, RichChunk},
     graph::{Gate, Graph},
+    icon_sheets::{ButtonIconSheets, NodeIconSheetId, NodeIconSheetSets},
     input::Bindings,
     ivec::{IBounds, IRect, IVec2},
     tab::{EditorTab, Tab, TabList},
@@ -15,6 +16,7 @@ use rl_input::Event;
 
 mod console;
 mod graph;
+mod icon_sheets;
 mod input;
 mod ivec;
 mod tab;
@@ -46,6 +48,9 @@ fn main() {
 
     let theme = Theme::default();
     let binds = Bindings::default();
+
+    let button_icon_sheets = ButtonIconSheets::load(&mut rl, &thread).unwrap();
+    let node_icon_sheets = NodeIconSheetSets::load(&mut rl, &thread).unwrap();
 
     let mut graphs = vec![Arc::new(RwLock::new(Graph::new()))];
 
@@ -139,10 +144,26 @@ fn main() {
                         match toolpane.tool {
                             Tool::Create {} => {
                                 if input.primary.is_starting() {
-                                    graph.create_node(
-                                        toolpane.gate,
-                                        tab.screen_to_world(input.cursor).snap(GRID_SIZE.into()),
-                                    );
+                                    let pos =
+                                        tab.screen_to_world(input.cursor).snap(GRID_SIZE.into());
+                                    if let Some(_idx) = graph.find_node_at_pos(pos) {
+                                        // TODO
+                                    } else {
+                                        graph.create_node(toolpane.gate, pos);
+                                        log!(
+                                            console,
+                                            rl,
+                                            theme,
+                                            (
+                                                LogType::Info,
+                                                "create `{}` node at ({}, {})\n",
+                                                &toolpane.gate,
+                                                pos.x,
+                                                pos.y
+                                            )
+                                        )
+                                        .unwrap();
+                                    }
                                 }
                             }
                             Tool::Erase {} => todo!(),
@@ -203,14 +224,23 @@ fn main() {
                     if let Some(graph) = tab.graph.upgrade() {
                         let graph = graph.read().unwrap();
                         for node in graph.nodes_iter() {
-                            d.draw_circle(
-                                node.position.x,
-                                node.position.y,
-                                f32::from(GRID_SIZE / 2),
+                            node_icon_sheets.draw(
+                                &mut d,
+                                tab.zoom_exp(),
+                                NodeIconSheetId::Basic,
+                                Rectangle {
+                                    x: node.position.x as f32,
+                                    y: node.position.y as f32,
+                                    width: GRID_SIZE.into(),
+                                    height: GRID_SIZE.into(),
+                                },
+                                node.gate,
+                                Vector2::zero(),
+                                0.0,
                                 if node.state() {
                                     theme.active
                                 } else {
-                                    theme.background3
+                                    theme.foreground
                                 },
                             );
                         }
@@ -233,7 +263,9 @@ fn main() {
                 x_change,
                 height,
                 is_y_changing,
-            } in console.content()
+            } in console
+                .content()
+                .skip_while(|chunk| chunk.text.split('\n').count())
             {
                 // assumes h is never negative and bounds.max >= bounds.min
                 if y + h >= console.bounds.min.y + 5 && y <= console.bounds.max.y - 5 {

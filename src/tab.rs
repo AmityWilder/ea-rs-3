@@ -34,6 +34,10 @@ impl EditorTab {
         })
     }
 
+    pub const fn zoom_exp(&self) -> f32 {
+        self.zoom_exp
+    }
+
     pub fn camera(&self) -> Camera2D {
         Camera2D {
             offset: Vector2::zero(),
@@ -107,12 +111,12 @@ impl EditorTab {
                 IVec2::from_vec2(rl.get_screen_to_world2D(self.bounds.max.as_vec2(), camera));
 
             start = start.snap(GRID_SIZE.into());
-            start.x -= i32::from(GRID_SIZE / 2);
-            start.y -= i32::from(GRID_SIZE / 2);
+            start.x -= i32::from(GRID_SIZE);
+            start.y -= i32::from(GRID_SIZE);
 
             end = end.snap(GRID_SIZE.into());
-            end.x += i32::from(GRID_SIZE / 2);
-            end.y += i32::from(GRID_SIZE / 2);
+            end.x += i32::from(GRID_SIZE);
+            end.y += i32::from(GRID_SIZE);
 
             let mut d = rl.begin_texture_mode(thread, &mut self.grid);
             d.clear_background(Color::BLANK);

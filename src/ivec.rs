@@ -32,8 +32,8 @@ impl IVec2 {
     }
 
     pub const fn snap(self, grid_size: i32) -> Self {
-        let x = self.x + self.x.signum() * grid_size / 2;
-        let y = self.y + self.y.signum() * grid_size / 2;
+        let x = self.x; // + self.x.signum() * grid_size / 2;
+        let y = self.y; // + self.y.signum() * grid_size / 2;
         Self {
             x: x - (x % grid_size),
             y: y - (y % grid_size),

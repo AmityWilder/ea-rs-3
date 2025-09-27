@@ -7,6 +7,27 @@ pub enum Gate {
     And,
     Nor,
     Xor,
+    Resistor {},
+    Capacitor {},
+    Led {},
+    Delay {},
+    Battery,
+}
+
+impl std::fmt::Display for Gate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Gate::Or => "or".fmt(f),
+            Gate::And => "and".fmt(f),
+            Gate::Nor => "nor".fmt(f),
+            Gate::Xor => "xor".fmt(f),
+            Gate::Resistor {} => write!(f, "resistor"),
+            Gate::Capacitor {} => write!(f, "capacitor"),
+            Gate::Led {} => write!(f, "led"),
+            Gate::Delay {} => write!(f, "delay"),
+            Gate::Battery => "battery".fmt(f),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -60,6 +81,18 @@ impl Graph {
             nodes: Vec::new(),
             wires: Vec::new(),
         }
+    }
+
+    pub fn find_node_at_pos(&self, pos: IVec2) -> Option<usize> {
+        self.nodes.iter().position(|node| node.position == pos)
+    }
+
+    pub fn node(&self, idx: usize) -> Option<&Node> {
+        self.nodes.get(idx)
+    }
+
+    pub fn node_mut(&mut self, idx: usize) -> Option<&mut Node> {
+        self.nodes.get_mut(idx)
     }
 
     pub fn create_node(&mut self, gate: Gate, position: IVec2) -> (usize, &mut Node) {

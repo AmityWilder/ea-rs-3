@@ -1,12 +1,24 @@
 use crate::{
-    ivec::IBounds,
+    ivec::{IBounds, IVec2},
     theme::{ColorId, Theme},
 };
 use raylib::prelude::*;
 use std::{collections::VecDeque, fmt::Write};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub enum LogType {
+    #[default]
+    Info,
+    Debug,
+    Attempt,
+    Success,
+    Warning,
+    Error,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorRef {
+    Trace(LogType),
     Theme(ColorId),
     Exact(Color),
 }
@@ -14,6 +26,14 @@ pub enum ColorRef {
 impl ColorRef {
     pub fn get(self, theme: &Theme) -> Color {
         match self {
+            Self::Trace(level) => match level {
+                LogType::Info => theme.foreground,
+                LogType::Debug => Color::MAGENTA,
+                LogType::Attempt => theme.special,
+                LogType::Success => theme.foreground1,
+                LogType::Warning => theme.caution,
+                LogType::Error => theme.error,
+            },
             Self::Theme(id) => theme[id],
             Self::Exact(color) => color,
         }
@@ -29,6 +49,12 @@ impl From<ColorId> for ColorRef {
 impl From<Color> for ColorRef {
     fn from(value: Color) -> Self {
         Self::Exact(value)
+    }
+}
+
+impl From<LogType> for ColorRef {
+    fn from(value: LogType) -> Self {
+        Self::Trace(value)
     }
 }
 
@@ -58,6 +84,8 @@ pub struct Console {
     colors: VecDeque<RichChunkData>,
     capacity: usize,
     end_x: i32,
+    /// In units of cols/rows
+    pub scroll: IVec2,
     pub bounds: IBounds,
     pub left_anchored: bool,
     pub top_anchored: bool,
@@ -80,6 +108,7 @@ impl Console {
             capacity,
             end_x: 0,
             bounds,
+            scroll: IVec2::zero(),
             left_anchored,
             top_anchored,
             right_anchored,
