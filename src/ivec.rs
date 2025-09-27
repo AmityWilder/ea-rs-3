@@ -1,5 +1,7 @@
 use raylib::prelude::*;
 
+use crate::GRID_SIZE;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct IVec2 {
     pub x: i32,
@@ -26,6 +28,15 @@ impl IVec2 {
         Self {
             x: value.x as i32,
             y: value.y as i32,
+        }
+    }
+
+    pub const fn snap(self, grid_size: i32) -> Self {
+        let x = self.x + self.x.signum() * grid_size / 2;
+        let y = self.y + self.y.signum() * grid_size / 2;
+        Self {
+            x: x - (x % grid_size),
+            y: y - (y % grid_size),
         }
     }
 }

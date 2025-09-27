@@ -1,18 +1,26 @@
+use std::sync::{Arc, RwLock};
+
 use crate::{
     console::{Console, RichChunk},
+    graph::{Gate, Graph},
     input::Bindings,
     ivec::{IBounds, IRect, IVec2},
     tab::{EditorTab, Tab, TabList},
     theme::{ColorId, Theme},
+    tool::Tool,
+    toolpane::{ToolPane, ToolPaneAnchoring},
 };
 use raylib::prelude::*;
 use rl_input::Event;
 
 mod console;
+mod graph;
 mod input;
 mod ivec;
 mod tab;
 mod theme;
+mod tool;
+mod toolpane;
 
 pub const GRID_SIZE: u8 = 8;
 
@@ -39,11 +47,14 @@ fn main() {
     let theme = Theme::default();
     let binds = Bindings::default();
 
+    let mut graphs = vec![Arc::new(RwLock::new(Graph::new()))];
+
     let mut tabs = TabList::from([Tab::Editor(
         EditorTab::new(
             &mut rl,
             &thread,
             IBounds::new(IVec2::zero(), IVec2::new(1280, 720)),
+            Arc::downgrade(&graphs[0]),
         )
         .unwrap(),
     )]);
@@ -55,6 +66,12 @@ fn main() {
         false,
         true,
         true,
+    );
+
+    let mut toolpane = ToolPane::new(
+        Tool::default(),
+        Gate::default(),
+        ToolPaneAnchoring::default(),
     );
 
     let mut hovering_console_top = Event::Inactive;
@@ -113,7 +130,25 @@ fn main() {
                         tab.update_bounds(&mut rl, &thread, bounds).unwrap();
                     }
 
-                    tab.zoom(input.zoom);
+                    tab.zoom_and_pan(input.pan, input.zoom, 5.0);
+
+                    if let Some(graph) = tab.graph.upgrade()
+                        // if graph is being borrowed, don't edit it!
+                        && let Ok(mut graph) = graph.try_write()
+                    {
+                        match toolpane.tool {
+                            Tool::Create {} => {
+                                if input.primary.is_starting() {
+                                    graph.create_node(
+                                        toolpane.gate,
+                                        tab.screen_to_world(input.cursor).snap(GRID_SIZE.into()),
+                                    );
+                                }
+                            }
+                            Tool::Erase {} => todo!(),
+                            Tool::Edit {} => todo!(),
+                        }
+                    }
                 }
             }
         }
@@ -165,6 +200,21 @@ fn main() {
                         Color::WHITE,
                     );
                     let mut d = d.begin_mode2D(tab.camera());
+                    if let Some(graph) = tab.graph.upgrade() {
+                        let graph = graph.read().unwrap();
+                        for node in graph.nodes_iter() {
+                            d.draw_circle(
+                                node.position.x,
+                                node.position.y,
+                                f32::from(GRID_SIZE / 2),
+                                if node.state() {
+                                    theme.active
+                                } else {
+                                    theme.background3
+                                },
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -195,37 +245,5 @@ fn main() {
                 x += x_change;
             }
         }
-
-        d.draw_text(
-            &format!(
-                "\
-                input.primary:\n  {:?}\n  {:?}\n\
-                input.secondary:\n  {:?}\n  {:?}\n\
-                input.alternate:\n  {:?}\n  {:?}\n\
-                input.parallel:\n  {:?}\n  {:?}\n\
-                input.zoom:\n  {:?}\n  {:?}\n\
-                input.cursor:\n  {:?}\n  {:?}\n\
-                input.pan:\n  {:?}\n  {:?}\
-                ",
-                &binds.primary,
-                input.primary,
-                &binds.secondary,
-                input.secondary,
-                &binds.alternate,
-                input.alternate,
-                &binds.parallel,
-                input.parallel,
-                &binds.zoom,
-                input.zoom,
-                &binds.cursor,
-                input.cursor,
-                &binds.pan,
-                input.pan,
-            ),
-            5,
-            5,
-            10,
-            Color::MAGENTA,
-        );
     }
 }

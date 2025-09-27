@@ -1,5 +1,6 @@
-use crate::{GRID_SIZE, IBounds, IVec2, Theme};
+use crate::{GRID_SIZE, IBounds, IVec2, Theme, graph::Graph};
 use raylib::prelude::*;
+use std::sync::{RwLock, Weak};
 
 #[derive(Debug)]
 pub struct EditorTab {
@@ -8,6 +9,7 @@ pub struct EditorTab {
     bounds: IBounds,
     grid: RenderTexture2D,
     dirty: bool,
+    pub graph: Weak<RwLock<Graph>>,
 }
 
 impl EditorTab {
@@ -15,6 +17,7 @@ impl EditorTab {
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
         bounds: IBounds,
+        graph: Weak<RwLock<Graph>>,
     ) -> Result<Self, raylib::error::Error> {
         let grid = rl.load_render_texture(
             thread,
@@ -27,6 +30,7 @@ impl EditorTab {
             bounds,
             grid,
             dirty: true,
+            graph,
         })
     }
 
@@ -39,11 +43,32 @@ impl EditorTab {
         }
     }
 
-    pub const fn zoom(&mut self, amount: f32) {
-        let new_zoom = (self.zoom_exp + amount).clamp(-3.0, 2.0);
-        if self.zoom_exp != new_zoom {
-            self.zoom_exp = new_zoom;
-            self.dirty = true;
+    /// `pan_speed` is scaled by zoom (zoom applied first)
+    pub fn zoom_and_pan(&mut self, pan: Vector2, zoom: f32, pan_speed: f32) {
+        if zoom != 0.0 {
+            let new_zoom = (self.zoom_exp + zoom).clamp(-3.0, 2.0);
+            if self.zoom_exp != new_zoom {
+                self.zoom_exp = new_zoom;
+                self.dirty = true;
+            }
+        }
+        if pan.length_sqr() > 0.0 {
+            const LO: f32 = (i32::MIN as f32).next_up();
+            const HI: f32 = (i32::MAX as f32).next_down();
+            #[allow(clippy::absurd_extreme_comparisons, reason = "outright untrue")]
+            const _: () = {
+                assert!((LO as i32) >= i32::MIN);
+                assert!((HI as i32) <= i32::MAX);
+            };
+            let pan_speed = pan_speed * 2.0f32.powf(-self.zoom_exp);
+            let new_pan = Vector2 {
+                x: (self.camera_target.x + pan.x * pan_speed).clamp(LO, HI),
+                y: (self.camera_target.y + pan.y * pan_speed).clamp(LO, HI),
+            };
+            if self.camera_target != new_pan {
+                self.camera_target = new_pan;
+                self.dirty = true;
+            }
         }
     }
 
@@ -81,22 +106,13 @@ impl EditorTab {
             let mut end =
                 IVec2::from_vec2(rl.get_screen_to_world2D(self.bounds.max.as_vec2(), camera));
 
-            // snap grid
-            start.x = (start.x.cast_unsigned())
-                .saturating_sub(1)
-                .next_multiple_of(GRID_SIZE.into())
-                .cast_signed();
-            start.y = (start.y.cast_unsigned())
-                .saturating_sub(1)
-                .next_multiple_of(GRID_SIZE.into())
-                .cast_signed();
+            start = start.snap(GRID_SIZE.into());
+            start.x -= i32::from(GRID_SIZE / 2);
+            start.y -= i32::from(GRID_SIZE / 2);
 
-            end.x = (end.x.cast_unsigned())
-                .next_multiple_of(GRID_SIZE.into())
-                .cast_signed();
-            end.y = (end.y.cast_unsigned())
-                .next_multiple_of(GRID_SIZE.into())
-                .cast_signed();
+            end = end.snap(GRID_SIZE.into());
+            end.x += i32::from(GRID_SIZE / 2);
+            end.y += i32::from(GRID_SIZE / 2);
 
             let mut d = rl.begin_texture_mode(thread, &mut self.grid);
             d.clear_background(Color::BLANK);
@@ -112,6 +128,8 @@ impl EditorTab {
                     for x in (start.x..=end.x).step_by(GRID_SIZE as usize) {
                         d.draw_line(x, start.y, x, end.y, theme.background1);
                     }
+                    d.draw_line(start.x, 0, end.x, 0, theme.background2);
+                    d.draw_line(0, start.y, 0, end.y, theme.background2);
                 }
             }
             // d.draw_text(&format!("{}", d.get_time()), 0, 0, 10, Color::MAGENTA);
@@ -120,6 +138,14 @@ impl EditorTab {
 
     pub fn grid_tex(&self) -> &WeakTexture2D {
         self.grid.texture()
+    }
+
+    pub fn screen_to_world(&self, screen_pos: Vector2) -> IVec2 {
+        let camera = self.camera();
+        // SAFETY: GetScreenToWorld2D is a pure function with no preconditions
+        IVec2::from_vec2(
+            unsafe { ffi::GetScreenToWorld2D(screen_pos.into(), camera.into()) }.into(),
+        )
     }
 }
 
