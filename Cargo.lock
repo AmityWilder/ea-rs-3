@@ -87,6 +87,7 @@ name = "ea-rs-3"
 version = "0.1.0"
 dependencies = [
  "raylib",
+ "rl_input",
 ]
 
 [[package]]
@@ -246,6 +247,13 @@ name = "regex-syntax"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "caf4aa5b0f434c91fe5c7f1ecb6a5ece2130b02ad2a590589dda5146df959001"
+
+[[package]]
+name = "rl_input"
+version = "0.1.0"
+dependencies = [
+ "raylib",
+]
 
 [[package]]
 name = "rustc-hash"

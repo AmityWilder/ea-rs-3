@@ -36,7 +36,7 @@ fn main() {
     }
 
     let theme = Theme::default();
-    let bindings = Bindings::default();
+    let input = Bindings::default();
 
     let mut tabs = TabList::from([Tab::Editor(
         EditorTab::new(
@@ -73,7 +73,7 @@ fn main() {
                         tab.update_bounds(&mut rl, &thread, bounds).unwrap();
                     }
 
-                    tab.zoom(bindings.zoom.get(&rl));
+                    tab.zoom(input.zoom.get(&rl));
                 }
             }
         }
@@ -123,5 +123,37 @@ fn main() {
                 }
             }
         }
+
+        d.draw_text(
+            &format!(
+                "\
+                input.primary:\n  {:?}\n  {:?}\n\
+                input.secondary:\n  {:?}\n  {:?}\n\
+                input.alternate:\n  {:?}\n  {:?}\n\
+                input.parallel:\n  {:?}\n  {:?}\n\
+                input.zoom:\n  {:?}\n  {:?}\n\
+                input.cursor:\n  {:?}\n  {:?}\n\
+                input.pan:\n  {:?}\n  {:?}\
+                ",
+                &input.primary,
+                input.primary.is_active(&d),
+                &input.secondary,
+                input.secondary.is_active(&d),
+                &input.alternate,
+                input.alternate.is_active(&d),
+                &input.parallel,
+                input.parallel.is_active(&d),
+                &input.zoom,
+                input.zoom.get(&d),
+                &input.cursor,
+                input.cursor.get(&d),
+                &input.pan,
+                input.pan.get(&d),
+            ),
+            5,
+            5,
+            10,
+            Color::MAGENTA,
+        );
     }
 }

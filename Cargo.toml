@@ -1,3 +1,6 @@
+[workspace]
+members = ["rl_input"]
+
 [package]
 name = "ea-rs-3"
 version = "0.1.0"
@@ -5,3 +8,4 @@ edition = "2024"
 
 [dependencies]
 raylib = "5.5.1"
+rl_input = { path = "rl_input" }
