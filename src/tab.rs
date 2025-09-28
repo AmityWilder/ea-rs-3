@@ -132,11 +132,10 @@ impl EditorTab {
                     for x in (start.x..=end.x).step_by(GRID_SIZE as usize) {
                         d.draw_line(x, start.y, x, end.y, theme.background1);
                     }
-                    d.draw_line(start.x, 0, end.x, 0, theme.background2);
-                    d.draw_line(0, start.y, 0, end.y, theme.background2);
                 }
+                d.draw_line(start.x, 0, end.x, 0, theme.background2);
+                d.draw_line(0, start.y, 0, end.y, theme.background2);
             }
-            // d.draw_text(&format!("{}", d.get_time()), 0, 0, 10, Color::MAGENTA);
         }
     }
 

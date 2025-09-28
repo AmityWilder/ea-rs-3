@@ -42,6 +42,8 @@ fn main() {
             .unwrap(),
     );
 
+    rl.set_exit_key(None);
+
     if let Some(icon) = program_icon.as_ref() {
         rl.set_window_icon(icon);
     }
@@ -237,7 +239,7 @@ fn main() {
                         for node in graph.nodes_iter() {
                             node_icon_sheets.draw(
                                 &mut d,
-                                tab.zoom_exp(),
+                                tab.zoom_exp().floor() as i32,
                                 NodeIconSheetId::Basic,
                                 Rectangle {
                                     x: node.position.x as f32,

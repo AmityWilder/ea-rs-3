@@ -166,10 +166,11 @@ impl NodeIconSheetSets {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn draw<D: RaylibDraw>(
         &self,
         d: &mut D,
-        zoom_exp: f32,
+        zoom_exp: i32,
         sheet: NodeIconSheetId,
         dest_rec: Rectangle,
         gate: Gate,
@@ -177,8 +178,12 @@ impl NodeIconSheetSets {
         rotation: f32,
         tint: Color,
     ) {
-        let scale = match zoom_exp.round() as i32 {
-            ..=0 => NodeIconSheetSetId::X8,
+        let scale = match zoom_exp {
+            ..0 => {
+                d.draw_rectangle_rec(dest_rec, tint);
+                return;
+            }
+            0 => NodeIconSheetSetId::X8,
             1 => NodeIconSheetSetId::X16,
             2.. => NodeIconSheetSetId::X32,
         };
