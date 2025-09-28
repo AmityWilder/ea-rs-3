@@ -263,21 +263,48 @@ fn main() {
         // console
         {
             let IRect { x, y, w, h } = IRect::from(console.bounds);
-            d.draw_rectangle(x, y, w, h, theme.background2);
-            d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, theme.background1);
-            let mut d = d.begin_scissor_mode(
-                x + theme.console_padding_left,
-                y + theme.console_padding_top,
-                w - theme.console_padding_left - theme.console_padding_right,
-                h - theme.console_padding_top - theme.console_padding_bottom,
-            );
-            for RichBlock {
-                text,
-                color,
-                position: IVec2 { x, y },
-            } in console.visible_content(&theme)
+            let mut d = d.begin_scissor_mode(x, y, w, h);
+
+            // content
             {
-                d.draw_text(text, x, y, theme.console_font_size, color.get(&theme));
+                d.draw_rectangle(x, y, w, h, theme.background2);
+                d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, theme.background1);
+                let mut d = d.begin_scissor_mode(
+                    x + theme.console_padding_left,
+                    y + theme.console_padding_top,
+                    w - theme.console_padding_left - theme.console_padding_right,
+                    h - theme.console_padding_top - theme.console_padding_bottom,
+                );
+                for RichBlock {
+                    text,
+                    color,
+                    position: IVec2 { x, y },
+                } in console.visible_content(&theme)
+                {
+                    d.draw_text(text, x, y, theme.console_font_size, color.get(&theme));
+                }
+            }
+
+            // title
+            {
+                let title = "Log";
+                let title_text_width = d.measure_text(title, theme.console_font_size);
+                let title_width = title_text_width + 2 * theme.title_padding_x;
+                let title_height = theme.console_font_size + 2 * theme.title_padding_y;
+                d.draw_rectangle(
+                    console.bounds.max.x - title_width,
+                    console.bounds.min.y,
+                    title_width,
+                    title_height,
+                    theme.background2,
+                );
+                d.draw_text(
+                    title,
+                    console.bounds.max.x - title_width + theme.title_padding_x,
+                    console.bounds.min.y + theme.title_padding_y,
+                    theme.console_font_size,
+                    theme.foreground,
+                );
             }
         }
     }

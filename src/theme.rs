@@ -40,6 +40,8 @@ pub struct Theme {
     pub console_padding_top: i32,
     pub console_padding_right: i32,
     pub console_padding_bottom: i32,
+    pub title_padding_x: i32,
+    pub title_padding_y: i32,
 }
 
 impl Theme {
@@ -76,6 +78,8 @@ impl Default for Theme {
             console_padding_top: 5,
             console_padding_right: 5,
             console_padding_bottom: 5,
+            title_padding_x: 6,
+            title_padding_y: 3,
         }
     }
 }
