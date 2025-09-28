@@ -1,12 +1,12 @@
 #![deny(clippy::missing_safety_doc, clippy::undocumented_unsafe_blocks)]
 
 use crate::{
-    console::{Console, ConsoleAnchoring, LogType, RichBlock},
+    console::{Console, ConsoleAnchoring, LogType, NodeRef, PositionRef},
     graph::{Graph, node::Gate},
     icon_sheets::{ButtonIconSheets, NodeIconSheetId, NodeIconSheetSets},
     input::Bindings,
     ivec::{IBounds, IRect, IVec2},
-    rich_text::ColorRef,
+    rich_text::{ColorAct, ColorRef},
     tab::{EditorTab, Tab, TabList},
     theme::{ColorId, Theme},
     tool::Tool,
@@ -89,7 +89,7 @@ fn main() {
     let mut hovering_console_top = Event::Inactive;
     let mut dragging_console_top = Event::Inactive;
 
-    logln!(console, "{}initialized", LogType::Success.color());
+    logln!(console, LogType::Success, "initialized");
 
     while !rl.window_should_close() {
         // Tick
@@ -165,16 +165,14 @@ fn main() {
                                     } else {
                                         let gate = toolpane.gate;
                                         let (id, _) = graph.create_node(gate, pos);
-                                        let IVec2 { x, y } = pos;
                                         logln!(
                                             console,
-                                            "{}create {}[{gate}]{} node {}N{id:06X}{} at {}({x}, {y})",
-                                            ColorRef::from(LogType::Info),
-                                            ColorRef::from(ColorId::Special),
-                                            ColorRef::from(LogType::Info),
-                                            ColorRef::from(ColorId::Special),
-                                            ColorRef::from(LogType::Info),
-                                            ColorRef::from(ColorId::Special),
+                                            LogType::Info,
+                                            "create {}[{gate}]{} node {} at {}",
+                                            ColorAct::Push(ColorId::Special.into()),
+                                            ColorAct::Pop,
+                                            graph.node_ref(id).unwrap(),
+                                            PositionRef(pos),
                                         );
                                     }
                                 }

@@ -1,6 +1,7 @@
 use crate::{
+    graph::{Graph, node::Node},
     ivec::{IBounds, IVec2},
-    rich_text::{ColorRef, RichStr, RichString},
+    rich_text::{ColorAct, ColorRef, RichStr, RichString},
     theme::{ColorId, Theme},
 };
 use raylib::prelude::*;
@@ -19,6 +20,20 @@ pub enum LogType {
     Success,
     Warning,
     Error,
+}
+
+impl std::fmt::Display for LogType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LogType::Info => "info",
+            LogType::Debug => "debug",
+            LogType::Attempt => "attempt",
+            LogType::Success => "success",
+            LogType::Warning => "warning",
+            LogType::Error => "error",
+        }
+        .fmt(f)
+    }
 }
 
 impl From<LogType> for ColorRef {
@@ -40,32 +55,34 @@ impl LogType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RichChunk<'a> {
-    pub text: &'a str,
-    pub color: ColorRef,
-    pub x_change: i32,
-    pub height: i32,
-    /// Whether to add `height` to your `y`
-    pub is_y_changing: bool,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct PositionRef(pub IVec2);
+
+impl std::fmt::Display for PositionRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let &Self(IVec2 { x, y }) = self;
+        write!(
+            f,
+            "{}({x}, {y}){}",
+            ColorAct::Push(ColorRef::Theme(ColorId::Special)),
+            ColorAct::Pop
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RichBlock<'a> {
-    pub text: &'a str,
-    pub color: ColorRef,
-    pub position: IVec2,
-}
+pub struct NodeRef<'a>(pub &'a Graph, pub &'a Node);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct RichChunkData {
-    pub start: Wrapping<usize>,
-    pub end: Wrapping<usize>,
-    pub color: ColorRef,
-    pub x_change: i32,
-    pub height: i32,
-    /// Whether to add `height` to your `y`
-    pub is_y_changing: bool,
+impl std::fmt::Display for NodeRef<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let &Self(g, n) = self;
+        write!(
+            f,
+            "{}g{g:p}-n{n:p}{}",
+            ColorAct::Push(ColorRef::Theme(ColorId::Special)),
+            ColorAct::Pop
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -133,6 +150,13 @@ impl Console {
         self.content.as_rich_str()
     }
 
+    pub fn displayable_lines(&self, theme: &Theme) -> i32 {
+        ((self.bounds.max.y - theme.console_padding_bottom)
+            - (self.bounds.min.y + theme.console_padding_top)
+            + /* Off by one otherwise */ theme.console_line_spacing)
+            / theme.console_line_height()
+    }
+
     pub fn content(&self) -> impl Iterator<Item = (ColorRef, &str)> {
         let mut last_color = ColorRef::Theme(ColorId::Foreground);
         RichStr::new(self.content.as_str())
@@ -146,13 +170,6 @@ impl Console {
                 }
                 Err(e) => panic!("{e}"),
             })
-    }
-
-    pub fn displayable_lines(&self, theme: &Theme) -> i32 {
-        ((self.bounds.max.y - theme.console_padding_bottom)
-            - (self.bounds.min.y + theme.console_padding_top)
-            + /* Off by one otherwise */ theme.console_line_spacing)
-            / theme.console_line_height()
     }
 
     pub fn visible_content(&self, theme: &Theme) -> impl Iterator<Item = (ColorRef, &str)> {
@@ -193,10 +210,15 @@ macro_rules! log {
 
 #[macro_export]
 macro_rules! logln {
-    ($console:expr, $($args:tt)+) => {
+    ($console:expr, $ty:expr, $($args:tt)+) => {
         $crate::console::Console::log(
             &mut $console,
-            format_args!("{}\n", format_args!($($args)+))
+            format_args!("{}[{}]: {}{}\n",
+                $crate::rich_text::ColorAct::Push(<$crate::rich_text::ColorRef as From<LogType>>::from($ty)),
+                $ty,
+                format_args!($($args)+),
+                $crate::rich_text::ColorAct::Pop,
+            )
         )
     };
 }

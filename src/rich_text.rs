@@ -1,6 +1,5 @@
 use crate::theme::{ColorId, Theme};
 use raylib::prelude::*;
-use std::fmt::Write;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RichStrError {
@@ -25,8 +24,8 @@ pub enum ColorRef {
 impl std::fmt::Display for ColorRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ColorRef::Theme(id) => write!(f, "\x1B{{{id}}}"),
-            ColorRef::Exact(Color { r, g, b, a }) => write!(f, "\x1B{{rgba({r},{g},{b},{a})}}"),
+            ColorRef::Theme(id) => write!(f, "{id}"),
+            ColorRef::Exact(Color { r, g, b, a }) => write!(f, "rgba({r},{g},{b},{a})"),
         }
     }
 }
@@ -78,9 +77,43 @@ impl From<Color> for ColorRef {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ColorAct {
+    #[default]
+    Pop,
+    Repl(ColorRef),
+    Push(ColorRef),
+}
+
+impl std::fmt::Display for ColorAct {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ColorAct::Pop => write!(f, "\x1B{{pop}}"),
+            ColorAct::Repl(c) => write!(f, "\x1B{{{c}}}"),
+            ColorAct::Push(c) => write!(f, "\x1B{{push:{c}}}"),
+        }
+    }
+}
+
+impl std::str::FromStr for ColorAct {
+    type Err = RichStrError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == "pop" {
+            Ok(Self::Pop)
+        } else {
+            let (c, wrapper): (&str, fn(ColorRef) -> Self) = s
+                .strip_prefix("push:")
+                .map_or((s, Self::Repl), |c| (c, Self::Push));
+            c.parse().map(wrapper)
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RichStrIter<'a> {
-    s: &'a str,
+    color_stack: Vec<ColorRef>,
+    string: &'a str,
 }
 
 impl std::error::Error for RichStrError {}
@@ -89,15 +122,15 @@ impl<'a> Iterator for RichStrIter<'a> {
     type Item = Result<(Option<ColorRef>, &'a str), RichStrError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut s = self.s;
+        let mut s = self.string;
         if s.is_empty() {
             return None;
         }
-        let color = match s.strip_prefix("\x1B{") {
+        let act = match s.strip_prefix("\x1B{") {
             Some(string) => match string.split_once('}') {
                 Some((code, rest)) => {
                     s = rest;
-                    Some(code.parse::<ColorRef>())
+                    Some(code.parse::<ColorAct>())
                 }
                 None => {
                     s = &s["\x1B{".len()..];
@@ -107,9 +140,21 @@ impl<'a> Iterator for RichStrIter<'a> {
             None => None,
         };
         let text;
-        (text, self.s) = s.split_at(s.find("\x1B{").unwrap_or(s.len()));
-        match color {
-            Some(Ok(c)) => Some(Ok((Some(c), text))),
+        (text, self.string) = s.split_at(s.find("\x1B{").unwrap_or(s.len()));
+        match act {
+            Some(Ok(a)) => {
+                match a {
+                    ColorAct::Pop => _ = self.color_stack.pop(),
+                    ColorAct::Repl(c) => match self.color_stack.last_mut() {
+                        Some(back) => *back = c,
+                        None => self.color_stack.push(c),
+                    },
+                    ColorAct::Push(c) => {
+                        self.color_stack.push(c);
+                    }
+                }
+                Some(Ok((self.color_stack.last().copied(), text)))
+            }
             Some(Err(e)) => Some(Err(e)),
             None => Some(Ok((None, text))),
         }
@@ -123,14 +168,14 @@ impl<'a> Iterator for RichStrIter<'a> {
 
 impl<'a> DoubleEndedIterator for RichStrIter<'a> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        let mut s = self.s;
+        let mut s = self.string;
         if s.is_empty() {
             return None;
         }
         let color = match s.rsplit_once("\x1B{") {
             Some((pre, string)) => match string.split_once('}') {
                 Some((code, text)) => {
-                    self.s = pre;
+                    self.string = pre;
                     s = text;
                     Some(code.parse::<ColorRef>())
                 }
@@ -148,7 +193,7 @@ impl<'a> DoubleEndedIterator for RichStrIter<'a> {
 
 impl<'a> ExactSizeIterator for RichStrIter<'a> {
     fn len(&self) -> usize {
-        self.s.split("\x1B{").count()
+        self.string.split("\x1B{").count()
     }
 }
 
@@ -195,8 +240,11 @@ impl RichStr {
         unsafe { std::mem::transmute(s) }
     }
 
-    pub fn iter(&self) -> RichStrIter<'_> {
-        RichStrIter { s: &self.0 }
+    pub const fn iter(&self) -> RichStrIter<'_> {
+        RichStrIter {
+            color_stack: Vec::new(),
+            string: &self.0,
+        }
     }
 }
 
@@ -283,9 +331,5 @@ impl RichString {
 
     pub const fn as_mut_rich_str(&mut self) -> &mut RichStr {
         RichStr::new_mut(self.0.as_mut_str())
-    }
-
-    pub fn push_colored_str(&mut self, color: ColorRef, s: &str) {
-        write!(self.0, "{color}{s}").expect("String's Write impl never errors")
     }
 }

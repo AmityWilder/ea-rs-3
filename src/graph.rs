@@ -1,4 +1,5 @@
 use crate::{
+    console::NodeRef,
     graph::{
         node::{Gate, Node},
         wire::Wire,
@@ -68,6 +69,10 @@ impl Graph {
     /// Returns [`None`] if the start or end of the wire is not in the graph.
     pub fn get_wire_nodes<'a>(&'a self, wire: &Wire) -> Option<(&'a Node, &'a Node)> {
         self.nodes.get(wire.src).zip(self.nodes.get(wire.dst))
+    }
+
+    pub fn node_ref(&self, index: usize) -> Option<NodeRef> {
+        self.nodes.get(index).map(|node| NodeRef(self, node))
     }
 
     pub fn evaluate(&mut self) {
