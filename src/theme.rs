@@ -34,6 +34,18 @@ pub struct Theme {
     pub caution: Color,
     pub blueprints_background: Color,
     pub console_font_size: i32,
+    pub console_char_spacing: i32,
+    pub console_line_spacing: i32,
+    pub console_padding_left: i32,
+    pub console_padding_top: i32,
+    pub console_padding_right: i32,
+    pub console_padding_bottom: i32,
+}
+
+impl Theme {
+    pub const fn console_line_height(&self) -> i32 {
+        self.console_font_size + self.console_line_spacing
+    }
 }
 
 impl Default for Theme {
@@ -58,6 +70,12 @@ impl Default for Theme {
             caution: CAUTION_YELLOW,
             blueprints_background: Color::new(10, 15, 30, 255),
             console_font_size: 10,
+            console_char_spacing: 1,
+            console_line_spacing: 2,
+            console_padding_left: 15,
+            console_padding_top: 5,
+            console_padding_right: 5,
+            console_padding_bottom: 5,
         }
     }
 }

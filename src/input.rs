@@ -8,6 +8,7 @@ pub struct Inputs {
     pub alternate: Event,
     pub parallel: Event,
     pub zoom: f32,
+    pub scroll_console: f32,
     pub cursor: Vector2,
     pub pan: Vector2,
 }
@@ -19,6 +20,7 @@ pub struct Bindings {
     pub alternate: EventSource,
     pub parallel: EventSource,
     pub zoom: AxisSource,
+    pub scroll_console: AxisSource,
     pub cursor: VectorSource,
     pub pan: VectorSource,
 }
@@ -33,6 +35,7 @@ impl Default for Bindings {
             alternate: EventSource::Keyboard(KEY_LEFT_CONTROL),
             parallel: EventSource::Keyboard(KEY_LEFT_SHIFT),
             zoom: AxisSource::MouseWheelMove,
+            scroll_console: AxisSource::MouseWheelMove,
             cursor: VectorSource::MousePosition,
             pan: VectorSource::EventMix(Box::from([
                 (
@@ -64,6 +67,7 @@ impl Bindings {
             alternate: self.alternate.get(rl),
             parallel: self.parallel.get(rl),
             zoom: self.zoom.get(rl),
+            scroll_console: self.scroll_console.get(rl),
             cursor: self.cursor.get(rl),
             pan: self.pan.get(rl),
         }

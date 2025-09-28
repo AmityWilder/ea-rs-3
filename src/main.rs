@@ -1,7 +1,7 @@
 use std::sync::{Arc, RwLock};
 
 use crate::{
-    console::{Console, LogType, RichChunk},
+    console::{Console, LogType, RichBlock, RichChunk},
     graph::{Gate, Graph},
     icon_sheets::{ButtonIconSheets, NodeIconSheetId, NodeIconSheetSets},
     input::Bindings,
@@ -66,7 +66,7 @@ fn main() {
 
     let mut console = Console::new(
         4096,
-        IBounds::new(IVec2::new(0, 520), IVec2::new(1280, 720)),
+        IBounds::new(IVec2::new(0, 570), IVec2::new(1280, 720)),
         true,
         false,
         true,
@@ -82,16 +82,7 @@ fn main() {
     let mut hovering_console_top = Event::Inactive;
     let mut dragging_console_top = Event::Inactive;
 
-    log!(
-        console,
-        rl,
-        theme,
-        (theme.caution, "squeak squeak\n:3"),
-        (theme.input, " ee"),
-        (ColorId::Input, "ee!\n"),
-        (theme.special, "^w^"),
-    )
-    .unwrap();
+    log!(console, rl, theme, (LogType::Success, "initialized\n"),).unwrap();
 
     while !rl.window_should_close() {
         // Tick
@@ -124,7 +115,18 @@ fn main() {
             }
         }
 
-        if let Some(tab) = tabs.focused_tab_mut() {
+        if console.bounds.contains(IVec2::from_vec2(input.cursor))
+            || dragging_console_top.is_active()
+        {
+            console.top_row = console
+                .top_row
+                .saturating_sub_signed(input.scroll_console as isize)
+                .min(
+                    console
+                        .num_lines()
+                        .saturating_sub(console.displayable_lines(&theme).try_into().unwrap()),
+                );
+        } else if let Some(tab) = tabs.focused_tab_mut() {
             match tab {
                 Tab::Editor(tab) => {
                     if rl.is_window_resized() {
@@ -149,18 +151,17 @@ fn main() {
                                     if let Some(_idx) = graph.find_node_at_pos(pos) {
                                         // TODO
                                     } else {
-                                        graph.create_node(toolpane.gate, pos);
+                                        let (id, _) = graph.create_node(toolpane.gate, pos);
                                         log!(
                                             console,
                                             rl,
                                             theme,
-                                            (
-                                                LogType::Info,
-                                                "create `{}` node at ({}, {})\n",
-                                                &toolpane.gate,
-                                                pos.x,
-                                                pos.y
-                                            )
+                                            (LogType::Info, "create "),
+                                            (ColorId::Special, "[{}]", &toolpane.gate),
+                                            (LogType::Info, " node "),
+                                            (ColorId::Special, "N{id:06X}"),
+                                            (LogType::Info, " at "),
+                                            (ColorId::Special, "({}, {})\n", pos.x, pos.y),
                                         )
                                         .unwrap();
                                     }
@@ -193,7 +194,13 @@ fn main() {
             dragging_console_top.deactivate();
         }
         if dragging_console_top.is_active() {
-            console.bounds.min.y = (input.cursor.y as i32).min(console.bounds.max.y - 20);
+            console.bounds.min.y = (input.cursor.y as i32).clamp(
+                theme.console_padding_top,
+                console.bounds.max.y
+                    - theme.console_padding_bottom
+                    - theme.console_padding_bottom
+                    - theme.console_font_size,
+            );
         }
 
         if hovering_console_top == Event::Starting {
@@ -254,27 +261,19 @@ fn main() {
             let IRect { x, y, w, h } = IRect::from(console.bounds);
             d.draw_rectangle(x, y, w, h, theme.background2);
             d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, theme.background1);
-            let mut x = x + 15;
-            let mut y = y + 5;
-            let mut d = d.begin_scissor_mode(x, y, w - 30, h - 10);
-            for RichChunk {
+            let mut d = d.begin_scissor_mode(
+                x + theme.console_padding_left,
+                y + theme.console_padding_top,
+                w - theme.console_padding_left - theme.console_padding_right,
+                h - theme.console_padding_top - theme.console_padding_bottom,
+            );
+            for RichBlock {
                 text,
                 color,
-                x_change,
-                height,
-                is_y_changing,
-            } in console
-                .content()
-                .skip_while(|chunk| chunk.text.split('\n').count())
+                position: IVec2 { x, y },
+            } in console.visible_content(&theme)
             {
-                // assumes h is never negative and bounds.max >= bounds.min
-                if y + h >= console.bounds.min.y + 5 && y <= console.bounds.max.y - 5 {
-                    d.draw_text(text, x, y, theme.console_font_size, color.get(&theme));
-                }
-                if is_y_changing {
-                    y += height
-                }
-                x += x_change;
+                d.draw_text(text, x, y, theme.console_font_size, color.get(&theme));
             }
         }
     }

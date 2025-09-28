@@ -27,7 +27,7 @@ impl ColorRef {
     pub fn get(self, theme: &Theme) -> Color {
         match self {
             Self::Trace(level) => match level {
-                LogType::Info => theme.foreground,
+                LogType::Info => theme.foreground3,
                 LogType::Debug => Color::MAGENTA,
                 LogType::Attempt => theme.special,
                 LogType::Success => theme.foreground1,
@@ -69,6 +69,13 @@ pub struct RichChunk<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RichBlock<'a> {
+    pub text: &'a str,
+    pub color: ColorRef,
+    pub position: IVec2,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RichChunkData {
     pub len: usize,
     pub color: ColorRef,
@@ -85,7 +92,7 @@ pub struct Console {
     capacity: usize,
     end_x: i32,
     /// In units of cols/rows
-    pub scroll: IVec2,
+    pub top_row: usize,
     pub bounds: IBounds,
     pub left_anchored: bool,
     pub top_anchored: bool,
@@ -108,7 +115,7 @@ impl Console {
             capacity,
             end_x: 0,
             bounds,
-            scroll: IVec2::zero(),
+            top_row: 0,
             left_anchored,
             top_anchored,
             right_anchored,
@@ -127,6 +134,7 @@ impl Console {
         let it = text.into_iter();
         let (size_min, size_max) = it.size_hint();
         self.colors.reserve(size_max.unwrap_or(size_min));
+        let start = self.content.len();
         // cant reserve content because we dont know the len of each element without consuming the iterator
         for (color, args) in it {
             let start = self.content.len();
@@ -142,6 +150,7 @@ impl Console {
                 height,
                 is_y_changing,
             });
+            // remove excess from front
             let mut total_size = 0;
             let (sum, count) = self
                 .colors
@@ -158,7 +167,20 @@ impl Console {
                 self.colors.pop_front();
             }
         }
+        let lines_added = self.content[start..].trim_end().split('\n').count();
+        if self.content.trim_end().split('\n').count() - self.top_row
+            > usize::try_from(self.displayable_lines(theme)).unwrap()
+        {
+            self.top_row += lines_added;
+        }
         Ok(())
+    }
+
+    pub fn displayable_lines(&self, theme: &Theme) -> i32 {
+        ((self.bounds.max.y - theme.console_padding_bottom)
+                - (self.bounds.min.y + theme.console_padding_top)
+                + /* off by one otherwise */ theme.console_line_spacing)
+            / theme.console_line_height()
     }
 
     /// `(x_change, height, is_y_changing)`
@@ -191,18 +213,52 @@ impl Console {
         }
     }
 
-    pub fn content(&self) -> impl Iterator<Item = RichChunk<'_>> {
-        self.colors.iter().scan(0, |end, &chunk| {
-            let start = *end;
-            *end += chunk.len;
-            Some(RichChunk {
-                text: &self.content[start..*end],
+    pub fn content(&self) -> impl ExactSizeIterator<Item = RichChunk<'_>> + Clone {
+        let mut end = 0;
+        self.colors.iter().map(move |&chunk| {
+            let start = end;
+            end += chunk.len;
+            RichChunk {
+                text: &self.content[start..end],
                 color: chunk.color,
                 x_change: chunk.x_change,
                 height: chunk.height,
                 is_y_changing: chunk.is_y_changing,
-            })
+            }
         })
+    }
+
+    pub fn visible_content(&self, theme: &Theme) -> impl Iterator<Item = RichBlock<'_>> {
+        self.content()
+            .scan(
+                (
+                    self.bounds.min.x + theme.console_padding_left,
+                    self.bounds.min.y + theme.console_padding_top
+                        - i32::try_from(self.top_row).unwrap() * theme.console_line_height(),
+                ),
+                |(x, y), chunk| {
+                    let old_y = *y;
+                    let old_x = *x;
+                    if chunk.is_y_changing {
+                        *y += chunk.height;
+                    }
+                    *x += chunk.x_change;
+                    Some((chunk, old_x, old_y, *x, *y))
+                },
+            )
+            .skip_while(|(_, _, _, _, y)| *y < self.bounds.min.y + theme.console_padding_top)
+            .take_while(|(_, _, old_y, _, _)| {
+                *old_y < self.bounds.max.y - theme.console_padding_bottom
+            })
+            .map(|(chunk, x, y, _, _)| RichBlock {
+                text: chunk.text,
+                color: chunk.color,
+                position: IVec2 { x, y },
+            })
+    }
+
+    pub fn num_lines(&self) -> usize {
+        self.content.lines().count()
     }
 }
 

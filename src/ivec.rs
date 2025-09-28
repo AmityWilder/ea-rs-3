@@ -108,4 +108,8 @@ impl IBounds {
     pub fn x(&self) -> std::ops::RangeInclusive<i32> {
         self.min.x..=self.max.x
     }
+
+    pub fn contains(&self, p: IVec2) -> bool {
+        self.min.x <= p.x && p.x <= self.max.x && self.min.y <= p.y && p.y <= self.max.y
+    }
 }
