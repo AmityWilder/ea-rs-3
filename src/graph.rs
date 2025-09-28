@@ -1,67 +1,13 @@
-use crate::ivec::IVec2;
+use crate::{
+    graph::{
+        node::{Gate, Node},
+        wire::Wire,
+    },
+    ivec::IVec2,
+};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum Gate {
-    #[default]
-    Or,
-    And,
-    Nor,
-    Xor,
-    Resistor {},
-    Capacitor {},
-    Led {},
-    Delay {},
-    Battery,
-}
-
-impl std::fmt::Display for Gate {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Gate::Or => "or".fmt(f),
-            Gate::And => "and".fmt(f),
-            Gate::Nor => "nor".fmt(f),
-            Gate::Xor => "xor".fmt(f),
-            Gate::Resistor {} => write!(f, "resistor"),
-            Gate::Capacitor {} => write!(f, "capacitor"),
-            Gate::Led {} => write!(f, "led"),
-            Gate::Delay {} => write!(f, "delay"),
-            Gate::Battery => "battery".fmt(f),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Node {
-    state: bool,
-    pub gate: Gate,
-    pub position: IVec2,
-}
-
-impl Node {
-    pub const fn new(gate: Gate, position: IVec2) -> Self {
-        Self {
-            state: false,
-            gate,
-            position,
-        }
-    }
-
-    pub const fn state(&self) -> bool {
-        self.state
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Wire {
-    src: usize,
-    dst: usize,
-}
-
-impl Wire {
-    pub const fn new(src: usize, dst: usize) -> Self {
-        Self { src, dst }
-    }
-}
+pub mod node;
+pub mod wire;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Graph {
@@ -122,5 +68,26 @@ impl Graph {
     /// Returns [`None`] if the start or end of the wire is not in the graph.
     pub fn get_wire_nodes<'a>(&'a self, wire: &Wire) -> Option<(&'a Node, &'a Node)> {
         self.nodes.get(wire.src).zip(self.nodes.get(wire.dst))
+    }
+
+    pub fn evaluate(&mut self) {
+        for n in 0..self.nodes.len() {
+            let mut inputs = self
+                .wires
+                .iter()
+                .filter(|wire| wire.dst == n) // surely there's a better way than O(nk)
+                .map(|wire| self.nodes[wire.src].state);
+            self.nodes[n].state = match self.nodes[n].gate {
+                Gate::Or => inputs.any(|x| x), // TODO
+                Gate::And => false,            // TODO
+                Gate::Nor => false,            // TODO
+                Gate::Xor => false,            // TODO
+                Gate::Resistor {} => false,    // TODO
+                Gate::Capacitor {} => false,   // TODO
+                Gate::Led {} => false,         // TODO
+                Gate::Delay {} => false,       // TODO
+                Gate::Battery => false,        // TODO
+            };
+        }
     }
 }

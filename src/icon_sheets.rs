@@ -1,4 +1,4 @@
-use crate::{graph::Gate, ivec::IVec2};
+use crate::{graph::node::Gate, ivec::IVec2};
 use raylib::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]

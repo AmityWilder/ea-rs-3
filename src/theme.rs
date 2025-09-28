@@ -106,6 +106,60 @@ pub enum ColorId {
     BlueprintsBackground,
 }
 
+impl std::fmt::Display for ColorId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ColorId::Background => "background",
+            ColorId::Background1 => "background1",
+            ColorId::Background2 => "background2",
+            ColorId::Background3 => "background3",
+            ColorId::Foreground3 => "foreground3",
+            ColorId::Foreground2 => "foreground2",
+            ColorId::Foreground1 => "foreground1",
+            ColorId::Foreground => "foreground",
+            ColorId::Input => "input",
+            ColorId::Output => "output",
+            ColorId::Available => "available",
+            ColorId::Interact => "interact",
+            ColorId::Active => "active",
+            ColorId::Error => "error",
+            ColorId::Destructive => "destructive",
+            ColorId::Special => "special",
+            ColorId::Caution => "caution",
+            ColorId::BlueprintsBackground => "blueprints_background",
+        }
+        .fmt(f)
+    }
+}
+
+impl std::str::FromStr for ColorId {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "background" => Ok(ColorId::Background),
+            "background1" => Ok(ColorId::Background1),
+            "background2" => Ok(ColorId::Background2),
+            "background3" => Ok(ColorId::Background3),
+            "foreground3" => Ok(ColorId::Foreground3),
+            "foreground2" => Ok(ColorId::Foreground2),
+            "foreground1" => Ok(ColorId::Foreground1),
+            "foreground" => Ok(ColorId::Foreground),
+            "input" => Ok(ColorId::Input),
+            "output" => Ok(ColorId::Output),
+            "available" => Ok(ColorId::Available),
+            "interact" => Ok(ColorId::Interact),
+            "active" => Ok(ColorId::Active),
+            "error" => Ok(ColorId::Error),
+            "destructive" => Ok(ColorId::Destructive),
+            "special" => Ok(ColorId::Special),
+            "caution" => Ok(ColorId::Caution),
+            "blueprints_background" => Ok(ColorId::BlueprintsBackground),
+            _ => Err(()),
+        }
+    }
+}
+
 impl std::ops::Index<ColorId> for Theme {
     type Output = Color;
 

@@ -1,4 +1,4 @@
-use crate::graph::Gate;
+use crate::graph::node::Gate;
 use raylib::prelude::*;
 use rl_input::{AxisSource, Event, EventSource, SelectorSource, VectorSource};
 

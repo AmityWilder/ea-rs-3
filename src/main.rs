@@ -1,11 +1,12 @@
-use std::sync::{Arc, RwLock};
+#![deny(clippy::missing_safety_doc, clippy::undocumented_unsafe_blocks)]
 
 use crate::{
-    console::{Console, LogType, RichBlock, RichChunk},
-    graph::{Gate, Graph},
+    console::{Console, ConsoleAnchoring, LogType, RichBlock},
+    graph::{Graph, node::Gate},
     icon_sheets::{ButtonIconSheets, NodeIconSheetId, NodeIconSheetSets},
     input::Bindings,
     ivec::{IBounds, IRect, IVec2},
+    rich_text::ColorRef,
     tab::{EditorTab, Tab, TabList},
     theme::{ColorId, Theme},
     tool::Tool,
@@ -13,12 +14,14 @@ use crate::{
 };
 use raylib::prelude::*;
 use rl_input::Event;
+use std::sync::{Arc, RwLock};
 
 mod console;
 mod graph;
 mod icon_sheets;
 mod input;
 mod ivec;
+mod rich_text;
 mod tab;
 mod theme;
 mod tool;
@@ -67,12 +70,14 @@ fn main() {
     )]);
 
     let mut console = Console::new(
-        4096,
+        327_680, // 4096 rows with 80 columns
         IBounds::new(IVec2::new(0, 570), IVec2::new(1280, 720)),
-        true,
-        false,
-        true,
-        true,
+        ConsoleAnchoring {
+            left: true,
+            top: false,
+            right: true,
+            bottom: true,
+        },
     );
 
     let mut toolpane = ToolPane::new(
@@ -84,7 +89,7 @@ fn main() {
     let mut hovering_console_top = Event::Inactive;
     let mut dragging_console_top = Event::Inactive;
 
-    log!(console, rl, theme, (LogType::Success, "initialized\n"),).unwrap();
+    logln!(console, "{}initialized", LogType::Success.color());
 
     while !rl.window_should_close() {
         // Tick
@@ -97,8 +102,8 @@ fn main() {
         if rl.is_window_resized() {
             let window_width = rl.get_screen_width();
             let window_height = rl.get_screen_height();
-            if console.right_anchored {
-                if console.left_anchored {
+            if console.anchoring.right {
+                if console.anchoring.left {
                     console.bounds.max.x = window_width;
                 } else {
                     let width = console.bounds.max.x - console.bounds.min.x;
@@ -106,8 +111,8 @@ fn main() {
                     console.bounds.max.x = window_width;
                 }
             }
-            if console.bottom_anchored {
-                if console.top_anchored {
+            if console.anchoring.bottom {
+                if console.anchoring.top {
                     console.bounds.max.y = window_width;
                 } else {
                     let height = console.bounds.max.y - console.bounds.min.y;
@@ -120,14 +125,15 @@ fn main() {
         if console.bounds.contains(IVec2::from_vec2(input.cursor))
             || dragging_console_top.is_active()
         {
-            console.top_row = console
-                .top_row
-                .saturating_sub_signed(input.scroll_console as isize)
-                .min(
-                    console
-                        .num_lines()
-                        .saturating_sub(console.displayable_lines(&theme).try_into().unwrap()),
-                );
+            console.bottom_offset = (console.bottom_offset + input.scroll_console as f64).clamp(
+                0.0,
+                console
+                    .content_str()
+                    .lines()
+                    .count()
+                    .saturating_sub(console.displayable_lines(&theme).try_into().unwrap())
+                    as f64,
+            );
         } else if let Some(tab) = tabs.focused_tab_mut() {
             match tab {
                 Tab::Editor(tab) => {
@@ -157,19 +163,19 @@ fn main() {
                                     if let Some(_idx) = graph.find_node_at_pos(pos) {
                                         // TODO
                                     } else {
-                                        let (id, _) = graph.create_node(toolpane.gate, pos);
-                                        log!(
+                                        let gate = toolpane.gate;
+                                        let (id, _) = graph.create_node(gate, pos);
+                                        let IVec2 { x, y } = pos;
+                                        logln!(
                                             console,
-                                            rl,
-                                            theme,
-                                            (LogType::Info, "create "),
-                                            (ColorId::Special, "[{}]", &toolpane.gate),
-                                            (LogType::Info, " node "),
-                                            (ColorId::Special, "N{id:06X}"),
-                                            (LogType::Info, " at "),
-                                            (ColorId::Special, "({}, {})\n", pos.x, pos.y),
-                                        )
-                                        .unwrap();
+                                            "{}create {}[{gate}]{} node {}N{id:06X}{} at {}({x}, {y})",
+                                            ColorRef::from(LogType::Info),
+                                            ColorRef::from(ColorId::Special),
+                                            ColorRef::from(LogType::Info),
+                                            ColorRef::from(ColorId::Special),
+                                            ColorRef::from(LogType::Info),
+                                            ColorRef::from(ColorId::Special),
+                                        );
                                     }
                                 }
                             }
@@ -213,6 +219,10 @@ fn main() {
             rl.set_mouse_cursor(MouseCursor::MOUSE_CURSOR_RESIZE_NS);
         } else if hovering_console_top == Event::Ending {
             rl.set_mouse_cursor(MouseCursor::MOUSE_CURSOR_DEFAULT);
+        }
+
+        for mut graph in graphs.iter_mut().filter_map(|g| g.try_write().ok()) {
+            graph.evaluate();
         }
 
         // Draw
@@ -277,13 +287,18 @@ fn main() {
                     w - theme.console_padding_left - theme.console_padding_right,
                     h - theme.console_padding_top - theme.console_padding_bottom,
                 );
-                for RichBlock {
-                    text,
-                    color,
-                    position: IVec2 { x, y },
-                } in console.visible_content(&theme)
-                {
+
+                let mut x = x + theme.console_padding_left;
+                let mut y = y + theme.console_padding_top;
+                let left = x;
+                for (color, text) in console.visible_content(&theme) {
                     d.draw_text(text, x, y, theme.console_font_size, color.get(&theme));
+                    if text.ends_with('\n') {
+                        y += theme.console_line_height();
+                        x = left;
+                    } else {
+                        x += d.measure_text(text, theme.console_font_size);
+                    }
                 }
             }
 

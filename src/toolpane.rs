@@ -1,4 +1,4 @@
-use crate::{graph::Gate, ivec::IBounds, tool::Tool};
+use crate::{graph::node::Gate, tool::Tool};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ToolPaneAnchoring {

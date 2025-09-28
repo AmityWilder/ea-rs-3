@@ -1,9 +1,14 @@
 use crate::{
     ivec::{IBounds, IVec2},
+    rich_text::{ColorRef, RichStr, RichString},
     theme::{ColorId, Theme},
 };
 use raylib::prelude::*;
-use std::{collections::VecDeque, fmt::Write};
+use std::{
+    collections::VecDeque,
+    fmt::Write,
+    num::{Saturating, Wrapping},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum LogType {
@@ -16,45 +21,22 @@ pub enum LogType {
     Error,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ColorRef {
-    Trace(LogType),
-    Theme(ColorId),
-    Exact(Color),
-}
-
-impl ColorRef {
-    pub fn get(self, theme: &Theme) -> Color {
-        match self {
-            Self::Trace(level) => match level {
-                LogType::Info => theme.foreground3,
-                LogType::Debug => Color::MAGENTA,
-                LogType::Attempt => theme.special,
-                LogType::Success => theme.foreground1,
-                LogType::Warning => theme.caution,
-                LogType::Error => theme.error,
-            },
-            Self::Theme(id) => theme[id],
-            Self::Exact(color) => color,
-        }
-    }
-}
-
-impl From<ColorId> for ColorRef {
-    fn from(value: ColorId) -> Self {
-        Self::Theme(value)
-    }
-}
-
-impl From<Color> for ColorRef {
-    fn from(value: Color) -> Self {
-        Self::Exact(value)
-    }
-}
-
 impl From<LogType> for ColorRef {
     fn from(value: LogType) -> Self {
-        Self::Trace(value)
+        value.color()
+    }
+}
+
+impl LogType {
+    pub const fn color(self) -> ColorRef {
+        match self {
+            LogType::Info => ColorRef::Theme(ColorId::Foreground3),
+            LogType::Debug => ColorRef::Exact(Color::MAGENTA),
+            LogType::Attempt => ColorRef::Theme(ColorId::Special),
+            LogType::Success => ColorRef::Theme(ColorId::Foreground1),
+            LogType::Warning => ColorRef::Theme(ColorId::Caution),
+            LogType::Error => ColorRef::Theme(ColorId::Error),
+        }
     }
 }
 
@@ -76,8 +58,9 @@ pub struct RichBlock<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RichChunkData {
-    pub len: usize,
+struct RichChunkData {
+    pub start: Wrapping<usize>,
+    pub end: Wrapping<usize>,
     pub color: ColorRef,
     pub x_change: i32,
     pub height: i32,
@@ -85,191 +68,135 @@ pub struct RichChunkData {
     pub is_y_changing: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ConsoleAnchoring {
+    pub left: bool,
+    pub top: bool,
+    pub right: bool,
+    pub bottom: bool,
+}
+
 #[derive(Debug)]
 pub struct Console {
-    content: String,
-    colors: VecDeque<RichChunkData>,
-    capacity: usize,
-    end_x: i32,
-    /// In units of cols/rows
-    pub top_row: usize,
+    content: RichString,
+    pub bottom_offset: f64,
     pub bounds: IBounds,
-    pub left_anchored: bool,
-    pub top_anchored: bool,
-    pub right_anchored: bool,
-    pub bottom_anchored: bool,
+    pub anchoring: ConsoleAnchoring,
 }
 
 impl Console {
-    pub const fn new(
-        capacity: usize,
-        bounds: IBounds,
-        left_anchored: bool,
-        top_anchored: bool,
-        right_anchored: bool,
-        bottom_anchored: bool,
-    ) -> Self {
+    pub fn new(capacity: usize, bounds: IBounds, anchoring: ConsoleAnchoring) -> Self {
         Self {
-            content: String::new(),
-            colors: VecDeque::new(),
-            capacity,
-            end_x: 0,
+            content: RichString::with_capacity(capacity),
             bounds,
-            top_row: 0,
-            left_anchored,
-            top_anchored,
-            right_anchored,
-            bottom_anchored,
+            bottom_offset: 0.0,
+            anchoring,
         }
     }
 
     /// NOTE: You will need to append with newline
-    /// NOTE: Remember to call [`Self::refresh_chunk_sizes`] if the font size has changed
-    pub fn log<'a>(
-        &mut self,
-        rl: &RaylibHandle,
-        theme: &Theme,
-        text: impl IntoIterator<Item = (ColorRef, std::fmt::Arguments<'a>)>,
-    ) -> std::fmt::Result {
-        let it = text.into_iter();
-        let (size_min, size_max) = it.size_hint();
-        self.colors.reserve(size_max.unwrap_or(size_min));
-        let start = self.content.len();
-        // cant reserve content because we dont know the len of each element without consuming the iterator
-        for (color, args) in it {
-            let start = self.content.len();
-            self.content.write_fmt(args)?;
-            let end = self.content.len();
-            let (x_change, height, is_y_changing) =
-                Self::measure_chunk(rl, theme, &self.content[start..end], self.end_x);
-            self.end_x += x_change;
-            self.colors.push_back(RichChunkData {
-                len: end - start,
-                color,
-                x_change,
-                height,
-                is_y_changing,
-            });
-            // remove excess from front
-            let mut total_size = 0;
-            let (sum, count) = self
-                .colors
-                .iter()
-                .rev()
-                .map(|chunk| chunk.len)
-                .skip_while(|&size| {
-                    total_size += size;
-                    total_size <= self.capacity
-                })
-                .fold((0, 0), |(sum, count), size| (sum + size, count + 1));
-            self.content.replace_range(..sum, "");
-            for _ in 0..count {
-                self.colors.pop_front();
+    pub fn log(&mut self, text: std::fmt::Arguments<'_>) {
+        let buf;
+        let s = match text.as_str() {
+            Some(s) => s,
+            None => {
+                buf = text.to_string();
+                buf.as_str()
             }
+        };
+        for mut line in s.split_inclusive('\n') {
+            if line.len() > self.content.capacity() {
+                self.content.clear();
+                line = &line[line.ceil_char_boundary(line.len() - self.content.capacity())..];
+            } else {
+                while self.content.len() + line.len() > self.content.capacity() {
+                    debug_assert!(
+                        !self.content.is_empty(),
+                        "if `line` exceeds capacity all by itself, this branch shouldn't have been reached"
+                    );
+                    match self.content.find('\n') {
+                        Some(n) => self.content.replace_range(..n + '\n'.len_utf8(), ""),
+                        None => self.content.clear(),
+                    }
+                }
+            }
+            debug_assert!(
+                self.content.len() + line.len() <= self.content.capacity(),
+                "content should not grow"
+            );
+            self.content.push_str(line);
         }
-        let lines_added = self.content[start..].trim_end().split('\n').count();
-        if self.content.trim_end().split('\n').count() - self.top_row
-            > usize::try_from(self.displayable_lines(theme)).unwrap()
-        {
-            self.top_row += lines_added;
-        }
-        Ok(())
+        self.bottom_offset = 0.0;
+    }
+
+    pub const fn content_str(&self) -> &RichStr {
+        self.content.as_rich_str()
+    }
+
+    pub fn content(&self) -> impl Iterator<Item = (ColorRef, &str)> {
+        let mut last_color = ColorRef::Theme(ColorId::Foreground);
+        RichStr::new(self.content.as_str())
+            .iter()
+            .map(move |item| match item {
+                Ok((color, text)) => {
+                    if let Some(color) = color {
+                        last_color = color;
+                    }
+                    (last_color, text)
+                }
+                Err(e) => panic!("{e}"),
+            })
     }
 
     pub fn displayable_lines(&self, theme: &Theme) -> i32 {
         ((self.bounds.max.y - theme.console_padding_bottom)
-                - (self.bounds.min.y + theme.console_padding_top)
-                + /* off by one otherwise */ theme.console_line_spacing)
+            - (self.bounds.min.y + theme.console_padding_top)
+            + /* Off by one otherwise */ theme.console_line_spacing)
             / theme.console_line_height()
     }
 
-    /// `(x_change, height, is_y_changing)`
-    fn measure_chunk(rl: &RaylibHandle, theme: &Theme, s: &str, x: i32) -> (i32, i32, bool) {
-        if s.contains('\n') {
-            (
-                rl.measure_text(s.split('\n').next_back().unwrap(), theme.console_font_size) + 1
-                    - x,
-                i32::try_from((s.split('\n').count() - 1) * 12).unwrap(),
-                true,
+    pub fn visible_content(&self, theme: &Theme) -> impl Iterator<Item = (ColorRef, &str)> {
+        const MAX_ROW: f64 = (usize::MAX as f64).next_down();
+        let mut last_color = ColorRef::Theme(ColorId::Foreground);
+        self.content
+            .split_inclusive('\n')
+            .skip(
+                self.content
+                    .lines()
+                    .count()
+                    .saturating_sub(self.bottom_offset.trunc().clamp(0.0, MAX_ROW) as usize)
+                    .saturating_sub(usize::try_from(self.displayable_lines(theme)).unwrap()),
             )
-        } else {
-            (rl.measure_text(s, theme.console_font_size) + 1, 12, false)
-        }
-    }
-
-    /// Call this when font size changes
-    pub fn refresh_chunk_sizes(&mut self, rl: &RaylibHandle, theme: &Theme) {
-        self.end_x = 0;
-        for (chunk, s) in self.colors.iter_mut().scan(0, |end, chunk| {
-            let start = *end;
-            *end += chunk.len;
-            Some((chunk, &self.content[start..*end]))
-        }) {
-            let (x_change, height, is_y_changing) = Self::measure_chunk(rl, theme, s, self.end_x);
-            self.end_x += x_change;
-            chunk.x_change = x_change;
-            chunk.height = height;
-            chunk.is_y_changing = is_y_changing;
-        }
-    }
-
-    pub fn content(&self) -> impl ExactSizeIterator<Item = RichChunk<'_>> + Clone {
-        let mut end = 0;
-        self.colors.iter().map(move |&chunk| {
-            let start = end;
-            end += chunk.len;
-            RichChunk {
-                text: &self.content[start..end],
-                color: chunk.color,
-                x_change: chunk.x_change,
-                height: chunk.height,
-                is_y_changing: chunk.is_y_changing,
-            }
-        })
-    }
-
-    pub fn visible_content(&self, theme: &Theme) -> impl Iterator<Item = RichBlock<'_>> {
-        self.content()
-            .scan(
-                (
-                    self.bounds.min.x + theme.console_padding_left,
-                    self.bounds.min.y + theme.console_padding_top
-                        - i32::try_from(self.top_row).unwrap() * theme.console_line_height(),
-                ),
-                |(x, y), chunk| {
-                    let old_y = *y;
-                    let old_x = *x;
-                    if chunk.is_y_changing {
-                        *y += chunk.height;
+            .take(self.displayable_lines(theme).try_into().unwrap())
+            .flat_map(|line| RichStr::new(line).iter())
+            .map(move |item| match item {
+                Ok((color, text)) => {
+                    if let Some(color) = color {
+                        last_color = color;
                     }
-                    *x += chunk.x_change;
-                    Some((chunk, old_x, old_y, *x, *y))
-                },
-            )
-            .skip_while(|(_, _, _, _, y)| *y < self.bounds.min.y + theme.console_padding_top)
-            .take_while(|(_, _, old_y, _, _)| {
-                *old_y < self.bounds.max.y - theme.console_padding_bottom
+                    (last_color, text)
+                }
+                Err(e) => panic!("{e}"),
             })
-            .map(|(chunk, x, y, _, _)| RichBlock {
-                text: chunk.text,
-                color: chunk.color,
-                position: IVec2 { x, y },
-            })
-    }
-
-    pub fn num_lines(&self) -> usize {
-        self.content.lines().count()
     }
 }
 
 #[macro_export]
 macro_rules! log {
-    ($console:expr, $rl:expr, $theme:expr, $(($color:expr, $($args:tt)+)),+ $(,)?) => {
+    ($console:expr, $($args:tt)+) => {
         $crate::console::Console::log(
             &mut $console,
-            &$rl,
-            &$theme,
-            [$( ($crate::console::ColorRef::from($color), format_args!($($args)+)) ),+]
+            format_args!($($args)+)
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! logln {
+    ($console:expr, $($args:tt)+) => {
+        $crate::console::Console::log(
+            &mut $console,
+            format_args!("{}\n", format_args!($($args)+))
         )
     };
 }
