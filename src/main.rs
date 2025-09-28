@@ -140,7 +140,7 @@ fn main() {
                     tab.zoom_and_pan(input.pan, input.zoom, 5.0);
 
                     if let Some(graph) = tab.graph.upgrade()
-                        // if graph is being borrowed, don't edit it!
+                        // if graph is being borrowed, don't edit it! it might be saving!
                         && let Ok(mut graph) = graph.try_write()
                     {
                         match toolpane.tool {
