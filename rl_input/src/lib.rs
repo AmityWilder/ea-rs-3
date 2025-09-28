@@ -153,10 +153,39 @@ impl EventSource {
 }
 
 #[derive(Debug, Clone)]
+pub struct SelectorSource<T>(pub Box<[(EventSource, T)]>);
+
+impl<T, U: Into<Box<[(EventSource, T)]>>> From<U> for SelectorSource<T> {
+    fn from(value: U) -> Self {
+        Self(value.into())
+    }
+}
+
+impl<T> SelectorSource<T> {
+    pub fn get<'a, F>(&'a self, rl: &RaylibHandle, mut f: F) -> impl Iterator<Item = &'a T>
+    where
+        F: FnMut(&EventSource, &RaylibHandle) -> bool,
+    {
+        self.0
+            .iter()
+            .filter(move |(src, _)| f(src, rl))
+            .map(|(_, val)| val)
+    }
+
+    pub fn get_active<'a>(&'a self, rl: &RaylibHandle) -> impl Iterator<Item = &'a T> {
+        self.get(rl, EventSource::is_active)
+    }
+
+    pub fn get_starting<'a>(&'a self, rl: &RaylibHandle) -> impl Iterator<Item = &'a T> {
+        self.get(rl, EventSource::is_starting)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum AxisSource {
     Constant(f32),
     MouseWheelMove,
-    EventMix(Box<[(EventSource, AxisSource)]>),
+    EventMix(SelectorSource<AxisSource>),
     Combo(Combo<Self>),
 }
 
@@ -166,11 +195,7 @@ impl AxisSource {
         match self {
             Self::Constant(x) => *x,
             Self::MouseWheelMove => rl.get_mouse_wheel_move(),
-            Self::EventMix(items) => items
-                .iter()
-                .filter(|(src, _)| src.is_active(rl))
-                .map(|(_, val)| val.get(rl))
-                .sum(),
+            Self::EventMix(items) => items.get_active(rl).map(|src| src.get(rl)).sum(),
             Self::Combo(Combo::Add(items)) => items.iter().map(|x| x.get(rl)).sum(),
             Self::Combo(Combo::Mul(items)) => items.iter().map(|x| x.get(rl)).product(),
             Self::Combo(Combo::Neg(item)) => -item.get(rl),
@@ -183,7 +208,7 @@ pub enum VectorSource {
     Constant(Vector2),
     MousePosition,
     MouseDelta,
-    EventMix(Box<[(EventSource, VectorSource)]>),
+    EventMix(SelectorSource<VectorSource>),
     AxisXY { x: AxisSource, y: AxisSource },
     Combo(Combo<Self>),
 }
@@ -196,9 +221,8 @@ impl VectorSource {
             Self::MousePosition => rl.get_mouse_position(),
             Self::MouseDelta => rl.get_mouse_delta(),
             Self::EventMix(items) => items
-                .iter()
-                .filter(|(src, _)| src.is_active(rl))
-                .map(|(_, val)| val.get(rl))
+                .get_active(rl)
+                .map(|src| src.get(rl))
                 .reduce(|a, b| a + b)
                 .unwrap_or(Vector2::zero()),
             Self::AxisXY { x, y } => Vector2::new(x.get(rl), y.get(rl)),

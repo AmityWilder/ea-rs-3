@@ -129,6 +129,10 @@ fn main() {
         } else if let Some(tab) = tabs.focused_tab_mut() {
             match tab {
                 Tab::Editor(tab) => {
+                    if let Some(gate) = input.gate_hotkey {
+                        toolpane.gate = gate;
+                    }
+
                     if rl.is_window_resized() {
                         let bounds = IBounds::new(
                             IVec2::zero(),

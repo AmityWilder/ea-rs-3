@@ -1,5 +1,6 @@
+use crate::graph::Gate;
 use raylib::prelude::*;
-use rl_input::{AxisSource, Event, EventSource, VectorSource};
+use rl_input::{AxisSource, Event, EventSource, SelectorSource, VectorSource};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Inputs {
@@ -11,6 +12,7 @@ pub struct Inputs {
     pub scroll_console: f32,
     pub cursor: Vector2,
     pub pan: Vector2,
+    pub gate_hotkey: Option<Gate>,
 }
 
 #[derive(Debug, Clone)]
@@ -23,6 +25,7 @@ pub struct Bindings {
     pub scroll_console: AxisSource,
     pub cursor: VectorSource,
     pub pan: VectorSource,
+    pub gate_hotkey: SelectorSource<Gate>,
 }
 
 impl Default for Bindings {
@@ -37,7 +40,7 @@ impl Default for Bindings {
             zoom: AxisSource::MouseWheelMove,
             scroll_console: AxisSource::MouseWheelMove,
             cursor: VectorSource::MousePosition,
-            pan: VectorSource::EventMix(Box::from([
+            pan: VectorSource::EventMix(SelectorSource::from([
                 (
                     EventSource::Keyboard(KEY_D),
                     VectorSource::Constant(rvec2(1, 0)),
@@ -55,6 +58,17 @@ impl Default for Bindings {
                     VectorSource::Constant(rvec2(0, 1)),
                 ),
             ])),
+            gate_hotkey: SelectorSource::from([
+                (EventSource::Keyboard(KEY_ONE), Gate::Or),
+                (EventSource::Keyboard(KEY_TWO), Gate::And),
+                (EventSource::Keyboard(KEY_THREE), Gate::Nor),
+                (EventSource::Keyboard(KEY_FOUR), Gate::Xor),
+                (EventSource::Keyboard(KEY_FIVE), Gate::Resistor {}),
+                (EventSource::Keyboard(KEY_SIX), Gate::Capacitor {}),
+                (EventSource::Keyboard(KEY_SEVEN), Gate::Led {}),
+                (EventSource::Keyboard(KEY_EIGHT), Gate::Delay {}),
+                (EventSource::Keyboard(KEY_NINE), Gate::Battery),
+            ]),
         }
     }
 }
@@ -70,6 +84,7 @@ impl Bindings {
             scroll_console: self.scroll_console.get(rl),
             cursor: self.cursor.get(rl),
             pan: self.pan.get(rl),
+            gate_hotkey: self.gate_hotkey.get_starting(rl).next().copied(),
         }
     }
 }
