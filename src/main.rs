@@ -479,7 +479,7 @@ fn main() {
                         for node in graph.nodes_iter() {
                             node_icon_sheets.draw(
                                 &mut d,
-                                tab.zoom_exp().floor() as i32,
+                                tab.zoom_exp().ceil() as i32,
                                 NodeIconSheetId::Basic,
                                 Rectangle {
                                     x: node.position.x as f32,
