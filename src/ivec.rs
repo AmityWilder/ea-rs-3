@@ -6,6 +6,16 @@ pub struct IVec2 {
     pub y: i32,
 }
 
+pub trait AsIVec2 {
+    fn as_ivec2(&self) -> IVec2;
+}
+
+impl AsIVec2 for Vector2 {
+    fn as_ivec2(&self) -> IVec2 {
+        IVec2::from_vec2(*self)
+    }
+}
+
 impl IVec2 {
     pub const fn new(x: i32, y: i32) -> Self {
         Self { x, y }
@@ -45,6 +55,21 @@ pub struct IRect {
     pub y: i32,
     pub w: i32,
     pub h: i32,
+}
+
+pub trait AsIRect {
+    fn as_irect(&self) -> IRect;
+}
+
+impl AsIRect for Rectangle {
+    fn as_irect(&self) -> IRect {
+        IRect {
+            x: self.x as i32,
+            y: self.y as i32,
+            w: self.width as i32,
+            h: self.height as i32,
+        }
+    }
 }
 
 impl IRect {

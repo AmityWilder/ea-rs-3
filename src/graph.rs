@@ -66,19 +66,19 @@ impl Graph {
     }
 
     pub fn node(&self, id: &NodeId) -> Option<&Node> {
-        self.nodes.get(&id)
+        self.nodes.get(id)
     }
 
     pub fn node_mut(&mut self, id: &NodeId) -> Option<&mut Node> {
-        self.nodes.get_mut(&id)
+        self.nodes.get_mut(id)
     }
 
     pub fn wire(&self, id: &WireId) -> Option<&Wire> {
-        self.wires.get(&id)
+        self.wires.get(id)
     }
 
     pub fn wire_mut(&mut self, id: &WireId) -> Option<&mut Wire> {
-        self.wires.get_mut(&id)
+        self.wires.get_mut(id)
     }
 
     pub fn create_node(&mut self, gate: Gate, position: IVec2) -> &mut Node {

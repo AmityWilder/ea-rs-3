@@ -31,7 +31,7 @@ impl std::ops::Index<NodeIconSheetId> for NodeIconSheetSet {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NodeIconSheetSetId {
     X8,
     X16,
@@ -216,13 +216,13 @@ impl NodeIconSheetSets {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Eq, Hash)]
 pub enum ButtonIconSheetId {
     X16,
     X32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ButtonIconId {
     Pen,
     Erase,
@@ -285,6 +285,7 @@ impl ButtonIconSheets {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn draw<D: RaylibDraw>(
         &self,
         d: &mut D,

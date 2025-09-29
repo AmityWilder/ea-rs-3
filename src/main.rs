@@ -1,9 +1,8 @@
 #![deny(clippy::missing_safety_doc, clippy::undocumented_unsafe_blocks)]
+#![allow(dead_code, reason = "for future use")]
 
 use crate::{
-    console::{
-        Console, ConsoleAnchoring, GateRef, HyperRef, LogType, NodeRef, PositionRef, ToolRef,
-    },
+    console::{Console, ConsoleAnchoring, GateRef, HyperRef, LogType, PositionRef, ToolRef},
     graph::{GraphList, node::Gate},
     icon_sheets::{ButtonIconSheets, NodeIconSheetId, NodeIconSheetSets},
     input::Bindings,
@@ -14,6 +13,7 @@ use crate::{
     toolpane::{ToolPane, ToolPaneAnchoring},
 };
 use console::GraphRef;
+use ivec::AsIVec2;
 use raylib::prelude::*;
 use rl_input::Event;
 use std::sync::Arc;
@@ -120,7 +120,7 @@ fn main() {
     let theme = Theme::default();
     let binds = Bindings::default();
 
-    let _button_icon_sheets = ButtonIconSheets::load(&mut rl, &thread).unwrap();
+    let button_icon_sheets = ButtonIconSheets::load(&mut rl, &thread).unwrap();
     let node_icon_sheets = NodeIconSheetSets::load(&mut rl, &thread).unwrap();
 
     let mut graphs = GraphList::new();
@@ -150,6 +150,7 @@ fn main() {
         Tool::default(),
         Gate::default(),
         ToolPaneAnchoring::default(),
+        icon_sheets::ButtonIconSheetId::X16,
     );
 
     let mut hovering_console_top = Event::Inactive;
@@ -188,7 +189,15 @@ fn main() {
             }
         }
 
-        if console.bounds.contains(IVec2::from_vec2(input.cursor))
+        if toolpane
+            .bounds(
+                rl.get_screen_width(),
+                rl.get_screen_height().min(console.bounds.min.y),
+                &theme,
+            )
+            .contains(input.cursor.as_ivec2())
+        {
+        } else if console.bounds.contains(input.cursor.as_ivec2())
             || dragging_console_top.is_active()
         {
             console.bottom_offset = (console.bottom_offset + input.scroll_console as f64).clamp(
@@ -211,7 +220,7 @@ fn main() {
                     rl.measure_text(text, theme.console_font_size),
                     theme.console_font_size,
                 ))
-                .contains(IVec2::from_vec2(input.cursor))
+                .contains(input.cursor.as_ivec2())
                     && let Ok(hyper_ref) = text.parse::<HyperRef>()
                 {
                     match hyper_ref {
@@ -280,7 +289,9 @@ fn main() {
                         && let Ok(mut graph) = graph.try_write()
                     {
                         let graph_ref = GraphRef(*graph.id());
-                        let pos = IVec2::from_vec2(tab.screen_to_world(input.cursor))
+                        let pos = tab
+                            .screen_to_world(input.cursor)
+                            .as_ivec2()
                             .snap(GRID_SIZE.into());
 
                         match &mut toolpane.tool {
@@ -358,9 +369,10 @@ fn main() {
                                         let graph_ref = GraphRef(*graph.id());
                                         let node_ref = graph_ref.node(*id);
                                         let node = graph.node_mut(id).unwrap();
-                                        node.position =
-                                            IVec2::from_vec2(tab.screen_to_world(input.cursor))
-                                                .snap(GRID_SIZE.into());
+                                        node.position = tab
+                                            .screen_to_world(input.cursor)
+                                            .as_ivec2()
+                                            .snap(GRID_SIZE.into());
                                         logln!(
                                             console,
                                             LogType::Info,
@@ -374,10 +386,9 @@ fn main() {
 
                                 if let Some((_, id)) = target.as_ref() {
                                     let node = graph.node_mut(id).unwrap();
-                                    node.position = IVec2::from_vec2(
-                                        tab.screen_to_world(input.cursor)
-                                            - rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                                    );
+                                    node.position = (tab.screen_to_world(input.cursor)
+                                        - rvec2(GRID_SIZE / 2, GRID_SIZE / 2))
+                                    .as_ivec2();
                                 }
                             }
                         }
@@ -541,7 +552,7 @@ fn main() {
                         .is_some();
 
                         if is_live
-                            && IBounds::from(hyper_rec).contains(IVec2::from_vec2(input.cursor))
+                            && IBounds::from(hyper_rec).contains(input.cursor.as_ivec2())
                             && let Ok(hr) = text.parse::<HyperRef>()
                         {
                             draw_hyper_ref_link(&mut d, hr, hyper_rec, &theme, &graphs, &tabs);
@@ -591,6 +602,38 @@ fn main() {
                     theme.console_font_size,
                     theme.foreground,
                 );
+            }
+        }
+
+        // toolpane
+        {
+            let IRect { x, y, w, h } = toolpane
+                .bounds(
+                    d.get_screen_width(),
+                    d.get_screen_height().min(console.bounds.min.y),
+                    &theme,
+                )
+                .into();
+
+            d.draw_rectangle(x, y, w, h, theme.background2);
+            d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, theme.background1);
+
+            for button in toolpane.buttons(&theme) {
+                if let Some(icon) = button.icon {
+                    button_icon_sheets.draw(
+                        &mut d,
+                        toolpane.scale,
+                        button.rec.as_rect(),
+                        icon,
+                        Vector2::zero(),
+                        0.0,
+                        theme.foreground,
+                    );
+                } else {
+                    let IRect { x, y, w, h } = button.rec;
+                    d.draw_rectangle(x, y, w, h, button.color.get(&theme));
+                    d.draw_rectangle_lines(x, y, w, h, theme.background2);
+                }
             }
         }
     }
