@@ -35,7 +35,7 @@ impl std::str::FromStr for ToolId {
 impl ToolId {
     pub const fn init(self) -> Tool {
         match self {
-            ToolId::Create => Tool::Create {},
+            ToolId::Create => Tool::Create { current_node: None },
             ToolId::Erase => Tool::Erase {},
             ToolId::Edit => Tool::Edit { target: None },
         }
@@ -44,7 +44,9 @@ impl ToolId {
 
 #[derive(Debug, Clone)]
 pub enum Tool {
-    Create {},
+    Create {
+        current_node: Option<usize>,
+    },
     Erase {},
     Edit {
         /// (start_pos, idx)
@@ -54,6 +56,6 @@ pub enum Tool {
 
 impl Default for Tool {
     fn default() -> Self {
-        Self::Create {}
+        Self::Create { current_node: None }
     }
 }

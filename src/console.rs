@@ -212,6 +212,14 @@ impl GraphRef {
             None
         }
     }
+
+    pub fn node(&self, node_id: NodeId) -> NodeRef {
+        NodeRef(self.0, node_id)
+    }
+
+    pub fn wire(&self, wire_id: WireId) -> WireRef {
+        WireRef(self.0, wire_id)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
