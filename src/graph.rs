@@ -5,10 +5,8 @@ use crate::{
     },
     ivec::IVec2,
 };
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
+use rustc_hash::FxHashMap;
+use std::sync::{Arc, RwLock};
 
 pub mod node;
 pub mod wire;
@@ -38,8 +36,8 @@ pub struct Graph {
     next_node_id: NodeId,
     next_wire_id: WireId,
     id: GraphId,
-    nodes: HashMap<NodeId, Node>,
-    wires: HashMap<WireId, Wire>,
+    nodes: FxHashMap<NodeId, Node>,
+    wires: FxHashMap<WireId, Wire>,
 }
 
 impl Graph {
@@ -48,8 +46,8 @@ impl Graph {
             next_node_id: NodeId(0),
             next_wire_id: WireId(0),
             id,
-            nodes: HashMap::new(),
-            wires: HashMap::new(),
+            nodes: FxHashMap::default(),
+            wires: FxHashMap::default(),
         }
     }
 
@@ -90,8 +88,15 @@ impl Graph {
             .into_mut()
     }
 
-    pub fn destroy_node(&mut self, id: &NodeId) -> Option<Node> {
-        self.nodes.remove(id)
+    pub fn destroy_node(&mut self, id: &NodeId, soft: bool) -> Option<Node> {
+        self.nodes.remove(id).inspect(|_| {
+            if soft {
+                todo!()
+            } else {
+                self.wires
+                    .retain(|_, wire| &wire.src != id && &wire.dst != id);
+            }
+        })
     }
 
     pub fn create_wire(&mut self, elbow_pos: IVec2, src: NodeId, dst: NodeId) -> &mut Wire {
@@ -121,7 +126,7 @@ impl Graph {
     }
 
     pub fn evaluate(&mut self) {
-        let node_states: HashMap<NodeId, u8> = self
+        let node_states: FxHashMap<NodeId, u8> = self
             .nodes
             .iter()
             .map(|(id, node)| (*id, node.state))

@@ -352,7 +352,7 @@ fn main() {
                                 if input.primary.is_starting()
                                     && let Some(&id) = graph.find_node_at_pos(pos)
                                 {
-                                    let _ = graph.destroy_node(&id).expect("cannot reach this branch if graph did not contain the node");
+                                    let _ = graph.destroy_node(&id, false).expect("cannot reach this branch if graph did not contain the node");
                                     let node_ref = graph_ref.node(id);
                                     logln!(console, LogType::Info, "destroy node {node_ref}");
                                 }
@@ -417,11 +417,11 @@ fn main() {
         }
         if dragging_console_top.is_active() {
             console.bounds.min.y = (input.cursor.y as i32).clamp(
-                theme.console_padding_top,
+                theme.console_padding_top, // arbitrary
                 console.bounds.max.y
                     - theme.console_padding_bottom
                     - theme.console_padding_bottom
-                    - theme.console_font_size,
+                    - theme.console_line_height(),
             );
         }
 
@@ -535,7 +535,9 @@ fn main() {
                 // );
 
                 let mut x = x + theme.console_padding_left;
-                let mut y = y + theme.console_padding_top;
+                let mut y = console.bounds.max.y
+                    - theme.console_padding_bottom
+                    - console.displayable_lines(&theme) * theme.console_line_height();
                 let left = x;
                 for (color, text) in console.visible_content(&theme) {
                     let width = d.measure_text(text, theme.console_font_size);
@@ -631,8 +633,8 @@ fn main() {
                     );
                 } else {
                     let IRect { x, y, w, h } = button.rec;
-                    d.draw_rectangle(x, y, w, h, button.color.get(&theme));
-                    d.draw_rectangle_lines(x, y, w, h, theme.background2);
+                    d.draw_rectangle(x, y, w, h, theme.background2);
+                    d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, button.color.get(&theme));
                 }
             }
         }
