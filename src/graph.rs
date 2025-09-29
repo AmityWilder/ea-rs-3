@@ -136,17 +136,22 @@ impl Graph {
                         .get(&wire.src)
                         .copied()
                         .expect("all wires should be valid")
-                });
+                })
+                .peekable();
 
             node.state = match node.gate {
                 Gate::Or | Gate::Led { .. } => inputs.any(|x| x != 0) as u8,
-                Gate::And => inputs.all(|x| x != 0) as u8,
+                Gate::And => (inputs.peek().is_some() && inputs.all(|x| x != 0)) as u8,
                 Gate::Nor => !inputs.any(|x| x != 0) as u8,
                 Gate::Xor => (inputs.filter(|&x| x != 0).count() == 1) as u8,
                 Gate::Resistor { resistance } => (inputs.sum::<u8>() > resistance) as u8,
                 Gate::Capacitor { capacity } => {
                     let total = inputs.sum::<u8>().min(capacity);
-                    if total > 0 { total } else { node.state - 1 }
+                    if total > 0 {
+                        total
+                    } else {
+                        node.state.saturating_sub(1)
+                    }
                 }
                 Gate::Delay { ticks: _ } => 0, // TODO
                 Gate::Battery => 1,
