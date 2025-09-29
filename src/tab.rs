@@ -143,12 +143,14 @@ impl EditorTab {
         self.grid.texture()
     }
 
-    pub fn screen_to_world(&self, screen_pos: Vector2) -> IVec2 {
-        let camera = self.camera();
+    pub fn screen_to_world(&self, screen_pos: Vector2) -> Vector2 {
         // SAFETY: GetScreenToWorld2D is a pure function with no preconditions
-        IVec2::from_vec2(
-            unsafe { ffi::GetScreenToWorld2D(screen_pos.into(), camera.into()) }.into(),
-        )
+        unsafe { ffi::GetScreenToWorld2D(screen_pos.into(), self.camera().into()) }.into()
+    }
+
+    pub fn world_to_screen(&self, world_pos: Vector2) -> Vector2 {
+        // SAFETY: GetWorldToScreen2D is a pure function with no preconditions
+        unsafe { ffi::GetWorldToScreen2D(world_pos.into(), self.camera().into()) }.into()
     }
 }
 
@@ -347,5 +349,39 @@ impl TabList {
         } else {
             Err(())
         }
+    }
+
+    pub fn editors(&self) -> impl DoubleEndedIterator<Item = &EditorTab> + Clone {
+        self.tabs.iter().map(|tab| match tab {
+            Tab::Editor(tab) => tab,
+            // _ => None,
+        })
+    }
+
+    pub fn editors_mut(&mut self) -> impl DoubleEndedIterator<Item = &mut EditorTab> {
+        self.tabs.iter_mut().map(|tab| match tab {
+            Tab::Editor(tab) => tab,
+            // _ => None,
+        })
+    }
+
+    pub fn editors_of_graph(
+        &self,
+        graph: &Weak<RwLock<Graph>>,
+    ) -> impl DoubleEndedIterator<Item = &EditorTab> + Clone {
+        self.tabs.iter().filter_map(|tab| match tab {
+            Tab::Editor(tab) if tab.graph.ptr_eq(graph) => Some(tab),
+            _ => None,
+        })
+    }
+
+    pub fn editors_of_graph_mut(
+        &mut self,
+        graph: &Weak<RwLock<Graph>>,
+    ) -> impl DoubleEndedIterator<Item = &mut EditorTab> {
+        self.tabs.iter_mut().filter_map(|tab| match tab {
+            Tab::Editor(tab) if tab.graph.ptr_eq(graph) => Some(tab),
+            _ => None,
+        })
     }
 }

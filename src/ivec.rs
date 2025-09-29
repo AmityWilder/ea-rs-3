@@ -1,7 +1,5 @@
 use raylib::prelude::*;
 
-use crate::GRID_SIZE;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct IVec2 {
     pub x: i32,

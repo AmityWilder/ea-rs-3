@@ -2,21 +2,20 @@
 
 use crate::{
     console::{
-        Console, ConsoleAnchoring, GraphRef, HyperRef, LogType, NodeRef, PositionRef, WireRef,
+        Console, ConsoleAnchoring, GateRef, HyperRef, LogType, NodeRef, PositionRef, ToolRef,
     },
-    graph::{Graph, GraphList, node::Gate},
+    graph::{GraphList, node::Gate},
     icon_sheets::{ButtonIconSheets, NodeIconSheetId, NodeIconSheetSets},
     input::Bindings,
     ivec::{IBounds, IRect, IVec2},
-    rich_text::ColorAct,
     tab::{EditorTab, Tab, TabList},
-    theme::{ColorId, Theme},
+    theme::Theme,
     tool::Tool,
     toolpane::{ToolPane, ToolPaneAnchoring},
 };
 use raylib::prelude::*;
 use rl_input::Event;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 mod console;
 mod graph;
@@ -30,6 +29,73 @@ mod tool;
 mod toolpane;
 
 pub const GRID_SIZE: u8 = 8;
+
+fn draw_hyper_ref_link<D>(
+    d: &mut D,
+    hyper_ref: HyperRef,
+    rec: IRect,
+    theme: &Theme,
+    graphs: &GraphList,
+    tabs: &TabList,
+) where
+    D: RaylibDraw,
+{
+    const GRID_CENTER_OFFSET: Vector2 =
+        Vector2::new((GRID_SIZE / 2) as f32, (GRID_SIZE / 2) as f32);
+
+    // highlight ref text
+    d.draw_rectangle(rec.x, rec.y, rec.w, rec.h, theme.hyperref.alpha(0.2));
+
+    // exit scissor mode temporarily
+    let mut d = d.begin_scissor_mode(0, 0, i32::MAX, i32::MAX);
+
+    let link_anchor = Vector2::new(
+        rec.x as f32 + rec.w as f32,
+        rec.y as f32 + rec.h as f32 * 0.5,
+    );
+
+    match hyper_ref {
+        HyperRef::Gate(_gate_ref) => {
+            // TODO
+        }
+
+        HyperRef::Tool(_tool_ref) => {
+            // TODO
+        }
+
+        HyperRef::Position(position_ref) => {
+            for tab in tabs.editors() {
+                let pos = tab.world_to_screen(position_ref.as_vec2() + GRID_CENTER_OFFSET);
+                d.draw_line_v(link_anchor, pos, theme.hyperref);
+            }
+        }
+
+        HyperRef::Graph(graph_ref) => {
+            graph_ref.deref_with(graphs, |g, _borrow| {
+                for _tab in tabs.editors_of_graph(&Arc::downgrade(g)) {
+                    // TODO
+                }
+            });
+        }
+
+        HyperRef::Node(node_ref) => {
+            node_ref.deref_with(graphs, |g, _borrow, node| {
+                for tab in tabs.editors_of_graph(&Arc::downgrade(g)) {
+                    let pos = tab.world_to_screen(node.position.as_vec2() + GRID_CENTER_OFFSET);
+                    d.draw_line_v(link_anchor, pos, theme.hyperref);
+                }
+            });
+        }
+
+        HyperRef::Wire(wire_ref) => {
+            wire_ref.deref_with(graphs, |g, _borrow, _wire| {
+                for _tab in tabs.editors_of_graph(&Arc::downgrade(g)) {
+                    // TODO
+                }
+            });
+        }
+    }
+}
 
 fn main() {
     let program_icon =
@@ -56,7 +122,7 @@ fn main() {
     let theme = Theme::default();
     let binds = Bindings::default();
 
-    let button_icon_sheets = ButtonIconSheets::load(&mut rl, &thread).unwrap();
+    let _button_icon_sheets = ButtonIconSheets::load(&mut rl, &thread).unwrap();
     let node_icon_sheets = NodeIconSheetSets::load(&mut rl, &thread).unwrap();
 
     let mut graphs = GraphList::new();
@@ -148,44 +214,37 @@ fn main() {
                     theme.console_font_size,
                 ))
                 .contains(IVec2::from_vec2(input.cursor))
-                    && let Ok(x) = text.parse::<HyperRef>()
+                    && let Ok(hyper_ref) = text.parse::<HyperRef>()
                 {
-                    match x {
-                        HyperRef::Position(PositionRef(pos)) => {
-                            // println!("{pos:?}");
+                    match hyper_ref {
+                        HyperRef::Gate(_gate_ref) => {
+                            // TODO
                         }
-                        HyperRef::Graph(GraphRef(g)) => {
-                            let borrow;
-                            let graph = match graphs.get_by_id(g) {
-                                Some(g) => {
-                                    borrow = g.read().unwrap();
-                                    Some(&*borrow)
-                                }
-                                None => None,
-                            };
-                            // println!("{graph:?}");
+
+                        HyperRef::Tool(_tool_ref) => {
+                            // TODO
                         }
-                        HyperRef::Node(NodeRef(g, n)) => {
-                            let borrow;
-                            let node = match graphs.get_by_id(g) {
-                                Some(g) => {
-                                    borrow = g.read().unwrap();
-                                    borrow.get_node_by_id(n)
-                                }
-                                None => None,
-                            };
-                            // println!("{node:?}");
+
+                        HyperRef::Position(_position_ref) => {
+                            // TODO
                         }
-                        HyperRef::Wire(WireRef(g, w)) => {
-                            let borrow;
-                            let wire = match graphs.get_by_id(g) {
-                                Some(g) => {
-                                    borrow = g.read().unwrap();
-                                    borrow.get_wire_by_id(w)
-                                }
-                                None => None,
-                            };
-                            // println!("{wire:?}");
+
+                        HyperRef::Graph(graph_ref) => {
+                            graph_ref.deref_with(&graphs, |_g, _borrow| {
+                                // TODO
+                            });
+                        }
+
+                        HyperRef::Node(node_ref) => {
+                            node_ref.deref_with(&graphs, |_g, _borrow, _node| {
+                                // TODO
+                            });
+                        }
+
+                        HyperRef::Wire(wire_ref) => {
+                            wire_ref.deref_with(&graphs, |_g, _borrow, _wire| {
+                                // TODO
+                            });
                         }
                     }
                 }
@@ -201,6 +260,11 @@ fn main() {
                 Tab::Editor(tab) => {
                     if let Some(gate) = input.gate_hotkey {
                         toolpane.gate = gate;
+                        logln!(console, LogType::Info, "set gate to {}", GateRef(gate));
+                    }
+                    if let Some(tool_id) = input.tool_hotkey {
+                        toolpane.tool = tool_id.init();
+                        logln!(console, LogType::Info, "set tool to {}", ToolRef(tool_id));
                     }
 
                     if rl.is_window_resized() {
@@ -217,11 +281,11 @@ fn main() {
                         // if graph is being borrowed, don't edit it! it might be saving!
                         && let Ok(mut graph) = graph.try_write()
                     {
+                        let pos = IVec2::from_vec2(tab.screen_to_world(input.cursor))
+                            .snap(GRID_SIZE.into());
                         match toolpane.tool {
                             Tool::Create {} => {
                                 if input.primary.is_starting() {
-                                    let pos =
-                                        tab.screen_to_world(input.cursor).snap(GRID_SIZE.into());
                                     if let Some(_idx) = graph.find_node_at_pos(pos) {
                                         // TODO
                                     } else {
@@ -231,17 +295,57 @@ fn main() {
                                         logln!(
                                             console,
                                             LogType::Info,
-                                            "create {}[{gate}]{} node {} at {}",
-                                            ColorAct::Push(ColorId::Special.into()),
-                                            ColorAct::Pop,
+                                            "create {} node {} at {}",
+                                            GateRef(gate),
                                             NodeRef(graph.id(), node_id),
                                             PositionRef(pos),
                                         );
                                     }
                                 }
                             }
-                            Tool::Erase {} => todo!(),
-                            Tool::Edit {} => todo!(),
+
+                            Tool::Erase {} => {
+                                if input.primary.is_starting()
+                                    && let Some(idx) = graph.find_node_at_pos(pos)
+                                {
+                                    let node = graph.destroy_node(idx);
+                                    logln!(
+                                        console,
+                                        LogType::Info,
+                                        "destroy node {}",
+                                        NodeRef(graph.id(), node.id()),
+                                    );
+                                }
+                            }
+
+                            Tool::Edit { ref mut target } => {
+                                if input.primary.is_starting()
+                                    && let Some(idx) = graph.find_node_at_pos(pos)
+                                {
+                                    *target = Some((graph.node(idx).unwrap().position, idx));
+                                }
+                                if input.primary.is_ending() {
+                                    if let Some((start_pos, idx)) = *target {
+                                        let node = graph.node(idx).unwrap();
+                                        logln!(
+                                            console,
+                                            LogType::Info,
+                                            "move node {} from {} to {}",
+                                            NodeRef(graph.id(), node.id()),
+                                            PositionRef(start_pos),
+                                            PositionRef(node.position),
+                                        );
+                                    }
+                                    *target = None;
+                                }
+
+                                if let Some(&(_, idx)) = target.as_ref() {
+                                    let node = graph.node_mut(idx).unwrap();
+                                    node.position =
+                                        IVec2::from_vec2(tab.screen_to_world(input.cursor))
+                                            .snap(GRID_SIZE.into());
+                                }
+                            }
                         }
                     }
                 }
@@ -354,87 +458,40 @@ fn main() {
                 let left = x;
                 for (color, text) in console.visible_content(&theme) {
                     let width = d.measure_text(text, theme.console_font_size);
-                    if IBounds::from(IRect::new(x, y, width, theme.console_font_size))
-                        .contains(IVec2::from_vec2(input.cursor))
-                        && let Ok(hr) = text.parse::<HyperRef>()
-                    {
-                        d.draw_rectangle(
-                            x,
-                            y,
-                            width,
-                            theme.console_font_size,
-                            theme.special.alpha(0.2),
-                        );
-                        match hr {
-                            HyperRef::Position(PositionRef(pos)) => {
-                                let mut d = d.begin_scissor_mode(
-                                    0,
-                                    0,
-                                    d.get_screen_width(),
-                                    d.get_screen_height(),
-                                );
-                                for tab in &tabs {
-                                    match tab {
-                                        Tab::Editor(tab) => {
-                                            d.draw_line_v(
-                                                input.cursor,
-                                                d.get_world_to_screen2D(
-                                                    pos.as_vec2()
-                                                        + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                                                    tab.camera(),
-                                                ),
-                                                theme.special,
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                            HyperRef::Graph(g) => {
-                                // TODO
-                            }
-                            HyperRef::Node(NodeRef(g, n)) => {
-                                if let Some(g) = graphs.get_by_id(g) {
-                                    let borrow = g.read().unwrap();
-                                    if let Some(node) = borrow.get_node_by_id(n) {
-                                        let mut d = d.begin_scissor_mode(
-                                            0,
-                                            0,
-                                            d.get_screen_width(),
-                                            d.get_screen_height(),
-                                        );
-                                        for tab in &tabs {
-                                            match tab {
-                                                Tab::Editor(tab) => {
-                                                    if tab
-                                                        .graph
-                                                        .upgrade()
-                                                        .is_some_and(|x| Arc::ptr_eq(&x, g))
-                                                    {
-                                                        d.draw_line_v(
-                                                            input.cursor,
-                                                            d.get_world_to_screen2D(
-                                                                node.position.as_vec2()
-                                                                    + rvec2(
-                                                                        GRID_SIZE / 2,
-                                                                        GRID_SIZE / 2,
-                                                                    ),
-                                                                tab.camera(),
-                                                            ),
-                                                            theme.special,
-                                                        );
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                };
-                            }
-                            HyperRef::Wire(w) => {
-                                // TODO
-                            }
+                    let hyper_rec = IRect::new(x, y, width, theme.console_font_size);
+                    let is_live = if let Ok(hr) = text.parse::<HyperRef>() {
+                        let is_live = match hr {
+                            HyperRef::Gate(_) => Some(()),
+                            HyperRef::Tool(_) => Some(()),
+                            HyperRef::Position(_) => Some(()),
+                            HyperRef::Graph(graph_ref) => graph_ref.deref_with(&graphs, |_, _| {}),
+                            HyperRef::Node(node_ref) => node_ref.deref_with(&graphs, |_, _, _| {}),
+                            HyperRef::Wire(wire_ref) => wire_ref.deref_with(&graphs, |_, _, _| {}),
                         }
-                    }
-                    d.draw_text(text, x, y, theme.console_font_size, color.get(&theme));
+                        .is_some();
+
+                        if is_live
+                            && IBounds::from(hyper_rec).contains(IVec2::from_vec2(input.cursor))
+                            && let Ok(hr) = text.parse::<HyperRef>()
+                        {
+                            draw_hyper_ref_link(&mut d, hr, hyper_rec, &theme, &graphs, &tabs);
+                        }
+
+                        Some(is_live)
+                    } else {
+                        None
+                    };
+                    d.draw_text(
+                        text,
+                        x,
+                        y,
+                        theme.console_font_size,
+                        if is_live.is_none_or(|x| x) {
+                            color.get(&theme)
+                        } else {
+                            theme.dead_link
+                        },
+                    );
                     if text.ends_with('\n') {
                         y += theme.console_line_height();
                         x = left;

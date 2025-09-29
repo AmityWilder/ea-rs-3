@@ -50,6 +50,25 @@ impl std::fmt::Display for Gate {
     }
 }
 
+impl std::str::FromStr for Gate {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Or" => Ok(Gate::Or),
+            "And" => Ok(Gate::And),
+            "Nor" => Ok(Gate::Nor),
+            "Xor" => Ok(Gate::Xor),
+            "Resistor" => Ok(Gate::Resistor {}),
+            "Capacitor" => Ok(Gate::Capacitor {}),
+            "Led" => Ok(Gate::Led {}),
+            "Delay" => Ok(Gate::Delay {}),
+            "Battery" => Ok(Gate::Battery),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Node {
     pub(super) state: bool,

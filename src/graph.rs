@@ -1,5 +1,3 @@
-use std::sync::{Arc, RwLock};
-
 use crate::{
     graph::{
         node::{Gate, Node, NodeId},
@@ -7,6 +5,7 @@ use crate::{
     },
     ivec::IVec2,
 };
+use std::sync::{Arc, RwLock};
 
 pub mod node;
 pub mod wire;
@@ -75,11 +74,19 @@ impl Graph {
         (idx, self.nodes.last_mut().expect("just pushed"))
     }
 
+    pub fn destroy_node(&mut self, idx: usize) -> Node {
+        self.nodes.remove(idx)
+    }
+
     pub fn create_wire(&mut self, src: usize, dst: usize) -> (usize, &mut Wire) {
         let idx = self.nodes.len();
         self.wires.push(Wire::new(self.next_wire_id, src, dst));
         self.next_wire_id.0 += 1;
         (idx, self.wires.last_mut().expect("just pushed"))
+    }
+
+    pub fn destroy_wire(&mut self, idx: usize) -> Wire {
+        self.wires.remove(idx)
     }
 
     pub fn nodes_iter(

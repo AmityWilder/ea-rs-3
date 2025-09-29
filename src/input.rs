@@ -1,4 +1,4 @@
-use crate::graph::node::Gate;
+use crate::{graph::node::Gate, tool::ToolId};
 use raylib::prelude::*;
 use rl_input::{AxisSource, Event, EventSource, SelectorSource, VectorSource};
 
@@ -13,6 +13,7 @@ pub struct Inputs {
     pub cursor: Vector2,
     pub pan: Vector2,
     pub gate_hotkey: Option<Gate>,
+    pub tool_hotkey: Option<ToolId>,
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +27,7 @@ pub struct Bindings {
     pub cursor: VectorSource,
     pub pan: VectorSource,
     pub gate_hotkey: SelectorSource<Gate>,
+    pub tool_hotkey: SelectorSource<ToolId>,
 }
 
 impl Default for Bindings {
@@ -69,6 +71,11 @@ impl Default for Bindings {
                 (EventSource::Keyboard(KEY_EIGHT), Gate::Delay {}),
                 (EventSource::Keyboard(KEY_NINE), Gate::Battery),
             ]),
+            tool_hotkey: SelectorSource::from([
+                (EventSource::Keyboard(KEY_B), ToolId::Create),
+                (EventSource::Keyboard(KEY_V), ToolId::Edit),
+                (EventSource::Keyboard(KEY_X), ToolId::Erase),
+            ]),
         }
     }
 }
@@ -85,6 +92,7 @@ impl Bindings {
             cursor: self.cursor.get(rl),
             pan: self.pan.get(rl),
             gate_hotkey: self.gate_hotkey.get_starting(rl).next().copied(),
+            tool_hotkey: self.tool_hotkey.get_starting(rl).next().copied(),
         }
     }
 }

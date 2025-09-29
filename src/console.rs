@@ -1,20 +1,16 @@
 use crate::{
     graph::{
-        Graph, GraphId,
-        node::{Node, NodeId},
-        wire::WireId,
+        Graph, GraphId, GraphList,
+        node::{Gate, Node, NodeId},
+        wire::{Wire, WireId},
     },
     ivec::{IBounds, IVec2},
     rich_text::{ColorAct, ColorRef, RichStr, RichString},
     theme::{ColorId, Theme},
+    tool::ToolId,
 };
 use raylib::prelude::*;
-use std::{
-    collections::VecDeque,
-    fmt::Write,
-    num::{Saturating, Wrapping},
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum LogType {
@@ -61,7 +57,99 @@ impl LogType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct GateRef(pub Gate);
+
+impl std::ops::Deref for GateRef {
+    type Target = Gate;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for GateRef {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl std::fmt::Display for GateRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let &Self(g) = self;
+        write!(
+            f,
+            "{}[{g}]{}",
+            ColorAct::Push(ColorRef::Theme(ColorId::HyperRef)),
+            ColorAct::Pop
+        )
+    }
+}
+
+impl std::str::FromStr for GateRef {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.strip_prefix('[')
+            .and_then(|s| s.strip_suffix(']'))
+            .and_then(|s| s.parse().ok())
+            .map(Self)
+            .ok_or(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ToolRef(pub ToolId);
+
+impl std::ops::Deref for ToolRef {
+    type Target = ToolId;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for ToolRef {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl std::fmt::Display for ToolRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let &Self(g) = self;
+        write!(
+            f,
+            "{}[{g}]{}",
+            ColorAct::Push(ColorRef::Theme(ColorId::HyperRef)),
+            ColorAct::Pop
+        )
+    }
+}
+
+impl std::str::FromStr for ToolRef {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse().ok().map(Self).ok_or(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct PositionRef(pub IVec2);
+
+impl std::ops::Deref for PositionRef {
+    type Target = IVec2;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for PositionRef {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 impl std::fmt::Display for PositionRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -69,7 +157,7 @@ impl std::fmt::Display for PositionRef {
         write!(
             f,
             "{}({x},{y}){}",
-            ColorAct::Push(ColorRef::Theme(ColorId::Special)),
+            ColorAct::Push(ColorRef::Theme(ColorId::HyperRef)),
             ColorAct::Pop
         )
     }
@@ -97,7 +185,7 @@ impl std::fmt::Display for GraphRef {
         write!(
             f,
             "{}{id}{}",
-            ColorAct::Push(ColorRef::Theme(ColorId::Special)),
+            ColorAct::Push(ColorRef::Theme(ColorId::HyperRef)),
             ColorAct::Pop
         )
     }
@@ -111,6 +199,21 @@ impl std::str::FromStr for GraphRef {
     }
 }
 
+impl GraphRef {
+    pub fn deref_with<T, F>(self, graphs: &GraphList, f: F) -> Option<T>
+    where
+        F: for<'a> FnOnce(&'a Arc<RwLock<Graph>>, RwLockReadGuard<'a, Graph>) -> T,
+    {
+        if let Some(graph) = graphs.get_by_id(self.0)
+            && let Ok(borrow) = graph.try_read()
+        {
+            Some(f(graph, borrow))
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NodeRef(pub GraphId, pub NodeId);
 
@@ -120,7 +223,7 @@ impl std::fmt::Display for NodeRef {
         write!(
             f,
             "{}{g}-{n}{}",
-            ColorAct::Push(ColorRef::Theme(ColorId::Special)),
+            ColorAct::Push(ColorRef::Theme(ColorId::HyperRef)),
             ColorAct::Pop
         )
     }
@@ -137,6 +240,22 @@ impl std::str::FromStr for NodeRef {
     }
 }
 
+impl NodeRef {
+    pub fn deref_with<T, F>(self, graphs: &GraphList, f: F) -> Option<T>
+    where
+        F: for<'a> FnOnce(&'a Arc<RwLock<Graph>>, &RwLockReadGuard<'a, Graph>, &'a Node) -> T,
+    {
+        if let Some(graph) = graphs.get_by_id(self.0)
+            && let Ok(borrow) = graph.try_read()
+            && let Some(node) = borrow.get_node_by_id(self.1)
+        {
+            Some(f(graph, &borrow, node))
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WireRef(pub GraphId, pub WireId);
 
@@ -146,7 +265,7 @@ impl std::fmt::Display for WireRef {
         write!(
             f,
             "{}{g}-{w}{}",
-            ColorAct::Push(ColorRef::Theme(ColorId::Special)),
+            ColorAct::Push(ColorRef::Theme(ColorId::HyperRef)),
             ColorAct::Pop
         )
     }
@@ -163,8 +282,26 @@ impl std::str::FromStr for WireRef {
     }
 }
 
+impl WireRef {
+    pub fn deref_with<T, F>(self, graphs: &GraphList, f: F) -> Option<T>
+    where
+        F: for<'a> FnOnce(&'a Arc<RwLock<Graph>>, &RwLockReadGuard<'a, Graph>, &'a Wire) -> T,
+    {
+        if let Some(graph) = graphs.get_by_id(self.0)
+            && let Ok(borrow) = graph.try_read()
+            && let Some(wire) = borrow.get_wire_by_id(self.1)
+        {
+            Some(f(graph, &borrow, wire))
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HyperRef {
+    Gate(GateRef),
+    Tool(ToolRef),
     Position(PositionRef),
     Graph(GraphRef),
     Node(NodeRef),
@@ -174,6 +311,8 @@ pub enum HyperRef {
 impl std::fmt::Display for HyperRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            HyperRef::Gate(x) => x.fmt(f),
+            HyperRef::Tool(x) => x.fmt(f),
             HyperRef::Position(x) => x.fmt(f),
             HyperRef::Graph(x) => x.fmt(f),
             HyperRef::Node(x) => x.fmt(f),
@@ -187,7 +326,9 @@ impl std::str::FromStr for HyperRef {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         s.parse()
-            .map(Self::Position)
+            .map(Self::Gate)
+            .or_else(|()| s.parse().map(Self::Tool))
+            .or_else(|()| s.parse().map(Self::Position))
             .or_else(|()| s.parse().map(Self::Graph))
             .or_else(|()| s.parse().map(Self::Node))
             .or_else(|()| s.parse().map(Self::Wire))
