@@ -204,7 +204,7 @@ impl GraphRef {
     where
         F: for<'a> FnOnce(&'a Arc<RwLock<Graph>>, RwLockReadGuard<'a, Graph>) -> T,
     {
-        if let Some(graph) = graphs.get_by_id(self.0)
+        if let Some(graph) = graphs.get(&self.0)
             && let Ok(borrow) = graph.try_read()
         {
             Some(f(graph, borrow))
@@ -253,9 +253,9 @@ impl NodeRef {
     where
         F: for<'a> FnOnce(&'a Arc<RwLock<Graph>>, &RwLockReadGuard<'a, Graph>, &'a Node) -> T,
     {
-        if let Some(graph) = graphs.get_by_id(self.0)
+        if let Some(graph) = graphs.get(&self.0)
             && let Ok(borrow) = graph.try_read()
-            && let Some(node) = borrow.get_node_by_id(self.1)
+            && let Some(node) = borrow.node(&self.1)
         {
             Some(f(graph, &borrow, node))
         } else {
@@ -295,9 +295,9 @@ impl WireRef {
     where
         F: for<'a> FnOnce(&'a Arc<RwLock<Graph>>, &RwLockReadGuard<'a, Graph>, &'a Wire) -> T,
     {
-        if let Some(graph) = graphs.get_by_id(self.0)
+        if let Some(graph) = graphs.get(&self.0)
             && let Ok(borrow) = graph.try_read()
-            && let Some(wire) = borrow.get_wire_by_id(self.1)
+            && let Some(wire) = borrow.wire(&self.1)
         {
             Some(f(graph, &borrow, wire))
         } else {

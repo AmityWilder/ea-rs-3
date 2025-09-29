@@ -5,7 +5,10 @@ use crate::{
     },
     ivec::IVec2,
 };
-use std::sync::{Arc, RwLock};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 pub mod node;
 pub mod wire;
@@ -30,115 +33,123 @@ impl std::str::FromStr for GraphId {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct Graph {
     next_node_id: NodeId,
     next_wire_id: WireId,
     id: GraphId,
-    nodes: Vec<Node>,
-    wires: Vec<Wire>,
+    nodes: HashMap<NodeId, Node>,
+    wires: HashMap<WireId, Wire>,
 }
 
 impl Graph {
-    pub const fn new(id: GraphId) -> Self {
+    pub fn new(id: GraphId) -> Self {
         Self {
             next_node_id: NodeId(0),
             next_wire_id: WireId(0),
             id,
-            nodes: Vec::new(),
-            wires: Vec::new(),
+            nodes: HashMap::new(),
+            wires: HashMap::new(),
         }
     }
 
-    pub const fn id(&self) -> GraphId {
-        self.id
+    #[inline(always)]
+    pub const fn id(&self) -> &GraphId {
+        &self.id
     }
 
-    pub fn find_node_at_pos(&self, pos: IVec2) -> Option<usize> {
-        self.nodes.iter().position(|node| node.position == pos)
-    }
-
-    pub fn node(&self, idx: usize) -> Option<&Node> {
-        self.nodes.get(idx)
-    }
-
-    pub fn node_mut(&mut self, idx: usize) -> Option<&mut Node> {
-        self.nodes.get_mut(idx)
-    }
-
-    pub fn create_node(&mut self, gate: Gate, position: IVec2) -> (usize, &mut Node) {
-        let idx = self.nodes.len();
+    pub fn find_node_at_pos(&self, pos: IVec2) -> Option<&NodeId> {
         self.nodes
-            .push(Node::new(self.next_node_id, gate, position));
+            .iter()
+            .find(|(_, node)| node.position == pos)
+            .map(|(id, _)| id)
+    }
+
+    pub fn node(&self, id: &NodeId) -> Option<&Node> {
+        self.nodes.get(&id)
+    }
+
+    pub fn node_mut(&mut self, id: &NodeId) -> Option<&mut Node> {
+        self.nodes.get_mut(&id)
+    }
+
+    pub fn wire(&self, id: &WireId) -> Option<&Wire> {
+        self.wires.get(&id)
+    }
+
+    pub fn wire_mut(&mut self, id: &WireId) -> Option<&mut Wire> {
+        self.wires.get_mut(&id)
+    }
+
+    pub fn create_node(&mut self, gate: Gate, position: IVec2) -> &mut Node {
+        let id = self.next_node_id;
         self.next_node_id.0 += 1;
-        (idx, self.nodes.last_mut().expect("just pushed"))
+        self.nodes
+            .entry(id)
+            .insert_entry(Node::new(id, gate, position))
+            .into_mut()
     }
 
-    pub fn destroy_node(&mut self, idx: usize) -> Node {
-        self.nodes.remove(idx)
+    pub fn destroy_node(&mut self, id: &NodeId) -> Option<Node> {
+        self.nodes.remove(id)
     }
 
-    pub fn create_wire(&mut self, src: usize, dst: usize) -> (usize, &mut Wire) {
-        let idx = self.nodes.len();
-        self.wires.push(Wire::new(self.next_wire_id, src, dst));
+    pub fn create_wire(&mut self, elbow_pos: IVec2, src: NodeId, dst: NodeId) -> &mut Wire {
+        let id = self.next_wire_id;
         self.next_wire_id.0 += 1;
-        (idx, self.wires.last_mut().expect("just pushed"))
+        self.wires
+            .entry(id)
+            .insert_entry(Wire::new(id, elbow_pos, src, dst))
+            .into_mut()
     }
 
-    pub fn destroy_wire(&mut self, idx: usize) -> Wire {
-        self.wires.remove(idx)
+    pub fn destroy_wire(&mut self, id: &WireId) -> Option<Wire> {
+        self.wires.remove(id)
     }
 
-    pub fn nodes_iter(
-        &self,
-    ) -> impl ExactSizeIterator<Item = &'_ Node> + DoubleEndedIterator + Clone {
-        self.nodes.iter()
+    pub fn nodes_iter(&self) -> std::collections::hash_map::Values<'_, NodeId, Node> {
+        self.nodes.values()
     }
 
-    pub fn get_node_by_id(&self, id: NodeId) -> Option<&Node> {
-        self.nodes.iter().find(|n| n.id() == id)
-    }
-
-    pub fn get_mut_node_by_id(&mut self, id: NodeId) -> Option<&mut Node> {
-        self.nodes.iter_mut().find(|n| n.id() == id)
-    }
-
-    pub fn wires_iter(
-        &self,
-    ) -> impl ExactSizeIterator<Item = &'_ Wire> + DoubleEndedIterator + Clone {
-        self.wires.iter()
-    }
-
-    pub fn get_wire_by_id(&self, id: WireId) -> Option<&Wire> {
-        self.wires.iter().find(|n| n.id() == id)
-    }
-
-    pub fn get_mut_wire_by_id(&mut self, id: WireId) -> Option<&mut Wire> {
-        self.wires.iter_mut().find(|n| n.id() == id)
+    pub fn wires_iter(&self) -> std::collections::hash_map::Values<'_, WireId, Wire> {
+        self.wires.values()
     }
 
     /// Returns [`None`] if the start or end of the wire is not in the graph.
     pub fn get_wire_nodes<'a>(&'a self, wire: &Wire) -> Option<(&'a Node, &'a Node)> {
-        self.nodes.get(wire.src).zip(self.nodes.get(wire.dst))
+        self.nodes.get(&wire.src).zip(self.nodes.get(&wire.dst))
     }
 
     pub fn evaluate(&mut self) {
-        for n in 0..self.nodes.len() {
+        let node_states: HashMap<NodeId, u8> = self
+            .nodes
+            .iter()
+            .map(|(id, node)| (*id, node.state))
+            .collect();
+        for (id, node) in self.nodes.iter_mut() {
             let mut inputs = self
                 .wires
-                .iter()
-                .filter(|wire| wire.dst == n) // surely there's a better way than O(nk)
-                .map(|wire| self.nodes[wire.src].state);
-            self.nodes[n].state = match self.nodes[n].gate {
-                Gate::Or => inputs.any(|x| x), // TODO
-                Gate::And => false,            // TODO
-                Gate::Nor => false,            // TODO
-                Gate::Xor => false,            // TODO
-                Gate::Resistor {} => false,    // TODO
-                Gate::Capacitor {} => false,   // TODO
-                Gate::Led {} => false,         // TODO
-                Gate::Delay {} => false,       // TODO
-                Gate::Battery => false,        // TODO
+                .values()
+                .filter(|wire| &wire.dst == id) // surely there's a better way than O(nk)
+                .map(|wire| {
+                    node_states
+                        .get(&wire.src)
+                        .copied()
+                        .expect("all wires should be valid")
+                });
+
+            node.state = match node.gate {
+                Gate::Or | Gate::Led { .. } => inputs.any(|x| x != 0) as u8,
+                Gate::And => inputs.all(|x| x != 0) as u8,
+                Gate::Nor => !inputs.any(|x| x != 0) as u8,
+                Gate::Xor => (inputs.filter(|&x| x != 0).count() == 1) as u8,
+                Gate::Resistor { resistance } => (inputs.sum::<u8>() > resistance) as u8,
+                Gate::Capacitor { capacity } => {
+                    let total = inputs.sum::<u8>().min(capacity);
+                    if total > 0 { total } else { node.state - 1 }
+                }
+                Gate::Delay { ticks: _ } => 0, // TODO
+                Gate::Battery => 1,
             };
         }
     }
@@ -178,11 +189,25 @@ impl GraphList {
         self.graphs.last_mut().expect("just pushed")
     }
 
-    pub fn get_by_id(&self, id: GraphId) -> Option<&Arc<RwLock<Graph>>> {
-        self.graphs.iter().find(|g| g.read().unwrap().id == id)
+    pub fn try_get(&self, id: &GraphId) -> Option<&Arc<RwLock<Graph>>> {
+        self.graphs
+            .iter()
+            .find(|g| g.try_read().unwrap().id() == id)
     }
 
-    pub fn get_mut_by_id(&mut self, id: GraphId) -> Option<&mut Arc<RwLock<Graph>>> {
-        self.graphs.iter_mut().find(|g| g.read().unwrap().id == id)
+    pub fn try_get_mut(&mut self, id: &GraphId) -> Option<&mut Arc<RwLock<Graph>>> {
+        self.graphs
+            .iter_mut()
+            .find(|g| g.try_read().unwrap().id() == id)
+    }
+
+    pub fn get(&self, id: &GraphId) -> Option<&Arc<RwLock<Graph>>> {
+        self.graphs.iter().find(|g| g.read().unwrap().id() == id)
+    }
+
+    pub fn get_mut(&mut self, id: &GraphId) -> Option<&mut Arc<RwLock<Graph>>> {
+        self.graphs
+            .iter_mut()
+            .find(|g| g.read().unwrap().id() == id)
     }
 }

@@ -27,10 +27,18 @@ pub enum Gate {
     And,
     Nor,
     Xor,
-    Resistor {},
-    Capacitor {},
-    Led {},
-    Delay {},
+    Resistor {
+        resistance: u8,
+    },
+    Capacitor {
+        capacity: u8,
+    },
+    Led {
+        color: u8,
+    },
+    Delay {
+        ticks: u8,
+    },
     Battery,
 }
 
@@ -41,10 +49,10 @@ impl std::fmt::Display for Gate {
             Gate::And => "and".fmt(f),
             Gate::Nor => "nor".fmt(f),
             Gate::Xor => "xor".fmt(f),
-            Gate::Resistor {} => write!(f, "resistor"),
-            Gate::Capacitor {} => write!(f, "capacitor"),
-            Gate::Led {} => write!(f, "led"),
-            Gate::Delay {} => write!(f, "delay"),
+            Gate::Resistor { resistance } => write!(f, "resistor.{resistance}"),
+            Gate::Capacitor { capacity } => write!(f, "capacitor.{capacity}"),
+            Gate::Led { color } => write!(f, "led.{color}"),
+            Gate::Delay { ticks } => write!(f, "delay.{ticks}"),
             Gate::Battery => "battery".fmt(f),
         }
     }
@@ -55,23 +63,29 @@ impl std::str::FromStr for Gate {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "Or" => Ok(Gate::Or),
-            "And" => Ok(Gate::And),
-            "Nor" => Ok(Gate::Nor),
-            "Xor" => Ok(Gate::Xor),
-            "Resistor" => Ok(Gate::Resistor {}),
-            "Capacitor" => Ok(Gate::Capacitor {}),
-            "Led" => Ok(Gate::Led {}),
-            "Delay" => Ok(Gate::Delay {}),
-            "Battery" => Ok(Gate::Battery),
-            _ => Err(()),
+            "or" => Ok(Gate::Or),
+            "and" => Ok(Gate::And),
+            "nor" => Ok(Gate::Nor),
+            "xor" => Ok(Gate::Xor),
+            "battery" => Ok(Gate::Battery),
+            _ => s
+                .split_once('.')
+                .and_then(|(name, value)| value.parse().ok().map(|val| (name, val)))
+                .and_then(|(name, value)| match name {
+                    "resistor" => Some(Gate::Resistor { resistance: value }),
+                    "capacitor" => Some(Gate::Capacitor { capacity: value }),
+                    "led" => Some(Gate::Led { color: value }),
+                    "delay" => Some(Gate::Delay { ticks: value }),
+                    _ => None,
+                })
+                .ok_or(()),
         }
     }
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Node {
-    pub(super) state: bool,
+    pub(super) state: u8,
     id: NodeId,
     pub gate: Gate,
     pub position: IVec2,
@@ -80,18 +94,19 @@ pub struct Node {
 impl Node {
     pub const fn new(id: NodeId, gate: Gate, position: IVec2) -> Self {
         Self {
-            state: false,
+            state: 0,
             id,
             gate,
             position,
         }
     }
 
-    pub const fn id(&self) -> NodeId {
-        self.id
+    #[inline(always)]
+    pub const fn id(&self) -> &NodeId {
+        &self.id
     }
 
-    pub const fn state(&self) -> bool {
+    pub const fn state(&self) -> u8 {
         self.state
     }
 }

@@ -65,10 +65,16 @@ impl Default for Bindings {
                 (EventSource::Keyboard(KEY_TWO), Gate::And),
                 (EventSource::Keyboard(KEY_THREE), Gate::Nor),
                 (EventSource::Keyboard(KEY_FOUR), Gate::Xor),
-                (EventSource::Keyboard(KEY_FIVE), Gate::Resistor {}),
-                (EventSource::Keyboard(KEY_SIX), Gate::Capacitor {}),
-                (EventSource::Keyboard(KEY_SEVEN), Gate::Led {}),
-                (EventSource::Keyboard(KEY_EIGHT), Gate::Delay {}),
+                (
+                    EventSource::Keyboard(KEY_FIVE),
+                    Gate::Resistor { resistance: 0 },
+                ),
+                (
+                    EventSource::Keyboard(KEY_SIX),
+                    Gate::Capacitor { capacity: 0 },
+                ),
+                (EventSource::Keyboard(KEY_SEVEN), Gate::Led { color: 0 }),
+                (EventSource::Keyboard(KEY_EIGHT), Gate::Delay { ticks: 0 }),
                 (EventSource::Keyboard(KEY_NINE), Gate::Battery),
             ]),
             tool_hotkey: SelectorSource::from([

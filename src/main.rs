@@ -13,7 +13,7 @@ use crate::{
     tool::Tool,
     toolpane::{ToolPane, ToolPaneAnchoring},
 };
-use console::{GraphRef, WireRef};
+use console::GraphRef;
 use raylib::prelude::*;
 use rl_input::Event;
 use std::sync::Arc;
@@ -46,9 +46,6 @@ fn draw_hyper_ref_link<D>(
 
     // highlight ref text
     d.draw_rectangle(rec.x, rec.y, rec.w, rec.h, theme.hyperref.alpha(0.2));
-
-    // exit scissor mode temporarily
-    let mut d = d.begin_scissor_mode(0, 0, i32::MAX, i32::MAX);
 
     let link_anchor = Vector2::new(
         rec.x as f32 + rec.w as f32,
@@ -282,21 +279,33 @@ fn main() {
                         // if graph is being borrowed, don't edit it! it might be saving!
                         && let Ok(mut graph) = graph.try_write()
                     {
+                        let graph_ref = GraphRef(*graph.id());
                         let pos = IVec2::from_vec2(tab.screen_to_world(input.cursor))
                             .snap(GRID_SIZE.into());
 
                         match &mut toolpane.tool {
                             Tool::Create { current_node } => {
                                 if input.primary.is_starting() {
-                                    if let Some(idx) = graph.find_node_at_pos(pos) {
+                                    if let Some(&id) = graph.find_node_at_pos(pos) {
                                         // existing node
-                                        *current_node = Some(idx);
+                                        if let Some(current_node) = *current_node {
+                                            let src_ref = graph_ref.node(current_node);
+                                            let dst_ref = graph_ref.node(id);
+                                            let wire =
+                                                graph.create_wire(IVec2::zero(), current_node, id);
+                                            let wire_ref = graph_ref.wire(*wire.id());
+                                            logln!(
+                                                console,
+                                                LogType::Info,
+                                                "create wire {wire_ref} from {src_ref} to {dst_ref}"
+                                            );
+                                        }
+                                        *current_node = Some(id);
                                     } else {
                                         // new node
-                                        let graph_ref = GraphRef(graph.id());
                                         let gate = toolpane.gate;
-                                        let (node_idx, node) = graph.create_node(gate, pos);
-                                        let node_ref = graph_ref.node(node.id());
+                                        let new_node = graph.create_node(gate, pos);
+                                        let node_ref = graph_ref.node(*new_node.id());
                                         logln!(
                                             console,
                                             LogType::Info,
@@ -304,24 +313,23 @@ fn main() {
                                             GateRef(gate),
                                             PositionRef(pos),
                                         );
-                                        if let Some(&current_node) = current_node.as_ref() {
-                                            let (_wire_idx, wire) =
-                                                graph.create_wire(current_node, node_idx);
-                                            let wire_ref = graph_ref.wire(wire.id());
-                                            let src_ref = graph_ref.node(
-                                                graph
-                                                    .node(current_node)
-                                                    .expect("current node should always be valid")
-                                                    .id(),
-                                            );
+                                        let new_node_id = *new_node.id();
+                                        if let Some(current_node) = current_node.as_ref() {
+                                            let src_ref = graph_ref.node(*current_node);
                                             let dst_ref = node_ref;
+                                            let wire = graph.create_wire(
+                                                IVec2::zero(),
+                                                *current_node,
+                                                new_node_id,
+                                            );
+                                            let wire_ref = graph_ref.wire(*wire.id());
                                             logln!(
                                                 console,
                                                 LogType::Info,
                                                 "create wire {wire_ref} from {src_ref} to {dst_ref}"
                                             );
                                         }
-                                        *current_node = Some(node_idx);
+                                        *current_node = Some(new_node_id);
                                     }
                                 }
                                 if input.secondary.is_starting() {
@@ -331,29 +339,25 @@ fn main() {
 
                             Tool::Erase {} => {
                                 if input.primary.is_starting()
-                                    && let Some(idx) = graph.find_node_at_pos(pos)
+                                    && let Some(&id) = graph.find_node_at_pos(pos)
                                 {
-                                    let node = graph.destroy_node(idx);
-                                    logln!(
-                                        console,
-                                        LogType::Info,
-                                        "destroy node {}",
-                                        NodeRef(graph.id(), node.id()),
-                                    );
+                                    let _ = graph.destroy_node(&id).expect("cannot reach this branch if graph did not contain the node");
+                                    let node_ref = graph_ref.node(id);
+                                    logln!(console, LogType::Info, "destroy node {node_ref}");
                                 }
                             }
 
                             Tool::Edit { target } => {
                                 if input.primary.is_starting()
-                                    && let Some(idx) = graph.find_node_at_pos(pos)
+                                    && let Some(id) = graph.find_node_at_pos(pos)
                                 {
-                                    *target = Some((graph.node(idx).unwrap().position, idx));
+                                    *target = Some((graph.node(id).unwrap().position, *id));
                                 }
                                 if input.primary.is_ending() {
-                                    if let Some((start_pos, idx)) = *target {
-                                        let graph_ref = GraphRef(graph.id());
-                                        let node = graph.node_mut(idx).unwrap();
-                                        let node_ref = graph_ref.node(node.id());
+                                    if let Some((start_pos, id)) = target {
+                                        let graph_ref = GraphRef(*graph.id());
+                                        let node_ref = graph_ref.node(*id);
+                                        let node = graph.node_mut(id).unwrap();
                                         node.position =
                                             IVec2::from_vec2(tab.screen_to_world(input.cursor))
                                                 .snap(GRID_SIZE.into());
@@ -361,15 +365,15 @@ fn main() {
                                             console,
                                             LogType::Info,
                                             "move node {node_ref} from {} to {}",
-                                            PositionRef(start_pos),
+                                            PositionRef(*start_pos),
                                             PositionRef(node.position),
                                         );
                                     }
                                     *target = None;
                                 }
 
-                                if let Some(&(_, idx)) = target.as_ref() {
-                                    let node = graph.node_mut(idx).unwrap();
+                                if let Some((_, id)) = target.as_ref() {
+                                    let node = graph.node_mut(id).unwrap();
                                     node.position = IVec2::from_vec2(
                                         tab.screen_to_world(input.cursor)
                                             - rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
@@ -457,7 +461,7 @@ fn main() {
                                 if let Some(&current_node) = current_node.as_ref() {
                                     d.draw_line_v(
                                         graph
-                                            .node(current_node)
+                                            .node(&current_node)
                                             .expect("current node should always be valid")
                                             .position
                                             .as_vec2()
@@ -486,7 +490,7 @@ fn main() {
                                 node.gate,
                                 Vector2::zero(),
                                 0.0,
-                                if node.state() {
+                                if node.state() != 0 {
                                     theme.active
                                 } else {
                                     theme.foreground
@@ -506,18 +510,18 @@ fn main() {
         // console
         {
             let IRect { x, y, w, h } = IRect::from(console.bounds);
-            let mut d = d.begin_scissor_mode(x, y, w, h);
+            // let mut d = d.begin_scissor_mode(x, y, w, h);
 
             // content
             {
                 d.draw_rectangle(x, y, w, h, theme.background2);
                 d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, theme.background1);
-                let mut d = d.begin_scissor_mode(
-                    x + theme.console_padding_left,
-                    y + theme.console_padding_top,
-                    w - theme.console_padding_left - theme.console_padding_right,
-                    h - theme.console_padding_top - theme.console_padding_bottom,
-                );
+                // let mut d = d.begin_scissor_mode(
+                //     x + theme.console_padding_left,
+                //     y + theme.console_padding_top,
+                //     w - theme.console_padding_left - theme.console_padding_right,
+                //     h - theme.console_padding_top - theme.console_padding_bottom,
+                // );
 
                 let mut x = x + theme.console_padding_left;
                 let mut y = y + theme.console_padding_top;

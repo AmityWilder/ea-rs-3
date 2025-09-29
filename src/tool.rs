@@ -1,4 +1,4 @@
-use crate::ivec::IVec2;
+use crate::{graph::node::NodeId, ivec::IVec2};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ToolId {
@@ -45,12 +45,12 @@ impl ToolId {
 #[derive(Debug, Clone)]
 pub enum Tool {
     Create {
-        current_node: Option<usize>,
+        current_node: Option<NodeId>,
     },
     Erase {},
     Edit {
         /// (start_pos, idx)
-        target: Option<(IVec2, usize)>,
+        target: Option<(IVec2, NodeId)>,
     },
 }
 
