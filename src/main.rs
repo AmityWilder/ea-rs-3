@@ -1,12 +1,14 @@
 #![deny(clippy::missing_safety_doc, clippy::undocumented_unsafe_blocks)]
 
 use crate::{
-    console::{Console, ConsoleAnchoring, LogType, NodeRef, PositionRef},
-    graph::{Graph, node::Gate},
+    console::{
+        Console, ConsoleAnchoring, GraphRef, HyperRef, LogType, NodeRef, PositionRef, WireRef,
+    },
+    graph::{Graph, GraphList, node::Gate},
     icon_sheets::{ButtonIconSheets, NodeIconSheetId, NodeIconSheetSets},
     input::Bindings,
     ivec::{IBounds, IRect, IVec2},
-    rich_text::{ColorAct, ColorRef},
+    rich_text::ColorAct,
     tab::{EditorTab, Tab, TabList},
     theme::{ColorId, Theme},
     tool::Tool,
@@ -57,14 +59,14 @@ fn main() {
     let button_icon_sheets = ButtonIconSheets::load(&mut rl, &thread).unwrap();
     let node_icon_sheets = NodeIconSheetSets::load(&mut rl, &thread).unwrap();
 
-    let mut graphs = vec![Arc::new(RwLock::new(Graph::new()))];
+    let mut graphs = GraphList::new();
 
     let mut tabs = TabList::from([Tab::Editor(
         EditorTab::new(
             &mut rl,
             &thread,
             IBounds::new(IVec2::zero(), IVec2::new(1280, 720)),
-            Arc::downgrade(&graphs[0]),
+            Arc::downgrade(graphs.create_graph()),
         )
         .unwrap(),
     )]);
@@ -134,6 +136,66 @@ fn main() {
                     .saturating_sub(console.displayable_lines(&theme).try_into().unwrap())
                     as f64,
             );
+
+            let mut x = console.bounds.min.x + theme.console_padding_left;
+            let mut y = console.bounds.min.y + theme.console_padding_top;
+            let left = x;
+            for (_, text) in console.visible_content(&theme) {
+                if IBounds::from(IRect::new(
+                    x,
+                    y,
+                    rl.measure_text(text, theme.console_font_size),
+                    theme.console_font_size,
+                ))
+                .contains(IVec2::from_vec2(input.cursor))
+                    && let Ok(x) = text.parse::<HyperRef>()
+                {
+                    match x {
+                        HyperRef::Position(PositionRef(pos)) => {
+                            // println!("{pos:?}");
+                        }
+                        HyperRef::Graph(GraphRef(g)) => {
+                            let borrow;
+                            let graph = match graphs.get_by_id(g) {
+                                Some(g) => {
+                                    borrow = g.read().unwrap();
+                                    Some(&*borrow)
+                                }
+                                None => None,
+                            };
+                            // println!("{graph:?}");
+                        }
+                        HyperRef::Node(NodeRef(g, n)) => {
+                            let borrow;
+                            let node = match graphs.get_by_id(g) {
+                                Some(g) => {
+                                    borrow = g.read().unwrap();
+                                    borrow.get_node_by_id(n)
+                                }
+                                None => None,
+                            };
+                            // println!("{node:?}");
+                        }
+                        HyperRef::Wire(WireRef(g, w)) => {
+                            let borrow;
+                            let wire = match graphs.get_by_id(g) {
+                                Some(g) => {
+                                    borrow = g.read().unwrap();
+                                    borrow.get_wire_by_id(w)
+                                }
+                                None => None,
+                            };
+                            // println!("{wire:?}");
+                        }
+                    }
+                }
+                if text.ends_with('\n') {
+                    y += theme.console_line_height();
+                    x = left;
+                } else {
+                    x += rl.measure_text(text, theme.console_font_size);
+                }
+            }
         } else if let Some(tab) = tabs.focused_tab_mut() {
             match tab {
                 Tab::Editor(tab) => {
@@ -164,14 +226,15 @@ fn main() {
                                         // TODO
                                     } else {
                                         let gate = toolpane.gate;
-                                        let (id, _) = graph.create_node(gate, pos);
+                                        let (_, node) = graph.create_node(gate, pos);
+                                        let node_id = node.id();
                                         logln!(
                                             console,
                                             LogType::Info,
                                             "create {}[{gate}]{} node {} at {}",
                                             ColorAct::Push(ColorId::Special.into()),
                                             ColorAct::Pop,
-                                            graph.node_ref(id).unwrap(),
+                                            NodeRef(graph.id(), node_id),
                                             PositionRef(pos),
                                         );
                                     }
@@ -290,12 +353,93 @@ fn main() {
                 let mut y = y + theme.console_padding_top;
                 let left = x;
                 for (color, text) in console.visible_content(&theme) {
+                    let width = d.measure_text(text, theme.console_font_size);
+                    if IBounds::from(IRect::new(x, y, width, theme.console_font_size))
+                        .contains(IVec2::from_vec2(input.cursor))
+                        && let Ok(hr) = text.parse::<HyperRef>()
+                    {
+                        d.draw_rectangle(
+                            x,
+                            y,
+                            width,
+                            theme.console_font_size,
+                            theme.special.alpha(0.2),
+                        );
+                        match hr {
+                            HyperRef::Position(PositionRef(pos)) => {
+                                let mut d = d.begin_scissor_mode(
+                                    0,
+                                    0,
+                                    d.get_screen_width(),
+                                    d.get_screen_height(),
+                                );
+                                for tab in &tabs {
+                                    match tab {
+                                        Tab::Editor(tab) => {
+                                            d.draw_line_v(
+                                                input.cursor,
+                                                d.get_world_to_screen2D(
+                                                    pos.as_vec2()
+                                                        + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                                                    tab.camera(),
+                                                ),
+                                                theme.special,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                            HyperRef::Graph(g) => {
+                                // TODO
+                            }
+                            HyperRef::Node(NodeRef(g, n)) => {
+                                if let Some(g) = graphs.get_by_id(g) {
+                                    let borrow = g.read().unwrap();
+                                    if let Some(node) = borrow.get_node_by_id(n) {
+                                        let mut d = d.begin_scissor_mode(
+                                            0,
+                                            0,
+                                            d.get_screen_width(),
+                                            d.get_screen_height(),
+                                        );
+                                        for tab in &tabs {
+                                            match tab {
+                                                Tab::Editor(tab) => {
+                                                    if tab
+                                                        .graph
+                                                        .upgrade()
+                                                        .is_some_and(|x| Arc::ptr_eq(&x, g))
+                                                    {
+                                                        d.draw_line_v(
+                                                            input.cursor,
+                                                            d.get_world_to_screen2D(
+                                                                node.position.as_vec2()
+                                                                    + rvec2(
+                                                                        GRID_SIZE / 2,
+                                                                        GRID_SIZE / 2,
+                                                                    ),
+                                                                tab.camera(),
+                                                            ),
+                                                            theme.special,
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                };
+                            }
+                            HyperRef::Wire(w) => {
+                                // TODO
+                            }
+                        }
+                    }
                     d.draw_text(text, x, y, theme.console_font_size, color.get(&theme));
                     if text.ends_with('\n') {
                         y += theme.console_line_height();
                         x = left;
                     } else {
-                        x += d.measure_text(text, theme.console_font_size);
+                        x += width;
                     }
                 }
             }

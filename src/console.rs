@@ -1,5 +1,9 @@
 use crate::{
-    graph::{Graph, node::Node},
+    graph::{
+        Graph, GraphId,
+        node::{Node, NodeId},
+        wire::WireId,
+    },
     ivec::{IBounds, IVec2},
     rich_text::{ColorAct, ColorRef, RichStr, RichString},
     theme::{ColorId, Theme},
@@ -9,6 +13,7 @@ use std::{
     collections::VecDeque,
     fmt::Write,
     num::{Saturating, Wrapping},
+    sync::{Arc, RwLock},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -63,25 +68,129 @@ impl std::fmt::Display for PositionRef {
         let &Self(IVec2 { x, y }) = self;
         write!(
             f,
-            "{}({x}, {y}){}",
+            "{}({x},{y}){}",
             ColorAct::Push(ColorRef::Theme(ColorId::Special)),
             ColorAct::Pop
         )
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NodeRef<'a>(pub &'a Graph, pub &'a Node);
+impl std::str::FromStr for PositionRef {
+    type Err = ();
 
-impl std::fmt::Display for NodeRef<'_> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.strip_prefix('(')
+            .and_then(|s| s.strip_suffix(')'))
+            .and_then(|s| s.split_once(','))
+            .and_then(|(x, y)| x.parse().ok().zip(y.parse().ok()))
+            .map(|(x, y)| Self(IVec2 { x, y }))
+            .ok_or(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GraphRef(pub GraphId);
+
+impl std::fmt::Display for GraphRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let &Self(id) = self;
+        write!(
+            f,
+            "{}{id}{}",
+            ColorAct::Push(ColorRef::Theme(ColorId::Special)),
+            ColorAct::Pop
+        )
+    }
+}
+
+impl std::str::FromStr for GraphRef {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse().map_err(|_| ()).map(Self)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NodeRef(pub GraphId, pub NodeId);
+
+impl std::fmt::Display for NodeRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let &Self(g, n) = self;
         write!(
             f,
-            "{}g{g:p}-n{n:p}{}",
+            "{}{g}-{n}{}",
             ColorAct::Push(ColorRef::Theme(ColorId::Special)),
             ColorAct::Pop
         )
+    }
+}
+
+impl std::str::FromStr for NodeRef {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.split_once('-')
+            .and_then(|(g, n)| g.parse().ok().zip(n.parse().ok()))
+            .map(|(g, n)| Self(g, n))
+            .ok_or(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WireRef(pub GraphId, pub WireId);
+
+impl std::fmt::Display for WireRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let &Self(g, w) = self;
+        write!(
+            f,
+            "{}{g}-{w}{}",
+            ColorAct::Push(ColorRef::Theme(ColorId::Special)),
+            ColorAct::Pop
+        )
+    }
+}
+
+impl std::str::FromStr for WireRef {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.split_once('-')
+            .and_then(|(g, w)| g.parse().ok().zip(w.parse().ok()))
+            .map(|(g, n)| Self(g, n))
+            .ok_or(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HyperRef {
+    Position(PositionRef),
+    Graph(GraphRef),
+    Node(NodeRef),
+    Wire(WireRef),
+}
+
+impl std::fmt::Display for HyperRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HyperRef::Position(x) => x.fmt(f),
+            HyperRef::Graph(x) => x.fmt(f),
+            HyperRef::Node(x) => x.fmt(f),
+            HyperRef::Wire(x) => x.fmt(f),
+        }
+    }
+}
+
+impl std::str::FromStr for HyperRef {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse()
+            .map(Self::Position)
+            .or_else(|()| s.parse().map(Self::Graph))
+            .or_else(|()| s.parse().map(Self::Node))
+            .or_else(|()| s.parse().map(Self::Wire))
     }
 }
 
@@ -196,16 +305,6 @@ impl Console {
                 Err(e) => panic!("{e}"),
             })
     }
-}
-
-#[macro_export]
-macro_rules! log {
-    ($console:expr, $($args:tt)+) => {
-        $crate::console::Console::log(
-            &mut $console,
-            format_args!($($args)+)
-        )
-    };
 }
 
 #[macro_export]

@@ -1,5 +1,25 @@
 use crate::ivec::IVec2;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NodeId(pub(super) u128);
+
+impl std::fmt::Display for NodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "n{:x}", self.0)
+    }
+}
+
+impl std::str::FromStr for NodeId {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.strip_prefix('n')
+            .ok_or(())
+            .and_then(|x| u128::from_str_radix(x, 16).map_err(|_| ()))
+            .map(Self)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Gate {
     #[default]
@@ -30,20 +50,26 @@ impl std::fmt::Display for Gate {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Node {
     pub(super) state: bool,
+    id: NodeId,
     pub gate: Gate,
     pub position: IVec2,
 }
 
 impl Node {
-    pub const fn new(gate: Gate, position: IVec2) -> Self {
+    pub const fn new(id: NodeId, gate: Gate, position: IVec2) -> Self {
         Self {
             state: false,
+            id,
             gate,
             position,
         }
+    }
+
+    pub const fn id(&self) -> NodeId {
+        self.id
     }
 
     pub const fn state(&self) -> bool {
