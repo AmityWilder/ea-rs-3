@@ -1,7 +1,8 @@
 use crate::{
+    GRID_SIZE,
     graph::{
         node::{Gate, Node, NodeId},
-        wire::{Wire, WireId},
+        wire::{Elbow, Flow, Wire, WireId},
     },
     ivec::IVec2,
 };
@@ -38,6 +39,7 @@ pub struct Graph {
     id: GraphId,
     nodes: FxHashMap<NodeId, Node>,
     wires: FxHashMap<WireId, Wire>,
+    node_grid: FxHashMap<IVec2, NodeId>,
 }
 
 impl Graph {
@@ -48,19 +50,23 @@ impl Graph {
             id,
             nodes: FxHashMap::default(),
             wires: FxHashMap::default(),
+            node_grid: FxHashMap::default(),
         }
     }
 
-    #[inline(always)]
+    fn world_to_grid(world_pos: IVec2) -> IVec2 {
+        IVec2::new(
+            world_pos.x / i32::from(GRID_SIZE),
+            world_pos.y / i32::from(GRID_SIZE),
+        )
+    }
+
     pub const fn id(&self) -> &GraphId {
         &self.id
     }
 
-    pub fn find_node_at_pos(&self, pos: IVec2) -> Option<&NodeId> {
-        self.nodes
-            .iter()
-            .find(|(_, node)| node.position == pos)
-            .map(|(id, _)| id)
+    pub fn find_node_at(&self, pos: IVec2) -> Option<&NodeId> {
+        self.node_grid.get(&Self::world_to_grid(pos))
     }
 
     pub fn node(&self, id: &NodeId) -> Option<&Node> {
@@ -79,13 +85,36 @@ impl Graph {
         self.wires.get_mut(id)
     }
 
-    pub fn create_node(&mut self, gate: Gate, position: IVec2) -> &mut Node {
+    /// Returns [`None`] if the position is already occupied
+    #[must_use]
+    pub fn create_node(&mut self, gate: Gate, position: IVec2) -> Option<&mut Node> {
         let id = self.next_node_id;
         self.next_node_id.0 += 1;
-        self.nodes
-            .entry(id)
-            .insert_entry(Node::new(id, gate, position))
-            .into_mut()
+        self.node_grid
+            .insert(Self::world_to_grid(position), id)
+            .is_none()
+            .then(|| {
+                self.nodes
+                    .entry(id)
+                    .insert_entry(Node::new(id, gate, position))
+                    .into_mut()
+            })
+    }
+
+    pub fn translate_node(&mut self, id: &NodeId, new_position: IVec2) -> Option<()> {
+        let node = self.nodes.get_mut(id)?;
+        let old_grid_position = Self::world_to_grid(node.position);
+        node.position = new_position;
+        let new_grid_position = Self::world_to_grid(node.position);
+        if old_grid_position != new_grid_position {
+            let id = self
+                .node_grid
+                .remove(&old_grid_position)
+                .filter(|x| x == id)
+                .expect("nodes should not be moved without updating their position in node_grid");
+            self.node_grid.insert(new_grid_position, id);
+        }
+        Some(())
     }
 
     pub fn destroy_node(&mut self, id: &NodeId, soft: bool) -> Option<Node> {
@@ -99,12 +128,12 @@ impl Graph {
         })
     }
 
-    pub fn create_wire(&mut self, elbow_pos: IVec2, src: NodeId, dst: NodeId) -> &mut Wire {
+    pub fn create_wire(&mut self, elbow: Elbow, src: NodeId, dst: NodeId) -> &mut Wire {
         let id = self.next_wire_id;
         self.next_wire_id.0 += 1;
         self.wires
             .entry(id)
-            .insert_entry(Wire::new(id, elbow_pos, src, dst))
+            .insert_entry(Wire::new(id, elbow, src, dst))
             .into_mut()
     }
 
@@ -118,6 +147,28 @@ impl Graph {
 
     pub fn wires_iter(&self) -> std::collections::hash_map::Values<'_, WireId, Wire> {
         self.wires.values()
+    }
+
+    pub fn wires_to<'a>(&'a self, node: &NodeId) -> impl Iterator<Item = (&'a WireId, &'a Wire)> {
+        self.wires.iter().filter(move |(_, wire)| &wire.dst == node)
+    }
+
+    pub fn wires_from<'a>(&'a self, node: &NodeId) -> impl Iterator<Item = (&'a WireId, &'a Wire)> {
+        self.wires.iter().filter(move |(_, wire)| &wire.src == node)
+    }
+
+    pub fn wires_of<'a>(
+        &'a self,
+        node: &NodeId,
+    ) -> impl Iterator<Item = (&'a WireId, &'a Wire, Flow)> {
+        self.wires.iter().filter_map(move |(id, wire)| {
+            match (&wire.src == node, &wire.dst == node) {
+                (true, true) => Some((id, wire, Flow::Loop)),
+                (true, false) => Some((id, wire, Flow::Output)),
+                (false, true) => Some((id, wire, Flow::Input)),
+                (false, false) => None,
+            }
+        })
     }
 
     /// Returns [`None`] if the start or end of the wire is not in the graph.

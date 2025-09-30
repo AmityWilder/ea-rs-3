@@ -88,7 +88,7 @@ pub struct Node {
     pub(super) state: u8,
     id: NodeId,
     pub gate: Gate,
-    pub position: IVec2,
+    pub(super) position: IVec2,
 }
 
 impl Node {
@@ -101,12 +101,15 @@ impl Node {
         }
     }
 
-    #[inline(always)]
     pub const fn id(&self) -> &NodeId {
         &self.id
     }
 
     pub const fn state(&self) -> u8 {
         self.state
+    }
+
+    pub const fn position(&self) -> IVec2 {
+        self.position
     }
 }

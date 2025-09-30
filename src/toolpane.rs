@@ -1,5 +1,5 @@
 use crate::{
-    graph::node::Gate,
+    graph::{node::Gate, wire::Elbow},
     icon_sheets::{ButtonIconId, ButtonIconSheetId},
     ivec::{IBounds, IRect, IVec2},
     rich_text::ColorRef,
@@ -102,6 +102,7 @@ pub struct Button {
 pub struct ToolPane {
     pub tool: Tool,
     pub gate: Gate,
+    pub elbow: Elbow,
     pub anchoring: ToolPaneAnchoring,
     pub collapsed: bool,
     pub scale: ButtonIconSheetId,
@@ -111,12 +112,14 @@ impl ToolPane {
     pub fn new(
         tool: Tool,
         gate: Gate,
+        elbow: Elbow,
         anchoring: ToolPaneAnchoring,
         scale: ButtonIconSheetId,
     ) -> Self {
         Self {
             tool,
             gate,
+            elbow,
             anchoring,
             collapsed: false,
             scale,

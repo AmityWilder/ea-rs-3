@@ -1,4 +1,5 @@
 use crate::{graph::node::NodeId, ivec::IVec2};
+use raylib::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ToolId {
@@ -42,16 +43,19 @@ impl ToolId {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct EditDragging {
+    pub start_pos: IVec2,
+    pub temp_pos: Vector2,
+    pub id: NodeId,
+}
+
 #[derive(Debug, Clone)]
 pub enum Tool {
-    Create {
-        current_node: Option<NodeId>,
-    },
+    Create { current_node: Option<NodeId> },
     Erase {},
-    Edit {
-        /// (start_pos, idx)
-        target: Option<(IVec2, NodeId)>,
-    },
+    Edit { target: Option<EditDragging> },
+    Interact {},
 }
 
 impl Default for Tool {

@@ -1,9 +1,15 @@
 use raylib::prelude::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct IVec2 {
     pub x: i32,
     pub y: i32,
+}
+
+impl std::hash::Hash for IVec2 {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        (((self.x as u64) << 32) | (self.y as u64)).hash(state);
+    }
 }
 
 pub trait AsIVec2 {

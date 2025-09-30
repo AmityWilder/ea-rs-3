@@ -3,13 +3,17 @@
 
 use crate::{
     console::{Console, ConsoleAnchoring, GateRef, HyperRef, LogType, PositionRef, ToolRef},
-    graph::{GraphList, node::Gate},
+    graph::{
+        GraphList,
+        node::Gate,
+        wire::{Elbow, Flow, Wire},
+    },
     icon_sheets::{ButtonIconSheets, NodeIconSheetId, NodeIconSheetSets},
     input::Bindings,
     ivec::{IBounds, IRect, IVec2},
     tab::{EditorTab, Tab, TabList},
     theme::Theme,
-    tool::Tool,
+    tool::{EditDragging, Tool},
     toolpane::{ToolPane, ToolPaneAnchoring},
 };
 use console::GraphRef;
@@ -79,7 +83,7 @@ fn draw_hyper_ref_link<D>(
         HyperRef::Node(node_ref) => {
             node_ref.deref_with(graphs, |g, _borrow, node| {
                 for tab in tabs.editors_of_graph(&Arc::downgrade(g)) {
-                    let pos = tab.world_to_screen(node.position.as_vec2() + GRID_CENTER_OFFSET);
+                    let pos = tab.world_to_screen(node.position().as_vec2() + GRID_CENTER_OFFSET);
                     d.draw_line_v(link_anchor, pos, theme.hyperref);
                 }
             });
@@ -149,6 +153,7 @@ fn main() {
     let mut toolpane = ToolPane::new(
         Tool::default(),
         Gate::default(),
+        Elbow::default(),
         ToolPaneAnchoring::default(),
         icon_sheets::ButtonIconSheetId::X16,
     );
@@ -297,13 +302,13 @@ fn main() {
                         match &mut toolpane.tool {
                             Tool::Create { current_node } => {
                                 if input.primary.is_starting() {
-                                    if let Some(&id) = graph.find_node_at_pos(pos) {
+                                    if let Some(&id) = graph.find_node_at(pos) {
                                         // existing node
                                         if let Some(current_node) = *current_node {
                                             let src_ref = graph_ref.node(current_node);
                                             let dst_ref = graph_ref.node(id);
                                             let wire =
-                                                graph.create_wire(IVec2::zero(), current_node, id);
+                                                graph.create_wire(toolpane.elbow, current_node, id);
                                             let wire_ref = graph_ref.wire(*wire.id());
                                             logln!(
                                                 console,
@@ -315,7 +320,9 @@ fn main() {
                                     } else {
                                         // new node
                                         let gate = toolpane.gate;
-                                        let new_node = graph.create_node(gate, pos);
+                                        let new_node = graph.create_node(gate, pos).expect(
+                                            "this branch implies the position is available",
+                                        );
                                         let node_ref = graph_ref.node(*new_node.id());
                                         logln!(
                                             console,
@@ -329,7 +336,7 @@ fn main() {
                                             let src_ref = graph_ref.node(*current_node);
                                             let dst_ref = node_ref;
                                             let wire = graph.create_wire(
-                                                IVec2::zero(),
+                                                toolpane.elbow,
                                                 *current_node,
                                                 new_node_id,
                                             );
@@ -350,7 +357,7 @@ fn main() {
 
                             Tool::Erase {} => {
                                 if input.primary.is_starting()
-                                    && let Some(&id) = graph.find_node_at_pos(pos)
+                                    && let Some(&id) = graph.find_node_at(pos)
                                 {
                                     let _ = graph.destroy_node(&id, false).expect("cannot reach this branch if graph did not contain the node");
                                     let node_ref = graph_ref.node(id);
@@ -360,37 +367,51 @@ fn main() {
 
                             Tool::Edit { target } => {
                                 if input.primary.is_starting()
-                                    && let Some(id) = graph.find_node_at_pos(pos)
+                                    && let Some(&id) = graph.find_node_at(pos)
                                 {
-                                    *target = Some((graph.node(id).unwrap().position, *id));
+                                    *target = Some(EditDragging {
+                                        start_pos: graph.node(&id).unwrap().position(),
+                                        temp_pos: Vector2::default(),
+                                        id,
+                                    });
                                 }
-                                if input.primary.is_ending() {
-                                    if let Some((start_pos, id)) = target {
-                                        let graph_ref = GraphRef(*graph.id());
-                                        let node_ref = graph_ref.node(*id);
-                                        let node = graph.node_mut(id).unwrap();
-                                        node.position = tab
-                                            .screen_to_world(input.cursor)
-                                            .as_ivec2()
-                                            .snap(GRID_SIZE.into());
-                                        logln!(
-                                            console,
-                                            LogType::Info,
-                                            "move node {node_ref} from {} to {}",
-                                            PositionRef(*start_pos),
-                                            PositionRef(node.position),
-                                        );
-                                    }
-                                    *target = None;
+                                if input.primary.is_ending()
+                                    && let Some(EditDragging {
+                                        start_pos,
+                                        temp_pos: _,
+                                        id,
+                                    }) = target.take()
+                                {
+                                    let graph_ref = GraphRef(*graph.id());
+                                    let node_ref = graph_ref.node(id);
+                                    let new_position = tab
+                                        .screen_to_world(input.cursor)
+                                        .as_ivec2()
+                                        .snap(GRID_SIZE.into());
+                                    graph
+                                        .translate_node(&id, new_position)
+                                        .expect("edit mode target node should be valid");
+                                    logln!(
+                                        console,
+                                        LogType::Info,
+                                        "move node {node_ref} from {} to {}",
+                                        PositionRef(start_pos),
+                                        PositionRef(new_position),
+                                    );
                                 }
 
-                                if let Some((_, id)) = target.as_ref() {
-                                    let node = graph.node_mut(id).unwrap();
-                                    node.position = (tab.screen_to_world(input.cursor)
-                                        - rvec2(GRID_SIZE / 2, GRID_SIZE / 2))
-                                    .as_ivec2();
+                                if let Some(EditDragging {
+                                    start_pos: _,
+                                    temp_pos,
+                                    id: _,
+                                }) = target.as_mut()
+                                {
+                                    *temp_pos = tab.screen_to_world(input.cursor)
+                                        - rvec2(GRID_SIZE / 2, GRID_SIZE / 2);
                                 }
                             }
+
+                            Tool::Interact {} => {}
                         }
                     }
                 }
@@ -454,47 +475,111 @@ fn main() {
                         Color::WHITE,
                     );
                     let mut d = d.begin_mode2D(tab.camera());
+                    let zoom_exp = tab.zoom_exp().ceil() as i32;
                     if let Some(graph) = tab.graph.upgrade() {
                         let graph = graph.read().unwrap();
                         // wires
                         for wire in graph.wires_iter() {
-                            let (src, dst) = graph
-                                .get_wire_nodes(wire)
-                                .expect("all wires should be valid");
-                            d.draw_line_v(
-                                src.position.as_vec2() + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                                dst.position.as_vec2() + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                            wire.draw(
+                                &mut d,
+                                &graph,
+                                rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
                                 theme.foreground,
-                            );
+                            )
+                            .expect("all wires should be valid");
                         }
                         match &toolpane.tool {
                             Tool::Create { current_node } => {
                                 if let Some(&current_node) = current_node.as_ref() {
-                                    d.draw_line_v(
+                                    Wire::draw_immediate(
+                                        &mut d,
                                         graph
                                             .node(&current_node)
                                             .expect("current node should always be valid")
-                                            .position
+                                            .position()
                                             .as_vec2()
                                             + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
                                         tab.screen_to_world(input.cursor),
+                                        toolpane.elbow,
                                         theme.foreground,
                                     );
                                 }
                             }
+
                             Tool::Erase {} => {}
-                            Tool::Edit { target: _ } => {}
+
+                            Tool::Edit { target } => {
+                                if let Some(EditDragging {
+                                    start_pos: _,
+                                    temp_pos,
+                                    id,
+                                }) = target
+                                {
+                                    for (_, wire, flow) in graph.wires_of(id) {
+                                        let (start_pos, end_pos) = match flow {
+                                            Flow::Input => (
+                                                graph
+                                                    .node(wire.src())
+                                                    .expect("all wires should be valid")
+                                                    .position()
+                                                    .as_vec2()
+                                                    + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                                                *temp_pos + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                                            ),
+                                            Flow::Output => (
+                                                *temp_pos + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                                                graph
+                                                    .node(wire.dst())
+                                                    .expect("all wires should be valid")
+                                                    .position()
+                                                    .as_vec2()
+                                                    + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                                            ),
+                                            Flow::Loop => {
+                                                todo!()
+                                            }
+                                        };
+                                        Wire::draw_immediate(
+                                            &mut d,
+                                            start_pos,
+                                            end_pos,
+                                            wire.elbow,
+                                            theme.special,
+                                        );
+                                    }
+                                    let node =
+                                        graph.node(id).expect("node being dragged should be valid");
+                                    node_icon_sheets.draw(
+                                        &mut d,
+                                        zoom_exp,
+                                        NodeIconSheetId::Basic,
+                                        Rectangle {
+                                            x: temp_pos.x,
+                                            y: temp_pos.y,
+                                            width: GRID_SIZE.into(),
+                                            height: GRID_SIZE.into(),
+                                        },
+                                        node.gate,
+                                        Vector2::zero(),
+                                        0.0,
+                                        theme.special,
+                                    );
+                                }
+                            }
+
+                            Tool::Interact {} => {}
                         }
 
                         // nodes
                         for node in graph.nodes_iter() {
+                            let node_position = node.position().as_vec2();
                             node_icon_sheets.draw(
                                 &mut d,
-                                tab.zoom_exp().ceil() as i32,
+                                zoom_exp,
                                 NodeIconSheetId::Basic,
                                 Rectangle {
-                                    x: node.position.x as f32,
-                                    y: node.position.y as f32,
+                                    x: node_position.x,
+                                    y: node_position.y,
                                     width: GRID_SIZE.into(),
                                     height: GRID_SIZE.into(),
                                 },
@@ -512,6 +597,33 @@ fn main() {
                             Tool::Create { current_node: _ } => {}
                             Tool::Erase {} => {}
                             Tool::Edit { target: _ } => {}
+                            Tool::Interact {} => {}
+                        }
+
+                        if let Some(id) = graph.find_node_at(
+                            tab.screen_to_world(input.cursor)
+                                .as_ivec2()
+                                .snap(GRID_SIZE.into()),
+                        ) {
+                            let node = graph
+                                .node(id)
+                                .expect("find_node_at should never return an invalid node");
+                            let node_position = node.position().as_vec2();
+                            node_icon_sheets.draw(
+                                &mut d,
+                                zoom_exp,
+                                NodeIconSheetId::Highlight,
+                                Rectangle {
+                                    x: node_position.x,
+                                    y: node_position.y,
+                                    width: GRID_SIZE.into(),
+                                    height: GRID_SIZE.into(),
+                                },
+                                node.gate,
+                                Vector2::zero(),
+                                0.0,
+                                theme.special,
+                            );
                         }
                     }
                 }
