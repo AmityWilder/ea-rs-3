@@ -36,8 +36,44 @@ pub enum GateId {
     Battery,
 }
 
+impl std::fmt::Display for GateId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GateId::Or => "or",
+            GateId::And => "and",
+            GateId::Nor => "nor",
+            GateId::Xor => "xor",
+            GateId::Resistor => "resistor",
+            GateId::Capacitor => "capacitor",
+            GateId::Led => "led",
+            GateId::Delay => "delay",
+            GateId::Battery => "battery",
+        }
+        .fmt(f)
+    }
+}
+
+impl std::str::FromStr for GateId {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "or" => Ok(GateId::Or),
+            "and" => Ok(GateId::And),
+            "nor" => Ok(GateId::Nor),
+            "xor" => Ok(GateId::Xor),
+            "resistor" => Ok(GateId::Resistor),
+            "capacitor" => Ok(GateId::Capacitor),
+            "led" => Ok(GateId::Led),
+            "delay" => Ok(GateId::Delay),
+            "battery" => Ok(GateId::Battery),
+            _ => Err(()),
+        }
+    }
+}
+
 impl GateId {
-    pub fn to_gate(self, ntd: u8) -> Gate {
+    pub const fn to_gate(self, ntd: u8) -> Gate {
         match self {
             GateId::Or => Gate::Or,
             GateId::And => Gate::And,
@@ -111,6 +147,22 @@ impl std::str::FromStr for Gate {
                     _ => None,
                 })
                 .ok_or(()),
+        }
+    }
+}
+
+impl Gate {
+    pub const fn id(self) -> GateId {
+        match self {
+            Gate::Or => GateId::Or,
+            Gate::And => GateId::And,
+            Gate::Nor => GateId::Nor,
+            Gate::Xor => GateId::Xor,
+            Gate::Resistor { .. } => GateId::Resistor,
+            Gate::Capacitor { .. } => GateId::Capacitor,
+            Gate::Led { .. } => GateId::Led,
+            Gate::Delay { .. } => GateId::Delay,
+            Gate::Battery => GateId::Battery,
         }
     }
 }

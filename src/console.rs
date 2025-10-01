@@ -2,7 +2,7 @@ use crate::{
     draw_hyper_ref_link,
     graph::{
         Graph, GraphId, GraphList,
-        node::{Gate, Node, NodeId},
+        node::{GateId, Node, NodeId},
         wire::{Wire, WireId},
     },
     input::Inputs,
@@ -11,6 +11,7 @@ use crate::{
     tab::TabList,
     theme::{ColorId, Theme},
     tool::ToolId,
+    toolpane::ToolPane,
 };
 use raylib::prelude::*;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
@@ -60,10 +61,10 @@ impl LogType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct GateRef(pub Gate);
+pub struct GateRef(pub GateId);
 
 impl std::ops::Deref for GateRef {
-    type Target = Gate;
+    type Target = GateId;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -133,7 +134,11 @@ impl std::str::FromStr for ToolRef {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse().ok().map(Self).ok_or(())
+        s.strip_prefix('[')
+            .and_then(|s| s.strip_suffix(']'))
+            .and_then(|s| s.parse().ok())
+            .map(Self)
+            .ok_or(())
     }
 }
 
@@ -458,6 +463,7 @@ impl Console {
             })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn draw<D, F>(
         &self,
         d: &mut D,
@@ -466,6 +472,7 @@ impl Console {
         input: &Inputs,
         graphs: &GraphList,
         tabs: &TabList,
+        toolpane: &ToolPane,
     ) where
         D: RaylibDraw,
         F: Fn(&D, &str, i32) -> i32,
@@ -500,7 +507,7 @@ impl Console {
                         && IBounds::from(hyper_rec).contains(input.cursor.as_ivec2())
                         && let Ok(hr) = text.parse::<HyperRef>()
                     {
-                        draw_hyper_ref_link(d, hr, hyper_rec, theme, graphs, tabs);
+                        draw_hyper_ref_link(d, hr, hyper_rec, theme, graphs, tabs, toolpane);
                     }
 
                     Some(is_live)

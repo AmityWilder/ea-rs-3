@@ -6,12 +6,16 @@ use crate::{
     console::{
         Console, ConsoleAnchoring, GateRef, GraphRef, HyperRef, LogType, PositionRef, ToolRef,
     },
-    graph::{GraphList, node::Gate, wire::Elbow},
-    icon_sheets::{ButtonIconSheets, NodeIconSheetSets},
+    graph::{
+        GraphList,
+        node::{Gate, GateId},
+        wire::Elbow,
+    },
+    icon_sheets::{ButtonIconId, ButtonIconSheets, NodeIconSheetSets},
     ivec::{AsIVec2, IBounds, IRect, IVec2},
     tab::{EditorTab, Tab, TabList},
     theme::Theme,
-    tool::{EditDragging, Tool},
+    tool::{EditDragging, Tool, ToolId},
     toolpane::ToolPane,
 };
 use raylib::prelude::*;
@@ -39,6 +43,7 @@ fn draw_hyper_ref_link<D>(
     theme: &Theme,
     graphs: &GraphList,
     tabs: &TabList,
+    toolpane: &ToolPane,
 ) where
     D: RaylibDraw,
 {
@@ -54,12 +59,53 @@ fn draw_hyper_ref_link<D>(
     );
 
     match hyper_ref {
-        HyperRef::Gate(_gate_ref) => {
-            // TODO
+        HyperRef::Gate(gate_ref) => {
+            // HACK: only matches against the icon of the button!
+            if let Some((rec, _)) = toolpane.buttons(IVec2::zero(), theme).find(|(_, button)| {
+                matches!(
+                    (button.icon, gate_ref.0),
+                    (Some(ButtonIconId::Or), GateId::Or)
+                        | (Some(ButtonIconId::And), GateId::And)
+                        | (Some(ButtonIconId::Nor), GateId::Nor)
+                        | (Some(ButtonIconId::Xor), GateId::Xor)
+                        | (Some(ButtonIconId::Resistor), GateId::Resistor)
+                        | (Some(ButtonIconId::Capacitor), GateId::Capacitor)
+                        | (Some(ButtonIconId::Led), GateId::Led)
+                        | (Some(ButtonIconId::Delay), GateId::Delay)
+                        | (Some(ButtonIconId::Battery), GateId::Battery)
+                )
+            }) {
+                d.draw_line_v(
+                    link_anchor,
+                    Vector2::new(
+                        rec.x as f32 + 0.5 * rec.w as f32,
+                        rec.y as f32 + 0.5 * rec.h as f32,
+                    ),
+                    theme.hyperref,
+                );
+            }
         }
 
-        HyperRef::Tool(_tool_ref) => {
-            // TODO
+        HyperRef::Tool(tool_ref) => {
+            // HACK: only matches against the icon of the button!
+            if let Some((rec, _)) = toolpane.buttons(IVec2::zero(), theme).find(|(_, button)| {
+                matches!(
+                    (button.icon, tool_ref.0),
+                    (Some(ButtonIconId::Pen), ToolId::Create)
+                        | (Some(ButtonIconId::Erase), ToolId::Erase)
+                        | (Some(ButtonIconId::Edit), ToolId::Edit)
+                        | (Some(ButtonIconId::Interact), ToolId::Interact)
+                )
+            }) {
+                d.draw_line_v(
+                    link_anchor,
+                    Vector2::new(
+                        rec.x as f32 + 0.5 * rec.w as f32,
+                        rec.y as f32 + 0.5 * rec.h as f32,
+                    ),
+                    theme.hyperref,
+                );
+            }
         }
 
         HyperRef::Position(position_ref) => {
@@ -87,9 +133,15 @@ fn draw_hyper_ref_link<D>(
         }
 
         HyperRef::Wire(wire_ref) => {
-            wire_ref.deref_with(graphs, |g, _borrow, _wire| {
-                for _tab in tabs.editors_of_graph(&Arc::downgrade(g)) {
-                    // TODO
+            wire_ref.deref_with(graphs, |g, borrow, wire| {
+                for tab in tabs.editors_of_graph(&Arc::downgrade(g)) {
+                    let (start, end) = borrow
+                        .get_wire_nodes(wire)
+                        .expect("all wires should be valid");
+                    let start_pos = start.position().as_vec2() + GRID_CENTER_OFFSET;
+                    let end_pos = end.position().as_vec2() + GRID_CENTER_OFFSET;
+                    let pos = tab.world_to_screen(wire.elbow.calculate(start_pos, end_pos));
+                    d.draw_line_v(link_anchor, pos, theme.hyperref);
                 }
             });
         }
@@ -290,7 +342,7 @@ fn main() {
                             console,
                             LogType::Info,
                             "set gate to {}",
-                            GateRef(toolpane.gate)
+                            GateRef(toolpane.gate.id())
                         );
                     }
                     if let Some(tool_id) = input.tool() {
@@ -347,7 +399,7 @@ fn main() {
                                             console,
                                             LogType::Info,
                                             "create {} node {node_ref} at {}",
-                                            GateRef(gate),
+                                            GateRef(gate.id()),
                                             PositionRef(pos),
                                         );
                                         let new_node_id = *new_node.id();
@@ -488,18 +540,6 @@ fn main() {
             }
         }
 
-        // console
-        {
-            console.draw(
-                &mut d,
-                |d, text, font_size| d.measure_text(text, font_size),
-                &theme,
-                &input,
-                &graphs,
-                &tabs,
-            );
-        }
-
         // toolpane
         {
             let container_width = d.get_screen_width();
@@ -510,6 +550,19 @@ fn main() {
                 container_height,
                 &theme,
                 &button_icon_sheets,
+            );
+        }
+
+        // console
+        {
+            console.draw(
+                &mut d,
+                |d, text, font_size| d.measure_text(text, font_size),
+                &theme,
+                &input,
+                &graphs,
+                &tabs,
+                &toolpane,
             );
         }
     }

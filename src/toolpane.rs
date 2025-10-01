@@ -535,9 +535,9 @@ impl ToolPane {
                 );
             } else {
                 let IRect { x, y, w, h } = button_rec;
-                d.draw_rectangle(x, y, w, h, theme.background2);
+                // d.draw_rectangle(x, y, w, h, theme.background2);
                 if let Some(color) = button.color {
-                    d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, color.get(theme));
+                    d.draw_rectangle(x, y, w - 1, h - 1, color.get(theme));
                 }
             }
         }

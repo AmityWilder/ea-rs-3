@@ -90,15 +90,14 @@ impl Graph {
     pub fn create_node(&mut self, gate: Gate, position: IVec2) -> Option<&mut Node> {
         let id = self.next_node_id;
         self.next_node_id.0 += 1;
-        self.node_grid
-            .insert(Self::world_to_grid(position), id)
-            .is_none()
-            .then(|| {
-                self.nodes
-                    .entry(id)
-                    .insert_entry(Node::new(id, gate, position))
-                    .into_mut()
-            })
+        let grid_pos = Self::world_to_grid(position);
+        (!self.node_grid.contains_key(&grid_pos)).then(|| {
+            self.node_grid.insert(grid_pos, id);
+            self.nodes
+                .entry(id)
+                .insert_entry(Node::new(id, gate, position))
+                .into_mut()
+        })
     }
 
     pub fn translate_node(&mut self, id: &NodeId, new_position: IVec2) -> Option<()> {
@@ -118,7 +117,11 @@ impl Graph {
     }
 
     pub fn destroy_node(&mut self, id: &NodeId, soft: bool) -> Option<Node> {
-        self.nodes.remove(id).inspect(|_| {
+        self.nodes.remove(id).inspect(|node| {
+            self.node_grid
+                .remove(&Self::world_to_grid(node.position))
+                .filter(|x| x == id)
+                .expect("nodes should not be moved without updating their position in node_grid");
             if soft {
                 todo!()
             } else {
