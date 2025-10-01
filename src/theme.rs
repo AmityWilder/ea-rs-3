@@ -102,39 +102,43 @@ mod color {
     }
 }
 
-pub const SPACE_GRAY: Color = Color::new(28, 26, 41, 255);
-pub const LIFELESS_NEBULA: Color = Color::new(75, 78, 94, 255);
-pub const HAUNTING_WHITE: Color = Color::new(148, 150, 166, 255);
-pub const GLEEFUL_DUST: Color = Color::new(116, 125, 237, 255);
-pub const INTERFERENCE_GRAY: Color = Color::new(232, 234, 255, 255);
-pub const REDSTONE: Color = Color::new(212, 25, 25, 255);
-pub const DESTRUCTIVE_RED: Color = Color::new(219, 18, 18, 255);
-pub const DEAD_CABLE: Color = Color::new(122, 118, 118, 255);
-pub const INPUT_LAVENDER: Color = Color::new(128, 106, 217, 255);
-pub const OUTPUT_APRICOT: Color = Color::new(207, 107, 35, 255);
-pub const WIP_BLUE: Color = Color::new(26, 68, 161, 255);
-pub const CAUTION_YELLOW: Color = Color::new(250, 222, 37, 255);
+pub trait CustomColors {
+    const SPACE_GRAY: Color = Color::new(28, 26, 41, 255);
+    const LIFELESS_NEBULA: Color = Color::new(75, 78, 94, 255);
+    const HAUNTING_WHITE: Color = Color::new(148, 150, 166, 255);
+    const GLEEFUL_DUST: Color = Color::new(116, 125, 237, 255);
+    const INTERFERENCE_GRAY: Color = Color::new(232, 234, 255, 255);
+    const REDSTONE: Color = Color::new(212, 25, 25, 255);
+    const DESTRUCTIVE_RED: Color = Color::new(219, 18, 18, 255);
+    const DEAD_CABLE: Color = Color::new(122, 118, 118, 255);
+    const INPUT_LAVENDER: Color = Color::new(128, 106, 217, 255);
+    const OUTPUT_APRICOT: Color = Color::new(207, 107, 35, 255);
+    const WIP_BLUE: Color = Color::new(26, 68, 161, 255);
+    const CAUTION_YELLOW: Color = Color::new(250, 222, 37, 255);
+}
+
+impl CustomColors for Color {}
 
 static DARK_THEME: Theme = Theme {
     background: Color::BLACK,
-    background1: SPACE_GRAY,
-    background2: LIFELESS_NEBULA,
-    background3: GLEEFUL_DUST,
-    foreground3: DEAD_CABLE,
-    foreground2: HAUNTING_WHITE,
-    foreground1: INTERFERENCE_GRAY,
+    background1: Color::SPACE_GRAY,
+    background2: Color::LIFELESS_NEBULA,
+    background3: Color::GLEEFUL_DUST,
+    foreground3: Color::DEAD_CABLE,
+    foreground2: Color::HAUNTING_WHITE,
+    foreground1: Color::INTERFERENCE_GRAY,
     foreground: Color::WHITE,
-    input: INPUT_LAVENDER,
-    output: OUTPUT_APRICOT,
-    available: WIP_BLUE,
+    input: Color::INPUT_LAVENDER,
+    output: Color::OUTPUT_APRICOT,
+    available: Color::WIP_BLUE,
     interact: Color::YELLOW,
-    active: REDSTONE,
+    active: Color::REDSTONE,
     error: Color::MAGENTA,
-    destructive: DESTRUCTIVE_RED,
+    destructive: Color::DESTRUCTIVE_RED,
     special: Color::VIOLET,
-    hyperref: GLEEFUL_DUST,
-    dead_link: HAUNTING_WHITE,
-    caution: CAUTION_YELLOW,
+    hyperref: Color::GLEEFUL_DUST,
+    dead_link: Color::HAUNTING_WHITE,
+    caution: Color::CAUTION_YELLOW,
     blueprints_background: Color::new(10, 15, 30, 255),
     resistance0: Color::BLACK,
     resistance1: Color::BROWN,
@@ -170,21 +174,21 @@ static LIGHT_THEME: Theme = Theme {
     background1: Color::new(226, 227, 227, 255),
     background2: Color::new(188, 188, 188, 255),
     background3: Color::GRAY,
-    foreground3: DEAD_CABLE,
+    foreground3: Color::DEAD_CABLE,
     foreground2: Color::new(100, 100, 100, 255),
     foreground1: Color::new(75, 75, 75, 255),
     foreground: Color::new(40, 40, 40, 255),
-    input: INPUT_LAVENDER,
-    output: OUTPUT_APRICOT,
+    input: Color::INPUT_LAVENDER,
+    output: Color::OUTPUT_APRICOT,
     available: Color::new(26, 115, 232, 255),
     interact: Color::new(231, 240, 253, 255),
     active: Color::BLUE,
     error: Color::MAGENTA,
-    destructive: DESTRUCTIVE_RED,
+    destructive: Color::DESTRUCTIVE_RED,
     special: Color::new(135, 60, 190, 255),
     hyperref: Color::BLUE,
     dead_link: Color::BISQUE,
-    caution: CAUTION_YELLOW,
+    caution: Color::CAUTION_YELLOW,
     blueprints_background: Color::new(250, 250, 255, 255),
     resistance0: Color::BLACK,
     resistance1: Color::BROWN,
