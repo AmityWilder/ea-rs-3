@@ -12,7 +12,7 @@ struct Vector2Def {
 
 #[allow(non_camel_case_types)]
 #[derive(Serialize, Deserialize)]
-#[serde(remote = "KeyboardKey", rename_all = "snake_case")]
+#[serde(remote = "KeyboardKey")]
 enum KeyboardKeyDef {
     #[serde(skip)]
     KEY_NULL,
@@ -50,31 +50,57 @@ enum KeyboardKeyDef {
     KEY_SEMICOLON,
     #[serde(rename = "=")]
     KEY_EQUAL,
+    #[serde(rename = "a")]
     KEY_A,
+    #[serde(rename = "b")]
     KEY_B,
+    #[serde(rename = "c")]
     KEY_C,
+    #[serde(rename = "d")]
     KEY_D,
+    #[serde(rename = "e")]
     KEY_E,
+    #[serde(rename = "f")]
     KEY_F,
+    #[serde(rename = "g")]
     KEY_G,
+    #[serde(rename = "h")]
     KEY_H,
+    #[serde(rename = "i")]
     KEY_I,
+    #[serde(rename = "j")]
     KEY_J,
+    #[serde(rename = "k")]
     KEY_K,
+    #[serde(rename = "l")]
     KEY_L,
+    #[serde(rename = "m")]
     KEY_M,
+    #[serde(rename = "n")]
     KEY_N,
+    #[serde(rename = "o")]
     KEY_O,
+    #[serde(rename = "p")]
     KEY_P,
+    #[serde(rename = "q")]
     KEY_Q,
+    #[serde(rename = "r")]
     KEY_R,
+    #[serde(rename = "s")]
     KEY_S,
+    #[serde(rename = "t")]
     KEY_T,
+    #[serde(rename = "u")]
     KEY_U,
+    #[serde(rename = "v")]
     KEY_V,
+    #[serde(rename = "w")]
     KEY_W,
+    #[serde(rename = "x")]
     KEY_X,
+    #[serde(rename = "y")]
     KEY_Y,
+    #[serde(rename = "z")]
     KEY_Z,
     #[serde(rename = "[")]
     KEY_LEFT_BRACKET,
@@ -84,40 +110,69 @@ enum KeyboardKeyDef {
     KEY_RIGHT_BRACKET,
     #[serde(rename = "`")]
     KEY_GRAVE,
+    #[serde(rename = "space")]
     KEY_SPACE,
     #[serde(rename = "esc")]
     KEY_ESCAPE,
+    #[serde(rename = "enter")]
     KEY_ENTER,
+    #[serde(rename = "tab")]
     KEY_TAB,
+    #[serde(rename = "backspace")]
     KEY_BACKSPACE,
     #[serde(rename = "ins")]
     KEY_INSERT,
     #[serde(rename = "del")]
     KEY_DELETE,
+    #[serde(rename = "right")]
     KEY_RIGHT,
+    #[serde(rename = "left")]
     KEY_LEFT,
+    #[serde(rename = "down")]
     KEY_DOWN,
+    #[serde(rename = "up")]
     KEY_UP,
+    #[serde(rename = "page_up")]
     KEY_PAGE_UP,
+    #[serde(rename = "page_down")]
     KEY_PAGE_DOWN,
+    #[serde(rename = "home")]
     KEY_HOME,
+    #[serde(rename = "end")]
     KEY_END,
+    #[serde(rename = "caps_lock")]
     KEY_CAPS_LOCK,
+    #[serde(rename = "scroll_lock")]
     KEY_SCROLL_LOCK,
+    #[serde(rename = "num_lock")]
     KEY_NUM_LOCK,
+    #[serde(rename = "print_screen")]
     KEY_PRINT_SCREEN,
+    #[serde(rename = "pause")]
     KEY_PAUSE,
+    #[serde(rename = "f1")]
     KEY_F1,
+    #[serde(rename = "f2")]
     KEY_F2,
+    #[serde(rename = "f3")]
     KEY_F3,
+    #[serde(rename = "f4")]
     KEY_F4,
+    #[serde(rename = "f5")]
     KEY_F5,
+    #[serde(rename = "f6")]
     KEY_F6,
+    #[serde(rename = "f7")]
     KEY_F7,
+    #[serde(rename = "f8")]
     KEY_F8,
+    #[serde(rename = "f9")]
     KEY_F9,
+    #[serde(rename = "f10")]
     KEY_F10,
+    #[serde(rename = "f11")]
     KEY_F11,
+    #[serde(rename = "f12")]
     KEY_F12,
     #[serde(rename = "l_shift")]
     KEY_LEFT_SHIFT,
@@ -135,25 +190,45 @@ enum KeyboardKeyDef {
     KEY_RIGHT_ALT,
     #[serde(rename = "r_super")]
     KEY_RIGHT_SUPER,
+    #[serde(rename = "kb_menu")]
     KEY_KB_MENU,
+    #[serde(rename = "kp_0")]
     KEY_KP_0,
+    #[serde(rename = "kp_1")]
     KEY_KP_1,
+    #[serde(rename = "kp_2")]
     KEY_KP_2,
+    #[serde(rename = "kp_3")]
     KEY_KP_3,
+    #[serde(rename = "kp_4")]
     KEY_KP_4,
+    #[serde(rename = "kp_5")]
     KEY_KP_5,
+    #[serde(rename = "kp_6")]
     KEY_KP_6,
+    #[serde(rename = "kp_7")]
     KEY_KP_7,
+    #[serde(rename = "kp_8")]
     KEY_KP_8,
+    #[serde(rename = "kp_9")]
     KEY_KP_9,
+    #[serde(rename = "kp_decimal")]
     KEY_KP_DECIMAL,
+    #[serde(rename = "kp_divide")]
     KEY_KP_DIVIDE,
+    #[serde(rename = "kp_multiply")]
     KEY_KP_MULTIPLY,
+    #[serde(rename = "kp_subtract")]
     KEY_KP_SUBTRACT,
+    #[serde(rename = "kp_add")]
     KEY_KP_ADD,
+    #[serde(rename = "kp_enter")]
     KEY_KP_ENTER,
+    #[serde(rename = "kp_equal")]
     KEY_KP_EQUAL,
+    #[serde(rename = "back")]
     KEY_BACK,
+    #[serde(rename = "menu")]
     KEY_MENU,
     #[serde(rename = "vol_up")]
     KEY_VOLUME_UP,
