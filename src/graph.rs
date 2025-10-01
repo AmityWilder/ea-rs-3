@@ -1,10 +1,12 @@
 use crate::{
     GRID_SIZE,
+    console::{Console, GateRef, GraphRef, LogType, NodeRef, PositionRef},
     graph::{
         node::{Gate, Node, NodeId},
         wire::{Elbow, Flow, Wire, WireId},
     },
     ivec::IVec2,
+    logln,
 };
 use rustc_hash::FxHashMap;
 use std::sync::{Arc, RwLock};
@@ -87,24 +89,43 @@ impl Graph {
 
     /// Returns [`None`] if the position is already occupied
     #[must_use]
-    pub fn create_node(&mut self, gate: Gate, position: IVec2) -> Option<&mut Node> {
+    pub fn create_node(
+        &mut self,
+        gate: Gate,
+        position: IVec2,
+        console: &mut Console,
+    ) -> Option<&mut Node> {
         let id = self.next_node_id;
         self.next_node_id.0 += 1;
         let grid_pos = Self::world_to_grid(position);
         (!self.node_grid.contains_key(&grid_pos)).then(|| {
             self.node_grid.insert(grid_pos, id);
-            self.nodes
+            let node = self
+                .nodes
                 .entry(id)
                 .insert_entry(Node::new(id, gate, position))
-                .into_mut()
+                .into_mut();
+            logln!(
+                console,
+                LogType::Info,
+                "create {} node {} at {}",
+                GateRef(gate.id()),
+                NodeRef(self.id, *node.id()),
+                PositionRef(position),
+            );
+            node
         })
     }
 
-    pub fn translate_node(&mut self, id: &NodeId, new_position: IVec2) -> Option<()> {
+    pub fn translate_node(
+        &mut self,
+        id: &NodeId,
+        new_position: IVec2,
+        console: &mut Console,
+    ) -> Option<()> {
         let node = self.nodes.get_mut(id)?;
         let old_grid_position = Self::world_to_grid(node.position);
-        node.position = new_position;
-        let new_grid_position = Self::world_to_grid(node.position);
+        let new_grid_position = Self::world_to_grid(new_position);
         if old_grid_position != new_grid_position {
             let id = self
                 .node_grid
@@ -112,11 +133,21 @@ impl Graph {
                 .filter(|x| x == id)
                 .expect("nodes should not be moved without updating their position in node_grid");
             self.node_grid.insert(new_grid_position, id);
+
+            let old_position = std::mem::replace(&mut node.position, new_position);
+            logln!(
+                console,
+                LogType::Info,
+                "move node {} from {} to {}",
+                NodeRef(self.id, id),
+                PositionRef(old_position),
+                PositionRef(new_position),
+            );
         }
         Some(())
     }
 
-    pub fn destroy_node(&mut self, id: &NodeId, soft: bool) -> Option<Node> {
+    pub fn destroy_node(&mut self, id: &NodeId, soft: bool, console: &mut Console) -> Option<Node> {
         self.nodes.remove(id).inspect(|node| {
             self.node_grid
                 .remove(&Self::world_to_grid(node.position))
@@ -128,16 +159,40 @@ impl Graph {
                 self.wires
                     .retain(|_, wire| &wire.src != id && &wire.dst != id);
             }
+            logln!(
+                console,
+                LogType::Info,
+                "destroy node {}",
+                NodeRef(self.id, *id)
+            );
         })
     }
 
-    pub fn create_wire(&mut self, elbow: Elbow, src: NodeId, dst: NodeId) -> &mut Wire {
+    pub fn create_wire(
+        &mut self,
+        elbow: Elbow,
+        src: NodeId,
+        dst: NodeId,
+        console: &mut Console,
+    ) -> &mut Wire {
+        let graph_ref = GraphRef(*self.id());
         let id = self.next_wire_id;
         self.next_wire_id.0 += 1;
-        self.wires
+        let wire = self
+            .wires
             .entry(id)
             .insert_entry(Wire::new(id, elbow, src, dst))
-            .into_mut()
+            .into_mut();
+
+        logln!(
+            console,
+            LogType::Info,
+            "create wire {} from {} to {}",
+            graph_ref.wire(*wire.id()),
+            graph_ref.node(src),
+            graph_ref.node(dst),
+        );
+        wire
     }
 
     pub fn destroy_wire(&mut self, id: &WireId) -> Option<Wire> {
@@ -235,6 +290,12 @@ impl std::ops::Deref for GraphList {
 impl std::ops::DerefMut for GraphList {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.graphs
+    }
+}
+
+impl Default for GraphList {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

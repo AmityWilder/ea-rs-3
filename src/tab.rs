@@ -230,12 +230,7 @@ impl EditorTab {
                 Tool::Erase {} => {}
 
                 Tool::Edit { target } => {
-                    if let Some(EditDragging {
-                        start_pos: _,
-                        temp_pos,
-                        id,
-                    }) = target
-                    {
+                    if let Some(EditDragging { temp_pos, id }) = target {
                         for (_, wire, flow) in graph.wires_of(id) {
                             let (start_pos, end_pos) = match flow {
                                 Flow::Input => (

@@ -17,6 +17,7 @@ pub trait AsIVec2 {
 }
 
 impl AsIVec2 for Vector2 {
+    #[inline]
     fn as_ivec2(&self) -> IVec2 {
         IVec2::from_vec2(*self)
     }
@@ -31,6 +32,7 @@ impl IVec2 {
         Self { x: 0, y: 0 }
     }
 
+    #[inline]
     pub const fn as_vec2(self) -> Vector2 {
         Vector2 {
             x: self.x as f32,
@@ -38,6 +40,7 @@ impl IVec2 {
         }
     }
 
+    #[inline]
     pub const fn from_vec2(value: Vector2) -> Self {
         Self {
             x: value.x as i32,
@@ -139,6 +142,6 @@ impl IBounds {
     }
 
     pub fn contains(&self, p: IVec2) -> bool {
-        self.min.x <= p.x && p.x <= self.max.x && self.min.y <= p.y && p.y <= self.max.y
+        self.min.x <= p.x && p.x < self.max.x && self.min.y <= p.y && p.y < self.max.y
     }
 }

@@ -562,7 +562,7 @@ impl Console {
 macro_rules! logln {
     ($console:expr, $ty:expr, $($args:tt)+) => {
         $crate::console::Console::log(
-            &mut $console,
+            $console,
             format_args!("{}[{}]: {}{}\n",
                 $crate::rich_text::ColorAct::Push(<$crate::rich_text::ColorRef as From<LogType>>::from($ty)),
                 $ty,

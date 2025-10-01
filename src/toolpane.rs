@@ -1,4 +1,5 @@
 use crate::{
+    console::{Console, GateRef, LogType, ToolRef},
     graph::{
         node::{Gate, GateId},
         wire::Elbow,
@@ -6,6 +7,7 @@ use crate::{
     icon_sheets::{ButtonIconId, ButtonIconSheetId, ButtonIconSheets},
     input::Inputs,
     ivec::{AsIVec2, IBounds, IRect, IVec2},
+    logln,
     rich_text::ColorRef,
     theme::Theme,
     tool::{Tool, ToolId},
@@ -460,6 +462,31 @@ impl ToolPane {
                     }],
                 },
             ],
+        }
+    }
+
+    pub fn set_tool(&mut self, tool_id: ToolId, console: &mut Console) {
+        if self.tool.id() != tool_id {
+            self.tool = tool_id.init();
+            logln!(console, LogType::Info, "set tool to {}", ToolRef(tool_id));
+        }
+    }
+
+    pub fn set_gate(&mut self, gate_id: GateId, console: &mut Console) {
+        if self.gate.id() != gate_id {
+            self.gate = gate_id.to_gate(self.ntd);
+            logln!(
+                console,
+                LogType::Info,
+                "set gate to {}",
+                GateRef(self.gate.id())
+            );
+        }
+    }
+
+    pub fn set_ntd(&mut self, data: u8) {
+        if self.ntd != data {
+            self.ntd = data;
         }
     }
 

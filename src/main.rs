@@ -3,9 +3,7 @@
 
 use crate::{
     config::Config,
-    console::{
-        Console, ConsoleAnchoring, GateRef, GraphRef, HyperRef, LogType, PositionRef, ToolRef,
-    },
+    console::{Console, ConsoleAnchoring, HyperRef, LogType},
     graph::{
         GraphList,
         node::{Gate, GateId},
@@ -21,6 +19,7 @@ use crate::{
 use raylib::prelude::*;
 use rl_input::Event;
 use std::{io::Write, sync::Arc};
+use toolpane::ButtonAction;
 
 mod config;
 mod console;
@@ -227,7 +226,7 @@ fn main() {
     let mut hovering_console_top = Event::Inactive;
     let mut dragging_console_top = Event::Inactive;
 
-    logln!(console, LogType::Success, "initialized");
+    logln!(&mut console, LogType::Success, "initialized");
 
     while !rl.window_should_close() {
         // Tick
@@ -268,6 +267,38 @@ fn main() {
             )
             .contains(input.cursor.as_ivec2())
         {
+            if input.primary.is_starting() {
+                let bounds = toolpane.bounds(rl.get_screen_width(), rl.get_screen_height(), &theme);
+                let action = toolpane
+                    .buttons(IVec2::new(bounds.min.x, bounds.min.y), &theme)
+                    .find_map(|(button_rec, button)| {
+                        IBounds::from(button_rec)
+                            .contains(input.cursor.as_ivec2())
+                            .then_some(button.action)
+                    });
+                if let Some(action) = action {
+                    match action {
+                        ButtonAction::SetTool(tool_id) => {
+                            toolpane.set_tool(tool_id, &mut console);
+                        }
+                        ButtonAction::SetGate(gate_id) => {
+                            toolpane.set_gate(gate_id, &mut console);
+                        }
+                        ButtonAction::SetNtd(data) => {
+                            toolpane.set_ntd(data);
+                        }
+                        ButtonAction::Blueprints => {
+                            // TODO
+                        }
+                        ButtonAction::Clipboard => {
+                            // TODO
+                        }
+                        ButtonAction::Settings => {
+                            // TODO
+                        }
+                    }
+                }
+            }
         } else if console.bounds.contains(input.cursor.as_ivec2())
             || dragging_console_top.is_active()
         {
@@ -337,19 +368,10 @@ fn main() {
             match tab {
                 Tab::Editor(tab) => {
                     if let Some(gate) = input.gate() {
-                        toolpane.gate = gate.to_gate(0);
-                        logln!(
-                            console,
-                            LogType::Info,
-                            "set gate to {}",
-                            GateRef(toolpane.gate.id())
-                        );
+                        toolpane.set_gate(gate, &mut console);
                     }
-                    if let Some(tool_id) = input.tool()
-                        && tool_id != toolpane.tool.id()
-                    {
-                        toolpane.tool = tool_id.init();
-                        logln!(console, LogType::Info, "set tool to {}", ToolRef(tool_id));
+                    if let Some(tool) = input.tool() {
+                        toolpane.set_tool(tool, &mut console);
                     }
 
                     if rl.is_window_resized() {
@@ -366,7 +388,6 @@ fn main() {
                         // if graph is being borrowed, don't edit it! it might be saving!
                         && let Ok(mut graph) = graph.try_write()
                     {
-                        let graph_ref = GraphRef(*graph.id());
                         let pos = tab
                             .screen_to_world(input.cursor)
                             .as_ivec2()
@@ -378,46 +399,28 @@ fn main() {
                                     if let Some(&id) = graph.find_node_at(pos) {
                                         // existing node
                                         if let Some(current_node) = *current_node {
-                                            let src_ref = graph_ref.node(current_node);
-                                            let dst_ref = graph_ref.node(id);
-                                            let wire =
-                                                graph.create_wire(toolpane.elbow, current_node, id);
-                                            let wire_ref = graph_ref.wire(*wire.id());
-                                            logln!(
-                                                console,
-                                                LogType::Info,
-                                                "create wire {wire_ref} from {src_ref} to {dst_ref}"
+                                            graph.create_wire(
+                                                toolpane.elbow,
+                                                current_node,
+                                                id,
+                                                &mut console,
                                             );
                                         }
                                         *current_node = Some(id);
                                     } else {
                                         // new node
                                         let gate = toolpane.gate;
-                                        let new_node = graph.create_node(gate, pos).expect(
-                                            "this branch implies the position is available",
-                                        );
-                                        let node_ref = graph_ref.node(*new_node.id());
-                                        logln!(
-                                            console,
-                                            LogType::Info,
-                                            "create {} node {node_ref} at {}",
-                                            GateRef(gate.id()),
-                                            PositionRef(pos),
-                                        );
+                                        let new_node =
+                                            graph.create_node(gate, pos, &mut console).expect(
+                                                "this branch implies the position is available",
+                                            );
                                         let new_node_id = *new_node.id();
                                         if let Some(current_node) = current_node.as_ref() {
-                                            let src_ref = graph_ref.node(*current_node);
-                                            let dst_ref = node_ref;
-                                            let wire = graph.create_wire(
+                                            graph.create_wire(
                                                 toolpane.elbow,
                                                 *current_node,
                                                 new_node_id,
-                                            );
-                                            let wire_ref = graph_ref.wire(*wire.id());
-                                            logln!(
-                                                console,
-                                                LogType::Info,
-                                                "create wire {wire_ref} from {src_ref} to {dst_ref}"
+                                                &mut console,
                                             );
                                         }
                                         *current_node = Some(new_node_id);
@@ -432,9 +435,7 @@ fn main() {
                                 if input.primary.is_starting()
                                     && let Some(&id) = graph.find_node_at(pos)
                                 {
-                                    let _ = graph.destroy_node(&id, false).expect("cannot reach this branch if graph did not contain the node");
-                                    let node_ref = graph_ref.node(id);
-                                    logln!(console, LogType::Info, "destroy node {node_ref}");
+                                    graph.destroy_node(&id, false, &mut console).expect("cannot reach this branch if graph did not contain the node");
                                 }
                             }
 
@@ -443,42 +444,23 @@ fn main() {
                                     && let Some(&id) = graph.find_node_at(pos)
                                 {
                                     *target = Some(EditDragging {
-                                        start_pos: graph.node(&id).unwrap().position(),
                                         temp_pos: Vector2::default(),
                                         id,
                                     });
                                 }
                                 if input.primary.is_ending()
-                                    && let Some(EditDragging {
-                                        start_pos,
-                                        temp_pos: _,
-                                        id,
-                                    }) = target.take()
+                                    && let Some(EditDragging { temp_pos: _, id }) = target.take()
                                 {
-                                    let graph_ref = GraphRef(*graph.id());
-                                    let node_ref = graph_ref.node(id);
                                     let new_position = tab
                                         .screen_to_world(input.cursor)
                                         .as_ivec2()
                                         .snap(GRID_SIZE.into());
                                     graph
-                                        .translate_node(&id, new_position)
+                                        .translate_node(&id, new_position, &mut console)
                                         .expect("edit mode target node should be valid");
-                                    logln!(
-                                        console,
-                                        LogType::Info,
-                                        "move node {node_ref} from {} to {}",
-                                        PositionRef(start_pos),
-                                        PositionRef(new_position),
-                                    );
                                 }
 
-                                if let Some(EditDragging {
-                                    start_pos: _,
-                                    temp_pos,
-                                    id: _,
-                                }) = target.as_mut()
-                                {
+                                if let Some(EditDragging { temp_pos, id: _ }) = target.as_mut() {
                                     *temp_pos = tab.screen_to_world(input.cursor)
                                         - rvec2(GRID_SIZE / 2, GRID_SIZE / 2);
                                 }

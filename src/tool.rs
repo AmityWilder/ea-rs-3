@@ -1,4 +1,4 @@
-use crate::{graph::node::NodeId, ivec::IVec2};
+use crate::graph::node::NodeId;
 use raylib::prelude::*;
 use serde_derive::{Deserialize, Serialize};
 
@@ -51,7 +51,6 @@ impl ToolId {
 
 #[derive(Debug, Clone, Copy)]
 pub struct EditDragging {
-    pub start_pos: IVec2,
     pub temp_pos: Vector2,
     pub id: NodeId,
 }
