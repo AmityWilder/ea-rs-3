@@ -531,7 +531,7 @@ impl ToolPane {
                     icon,
                     Vector2::zero(),
                     0.0,
-                    theme.foreground,
+                    theme.foreground2,
                 );
             } else {
                 let IRect { x, y, w, h } = button_rec;

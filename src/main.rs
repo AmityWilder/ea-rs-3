@@ -345,7 +345,9 @@ fn main() {
                             GateRef(toolpane.gate.id())
                         );
                     }
-                    if let Some(tool_id) = input.tool() {
+                    if let Some(tool_id) = input.tool()
+                        && tool_id != toolpane.tool.id()
+                    {
                         toolpane.tool = tool_id.init();
                         logln!(console, LogType::Info, "set tool to {}", ToolRef(tool_id));
                     }

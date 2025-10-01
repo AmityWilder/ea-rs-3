@@ -69,3 +69,14 @@ impl Default for Tool {
         Self::Create { current_node: None }
     }
 }
+
+impl Tool {
+    pub const fn id(&self) -> ToolId {
+        match self {
+            Tool::Create { .. } => ToolId::Create,
+            Tool::Erase { .. } => ToolId::Erase,
+            Tool::Edit { .. } => ToolId::Edit,
+            Tool::Interact { .. } => ToolId::Interact,
+        }
+    }
+}
