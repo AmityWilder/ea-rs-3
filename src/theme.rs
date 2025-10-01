@@ -14,7 +14,7 @@ mod color {
 
     impl serde::de::Expected for HexCode {
         fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("3, 4, or 8 digits 0-F")
+            formatter.write_str("6, or 8 digits of 0-F")
         }
     }
 
