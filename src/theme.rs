@@ -1,10 +1,106 @@
-use raylib::prelude::*;
-use serde::{Deserialize, Serialize};
-
 use crate::{
     icon_sheets::ButtonIconSheetId,
     toolpane::{ToolPaneAnchoring, Visibility},
 };
+use raylib::prelude::*;
+use serde_derive::{Deserialize, Serialize};
+
+mod color {
+    use raylib::color::Color;
+
+    struct ColorVisitor;
+
+    struct HexCode;
+
+    impl serde::de::Expected for HexCode {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("3, 4, or 8 digits 0-F")
+        }
+    }
+
+    impl<'de> serde::de::Visitor<'de> for ColorVisitor {
+        type Value = Color;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str(
+                "a color hexcode starting with '#' or a \"rgb(...)\" containing the rgb values",
+            )
+        }
+
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            if let Some(v) = v.strip_prefix('#') {
+                Ok(match v.len() {
+                    6 => {
+                        let [_, r, g, b] = u32::from_str_radix(v, 16)
+                            .map_err(|_| E::custom("invalid number"))?
+                            .to_be_bytes();
+                        Color::new(r, g, b, 255)
+                    }
+                    8 => {
+                        let [r, g, b, a] = u32::from_str_radix(v, 16)
+                            .map_err(|_| E::custom("invalid number"))?
+                            .to_be_bytes();
+                        Color::new(r, g, b, a)
+                    }
+                    len => Err(E::invalid_length(len, &HexCode))?,
+                })
+            } else if let Some(v) = v.strip_prefix("rgb(").and_then(|v| v.strip_suffix(')')) {
+                let mut it = v.split(',');
+                let r = it
+                    .next()
+                    .ok_or(E::custom("missing"))
+                    .and_then(|x| x.parse().map_err(E::custom))?;
+                let g = it
+                    .next()
+                    .ok_or(E::custom("missing"))
+                    .and_then(|x| x.parse().map_err(E::custom))?;
+                let b = it
+                    .next()
+                    .ok_or(E::custom("missing"))
+                    .and_then(|x| x.parse().map_err(E::custom))?;
+                Ok(Color::new(r, g, b, 255))
+            } else if let Some(v) = v.strip_prefix("rgba(").and_then(|v| v.strip_suffix(')')) {
+                let mut it = v.split(',');
+                let r = it
+                    .next()
+                    .ok_or(E::custom("missing"))
+                    .and_then(|x| x.parse().map_err(E::custom))?;
+                let g = it
+                    .next()
+                    .ok_or(E::custom("missing"))
+                    .and_then(|x| x.parse().map_err(E::custom))?;
+                let b = it
+                    .next()
+                    .ok_or(E::custom("missing"))
+                    .and_then(|x| x.parse().map_err(E::custom))?;
+                let a = it
+                    .next()
+                    .ok_or(E::custom("missing"))
+                    .and_then(|x| x.parse::<f32>().map_err(E::custom))?;
+                Ok(Color::new(r, g, b, (a * 255.0).clamp(0.0, 255.0) as u8))
+            } else {
+                Err(E::custom("unknown color format"))
+            }
+        }
+    }
+
+    pub fn serialize<S>(value: &Color, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&format!("#{:02X}{:02X}{:02X}", value.r, value.g, value.b))
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Color, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(ColorVisitor)
+    }
+}
 
 pub const SPACE_GRAY: Color = Color::new(28, 26, 41, 255);
 pub const LIFELESS_NEBULA: Color = Color::new(75, 78, 94, 255);
@@ -40,18 +136,16 @@ static DARK_THEME: Theme = Theme {
     dead_link: HAUNTING_WHITE,
     caution: CAUTION_YELLOW,
     blueprints_background: Color::new(10, 15, 30, 255),
-    resistance: [
-        Color::BLACK,
-        Color::BROWN,
-        Color::RED,
-        Color::ORANGE,
-        Color::YELLOW,
-        Color::GREEN,
-        Color::BLUE,
-        Color::PURPLE,
-        Color::GRAY,
-        Color::WHITE,
-    ],
+    resistance0: Color::BLACK,
+    resistance1: Color::BROWN,
+    resistance2: Color::RED,
+    resistance3: Color::ORANGE,
+    resistance4: Color::YELLOW,
+    resistance5: Color::GREEN,
+    resistance6: Color::BLUE,
+    resistance7: Color::PURPLE,
+    resistance8: Color::GRAY,
+    resistance9: Color::WHITE,
     console_font_size: 10,
     console_char_spacing: 1,
     console_line_spacing: 2,
@@ -73,27 +167,66 @@ static DARK_THEME: Theme = Theme {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Theme {
+    #[serde(with = "color")]
     pub background: Color,
+    #[serde(with = "color")]
     pub background1: Color,
+    #[serde(with = "color")]
     pub background2: Color,
+    #[serde(with = "color")]
     pub background3: Color,
+    #[serde(with = "color")]
     pub foreground3: Color,
+    #[serde(with = "color")]
     pub foreground2: Color,
+    #[serde(with = "color")]
     pub foreground1: Color,
+    #[serde(with = "color")]
     pub foreground: Color,
+    #[serde(with = "color")]
     pub input: Color,
+    #[serde(with = "color")]
     pub output: Color,
+    #[serde(with = "color")]
     pub available: Color,
+    #[serde(with = "color")]
     pub interact: Color,
+    #[serde(with = "color")]
     pub active: Color,
+    #[serde(with = "color")]
     pub error: Color,
+    #[serde(with = "color")]
     pub destructive: Color,
+    #[serde(with = "color")]
     pub special: Color,
+    #[serde(with = "color")]
     pub hyperref: Color,
+    #[serde(with = "color")]
     pub dead_link: Color,
+    #[serde(with = "color")]
     pub caution: Color,
+    #[serde(with = "color")]
     pub blueprints_background: Color,
-    pub resistance: [Color; 10],
+    #[serde(with = "color")]
+    pub resistance0: Color,
+    #[serde(with = "color")]
+    pub resistance1: Color,
+    #[serde(with = "color")]
+    pub resistance2: Color,
+    #[serde(with = "color")]
+    pub resistance3: Color,
+    #[serde(with = "color")]
+    pub resistance4: Color,
+    #[serde(with = "color")]
+    pub resistance5: Color,
+    #[serde(with = "color")]
+    pub resistance6: Color,
+    #[serde(with = "color")]
+    pub resistance7: Color,
+    #[serde(with = "color")]
+    pub resistance8: Color,
+    #[serde(with = "color")]
+    pub resistance9: Color,
     pub console_font_size: i32,
     pub console_char_spacing: i32,
     pub console_line_spacing: i32,
@@ -284,16 +417,16 @@ impl std::ops::Index<ColorId> for Theme {
             ColorId::DeadLink => &self.dead_link,
             ColorId::Caution => &self.caution,
             ColorId::BlueprintsBackground => &self.blueprints_background,
-            ColorId::Resistance0 => &self.resistance[0],
-            ColorId::Resistance1 => &self.resistance[1],
-            ColorId::Resistance2 => &self.resistance[2],
-            ColorId::Resistance3 => &self.resistance[3],
-            ColorId::Resistance4 => &self.resistance[4],
-            ColorId::Resistance5 => &self.resistance[5],
-            ColorId::Resistance6 => &self.resistance[6],
-            ColorId::Resistance7 => &self.resistance[7],
-            ColorId::Resistance8 => &self.resistance[8],
-            ColorId::Resistance9 => &self.resistance[9],
+            ColorId::Resistance0 => &self.resistance0,
+            ColorId::Resistance1 => &self.resistance1,
+            ColorId::Resistance2 => &self.resistance2,
+            ColorId::Resistance3 => &self.resistance3,
+            ColorId::Resistance4 => &self.resistance4,
+            ColorId::Resistance5 => &self.resistance5,
+            ColorId::Resistance6 => &self.resistance6,
+            ColorId::Resistance7 => &self.resistance7,
+            ColorId::Resistance8 => &self.resistance8,
+            ColorId::Resistance9 => &self.resistance9,
         }
     }
 }
@@ -321,16 +454,16 @@ impl std::ops::IndexMut<ColorId> for Theme {
             ColorId::DeadLink => &mut self.dead_link,
             ColorId::Caution => &mut self.caution,
             ColorId::BlueprintsBackground => &mut self.blueprints_background,
-            ColorId::Resistance0 => &mut self.resistance[0],
-            ColorId::Resistance1 => &mut self.resistance[1],
-            ColorId::Resistance2 => &mut self.resistance[2],
-            ColorId::Resistance3 => &mut self.resistance[3],
-            ColorId::Resistance4 => &mut self.resistance[4],
-            ColorId::Resistance5 => &mut self.resistance[5],
-            ColorId::Resistance6 => &mut self.resistance[6],
-            ColorId::Resistance7 => &mut self.resistance[7],
-            ColorId::Resistance8 => &mut self.resistance[8],
-            ColorId::Resistance9 => &mut self.resistance[9],
+            ColorId::Resistance0 => &mut self.resistance0,
+            ColorId::Resistance1 => &mut self.resistance1,
+            ColorId::Resistance2 => &mut self.resistance2,
+            ColorId::Resistance3 => &mut self.resistance3,
+            ColorId::Resistance4 => &mut self.resistance4,
+            ColorId::Resistance5 => &mut self.resistance5,
+            ColorId::Resistance6 => &mut self.resistance6,
+            ColorId::Resistance7 => &mut self.resistance7,
+            ColorId::Resistance8 => &mut self.resistance8,
+            ColorId::Resistance9 => &mut self.resistance9,
         }
     }
 }

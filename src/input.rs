@@ -1,9 +1,10 @@
 use crate::{graph::node::GateId, tool::ToolId, toolpane::Visibility};
 use raylib::prelude::*;
 use rl_input::{
-    AxisSource, BoolSource, Event, EventSource, SelectorItem, SelectorSource, Source, VectorSource,
+    AxisSource, BoolSource, Event, EventCombo, EventSource, SelectorItem, SelectorSource, Source,
+    VectorSource,
 };
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Inputs {
@@ -158,27 +159,27 @@ impl Default for Bindings {
             erase_tool_hotkey: EventSource::Keyboard(KEY_X),
             edit_tool_hotkey: EventSource::Keyboard(KEY_V),
             interact_tool_hotkey: EventSource::Keyboard(KEY_F),
-            hide_toolpane: EventSource::All(Box::from([
-                EventSource::Any(Box::from([
+            hide_toolpane: EventSource::Combo(EventCombo::All(Box::from([
+                EventSource::Combo(EventCombo::Any(Box::from([
                     EventSource::Keyboard(KEY_LEFT_CONTROL),
                     EventSource::Keyboard(KEY_RIGHT_CONTROL),
-                ])),
+                ]))),
                 EventSource::Keyboard(KEY_B),
-            ])),
-            collapse_toolpane: EventSource::All(Box::from([
-                EventSource::Any(Box::from([
+            ]))),
+            collapse_toolpane: EventSource::Combo(EventCombo::All(Box::from([
+                EventSource::Combo(EventCombo::Any(Box::from([
                     EventSource::Keyboard(KEY_LEFT_CONTROL),
                     EventSource::Keyboard(KEY_RIGHT_CONTROL),
-                ])),
+                ]))),
                 EventSource::Keyboard(KEY_B),
-            ])),
-            expand_toolpane: EventSource::All(Box::from([
-                EventSource::Any(Box::from([
+            ]))),
+            expand_toolpane: EventSource::Combo(EventCombo::All(Box::from([
+                EventSource::Combo(EventCombo::Any(Box::from([
                     EventSource::Keyboard(KEY_LEFT_CONTROL),
                     EventSource::Keyboard(KEY_RIGHT_CONTROL),
-                ])),
+                ]))),
                 EventSource::Keyboard(KEY_B),
-            ])),
+            ]))),
         }
     }
 }

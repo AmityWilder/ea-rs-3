@@ -1,6 +1,6 @@
 use crate::{graph::node::Gate, ivec::IVec2};
 use raylib::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum NodeIconSheetId {

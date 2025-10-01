@@ -1,178 +1,184 @@
 #![feature(impl_trait_in_assoc_type)]
 
 use raylib::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum EventSourceDef {
-    Inactive,
-    Starting,
-    Active,
-    Ending,
+#[serde(remote = "Vector2")]
+struct Vector2Def {
+    pub x: f32,
+    pub y: f32,
+}
 
+#[allow(non_camel_case_types)]
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "KeyboardKey", rename_all = "snake_case")]
+enum KeyboardKeyDef {
+    #[serde(skip)]
+    KEY_NULL,
     #[serde(rename = "'")]
-    Apostrophe,
+    KEY_APOSTROPHE,
     #[serde(rename = ",")]
-    Comma,
+    KEY_COMMA,
     #[serde(rename = "-")]
-    Minus,
+    KEY_MINUS,
     #[serde(rename = ".")]
-    Period,
+    KEY_PERIOD,
     #[serde(rename = "/")]
-    Slash,
+    KEY_SLASH,
     #[serde(rename = "0")]
-    Zero,
+    KEY_ZERO,
     #[serde(rename = "1")]
-    One,
+    KEY_ONE,
     #[serde(rename = "2")]
-    Two,
+    KEY_TWO,
     #[serde(rename = "3")]
-    Three,
+    KEY_THREE,
     #[serde(rename = "4")]
-    Four,
+    KEY_FOUR,
     #[serde(rename = "5")]
-    Five,
+    KEY_FIVE,
     #[serde(rename = "6")]
-    Six,
+    KEY_SIX,
     #[serde(rename = "7")]
-    Seven,
+    KEY_SEVEN,
     #[serde(rename = "8")]
-    Eight,
+    KEY_EIGHT,
     #[serde(rename = "9")]
-    Nine,
+    KEY_NINE,
     #[serde(rename = ";")]
-    Semicolon,
+    KEY_SEMICOLON,
     #[serde(rename = "=")]
-    Equal,
-    A,
-    B,
-    C,
-    D,
-    E,
-    F,
-    G,
-    H,
-    I,
-    J,
-    K,
-    L,
-    M,
-    N,
-    O,
-    P,
-    Q,
-    R,
-    S,
-    T,
-    U,
-    V,
-    W,
-    X,
-    Y,
-    Z,
+    KEY_EQUAL,
+    KEY_A,
+    KEY_B,
+    KEY_C,
+    KEY_D,
+    KEY_E,
+    KEY_F,
+    KEY_G,
+    KEY_H,
+    KEY_I,
+    KEY_J,
+    KEY_K,
+    KEY_L,
+    KEY_M,
+    KEY_N,
+    KEY_O,
+    KEY_P,
+    KEY_Q,
+    KEY_R,
+    KEY_S,
+    KEY_T,
+    KEY_U,
+    KEY_V,
+    KEY_W,
+    KEY_X,
+    KEY_Y,
+    KEY_Z,
     #[serde(rename = "[")]
-    LeftBracket,
+    KEY_LEFT_BRACKET,
     #[serde(rename = "\\")]
-    Backslash,
+    KEY_BACKSLASH,
     #[serde(rename = "]")]
-    RightBracket,
+    KEY_RIGHT_BRACKET,
     #[serde(rename = "`")]
-    Grave,
-    Space,
+    KEY_GRAVE,
+    KEY_SPACE,
     #[serde(rename = "esc")]
-    Escape,
-    Enter,
-    Tab,
-    Backspace,
+    KEY_ESCAPE,
+    KEY_ENTER,
+    KEY_TAB,
+    KEY_BACKSPACE,
     #[serde(rename = "ins")]
-    Insert,
+    KEY_INSERT,
     #[serde(rename = "del")]
-    Delete,
-    Right,
-    Left,
-    Down,
-    Up,
-    PageUp,
-    PageDown,
-    Home,
-    End,
-    CapsLock,
-    ScrollLock,
-    NumLock,
-    PrintScreen,
-    Pause,
-    F1,
-    F2,
-    F3,
-    F4,
-    F5,
-    F6,
-    F7,
-    F8,
-    F9,
-    F10,
-    F11,
-    F12,
+    KEY_DELETE,
+    KEY_RIGHT,
+    KEY_LEFT,
+    KEY_DOWN,
+    KEY_UP,
+    KEY_PAGE_UP,
+    KEY_PAGE_DOWN,
+    KEY_HOME,
+    KEY_END,
+    KEY_CAPS_LOCK,
+    KEY_SCROLL_LOCK,
+    KEY_NUM_LOCK,
+    KEY_PRINT_SCREEN,
+    KEY_PAUSE,
+    KEY_F1,
+    KEY_F2,
+    KEY_F3,
+    KEY_F4,
+    KEY_F5,
+    KEY_F6,
+    KEY_F7,
+    KEY_F8,
+    KEY_F9,
+    KEY_F10,
+    KEY_F11,
+    KEY_F12,
     #[serde(rename = "l_shift")]
-    LeftShift,
+    KEY_LEFT_SHIFT,
     #[serde(rename = "l_ctrl")]
-    LeftControl,
+    KEY_LEFT_CONTROL,
     #[serde(rename = "l_alt")]
-    LeftAlt,
+    KEY_LEFT_ALT,
     #[serde(rename = "l_super")]
-    LeftSuper,
+    KEY_LEFT_SUPER,
     #[serde(rename = "r_shift")]
-    RightShift,
+    KEY_RIGHT_SHIFT,
     #[serde(rename = "r_ctrl")]
-    RightControl,
+    KEY_RIGHT_CONTROL,
     #[serde(rename = "r_alt")]
-    RightAlt,
+    KEY_RIGHT_ALT,
     #[serde(rename = "r_super")]
-    RightSuper,
-    KbMenu,
-    Kp0,
-    Kp1,
-    Kp2,
-    Kp3,
-    Kp4,
-    Kp5,
-    Kp6,
-    Kp7,
-    Kp8,
-    Kp9,
-    KpDecimal,
-    KpDivide,
-    KpMultiply,
-    KpSubtract,
-    KpAdd,
-    KpEnter,
-    KpEqual,
-    Back,
-    Menu,
+    KEY_RIGHT_SUPER,
+    KEY_KB_MENU,
+    KEY_KP_0,
+    KEY_KP_1,
+    KEY_KP_2,
+    KEY_KP_3,
+    KEY_KP_4,
+    KEY_KP_5,
+    KEY_KP_6,
+    KEY_KP_7,
+    KEY_KP_8,
+    KEY_KP_9,
+    KEY_KP_DECIMAL,
+    KEY_KP_DIVIDE,
+    KEY_KP_MULTIPLY,
+    KEY_KP_SUBTRACT,
+    KEY_KP_ADD,
+    KEY_KP_ENTER,
+    KEY_KP_EQUAL,
+    KEY_BACK,
+    KEY_MENU,
     #[serde(rename = "vol_up")]
-    VolumeUp,
+    KEY_VOLUME_UP,
     #[serde(rename = "vol_down")]
-    VolumeDown,
+    KEY_VOLUME_DOWN,
+}
 
+#[allow(non_camel_case_types)]
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "MouseButton", rename_all = "snake_case")]
+enum MouseButtonDef {
     #[serde(rename = "m1")]
-    MouseLeft,
+    MOUSE_BUTTON_LEFT,
     #[serde(rename = "m2")]
-    MouseRight,
+    MOUSE_BUTTON_RIGHT,
     #[serde(rename = "m3")]
-    MouseMiddle,
+    MOUSE_BUTTON_MIDDLE,
     #[serde(rename = "m_side")]
-    MouseSide,
+    MOUSE_BUTTON_SIDE,
     #[serde(rename = "m_extra")]
-    MouseExtra,
+    MOUSE_BUTTON_EXTRA,
     #[serde(rename = "m_forward")]
-    MouseForward,
+    MOUSE_BUTTON_FORWARD,
     #[serde(rename = "m_back")]
-    MouseBack,
-
-    All(Box<[Self]>),
-    Any(Box<[Self]>),
-    Not(Box<Self>),
+    MOUSE_BUTTON_BACK,
 }
 
 pub trait Source {
@@ -262,301 +268,21 @@ impl Event {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EventCombo {
+    All(Box<[EventSource]>),
+    Any(Box<[EventSource]>),
+    Not(Box<EventSource>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum EventSource {
     Constant(Event),
-    Keyboard(KeyboardKey),
-    Mouse(MouseButton),
-    All(Box<[Self]>),
-    Any(Box<[Self]>),
-    Not(Box<Self>),
-}
-
-impl From<EventSource> for EventSourceDef {
-    fn from(value: EventSource) -> Self {
-        match value {
-            EventSource::Constant(Event::Inactive) => EventSourceDef::Inactive,
-            EventSource::Constant(Event::Starting) => EventSourceDef::Starting,
-            EventSource::Constant(Event::Active) => EventSourceDef::Active,
-            EventSource::Constant(Event::Ending) => EventSourceDef::Ending,
-            EventSource::Keyboard(KeyboardKey::KEY_NULL) => unimplemented!(),
-            EventSource::Keyboard(KeyboardKey::KEY_APOSTROPHE) => EventSourceDef::Apostrophe,
-            EventSource::Keyboard(KeyboardKey::KEY_COMMA) => EventSourceDef::Comma,
-            EventSource::Keyboard(KeyboardKey::KEY_MINUS) => EventSourceDef::Minus,
-            EventSource::Keyboard(KeyboardKey::KEY_PERIOD) => EventSourceDef::Period,
-            EventSource::Keyboard(KeyboardKey::KEY_SLASH) => EventSourceDef::Slash,
-            EventSource::Keyboard(KeyboardKey::KEY_ZERO) => EventSourceDef::Zero,
-            EventSource::Keyboard(KeyboardKey::KEY_ONE) => EventSourceDef::One,
-            EventSource::Keyboard(KeyboardKey::KEY_TWO) => EventSourceDef::Two,
-            EventSource::Keyboard(KeyboardKey::KEY_THREE) => EventSourceDef::Three,
-            EventSource::Keyboard(KeyboardKey::KEY_FOUR) => EventSourceDef::Four,
-            EventSource::Keyboard(KeyboardKey::KEY_FIVE) => EventSourceDef::Five,
-            EventSource::Keyboard(KeyboardKey::KEY_SIX) => EventSourceDef::Six,
-            EventSource::Keyboard(KeyboardKey::KEY_SEVEN) => EventSourceDef::Seven,
-            EventSource::Keyboard(KeyboardKey::KEY_EIGHT) => EventSourceDef::Eight,
-            EventSource::Keyboard(KeyboardKey::KEY_NINE) => EventSourceDef::Nine,
-            EventSource::Keyboard(KeyboardKey::KEY_SEMICOLON) => EventSourceDef::Semicolon,
-            EventSource::Keyboard(KeyboardKey::KEY_EQUAL) => EventSourceDef::Equal,
-            EventSource::Keyboard(KeyboardKey::KEY_A) => EventSourceDef::A,
-            EventSource::Keyboard(KeyboardKey::KEY_B) => EventSourceDef::B,
-            EventSource::Keyboard(KeyboardKey::KEY_C) => EventSourceDef::C,
-            EventSource::Keyboard(KeyboardKey::KEY_D) => EventSourceDef::D,
-            EventSource::Keyboard(KeyboardKey::KEY_E) => EventSourceDef::E,
-            EventSource::Keyboard(KeyboardKey::KEY_F) => EventSourceDef::F,
-            EventSource::Keyboard(KeyboardKey::KEY_G) => EventSourceDef::G,
-            EventSource::Keyboard(KeyboardKey::KEY_H) => EventSourceDef::H,
-            EventSource::Keyboard(KeyboardKey::KEY_I) => EventSourceDef::I,
-            EventSource::Keyboard(KeyboardKey::KEY_J) => EventSourceDef::J,
-            EventSource::Keyboard(KeyboardKey::KEY_K) => EventSourceDef::K,
-            EventSource::Keyboard(KeyboardKey::KEY_L) => EventSourceDef::L,
-            EventSource::Keyboard(KeyboardKey::KEY_M) => EventSourceDef::M,
-            EventSource::Keyboard(KeyboardKey::KEY_N) => EventSourceDef::N,
-            EventSource::Keyboard(KeyboardKey::KEY_O) => EventSourceDef::O,
-            EventSource::Keyboard(KeyboardKey::KEY_P) => EventSourceDef::P,
-            EventSource::Keyboard(KeyboardKey::KEY_Q) => EventSourceDef::Q,
-            EventSource::Keyboard(KeyboardKey::KEY_R) => EventSourceDef::R,
-            EventSource::Keyboard(KeyboardKey::KEY_S) => EventSourceDef::S,
-            EventSource::Keyboard(KeyboardKey::KEY_T) => EventSourceDef::T,
-            EventSource::Keyboard(KeyboardKey::KEY_U) => EventSourceDef::U,
-            EventSource::Keyboard(KeyboardKey::KEY_V) => EventSourceDef::V,
-            EventSource::Keyboard(KeyboardKey::KEY_W) => EventSourceDef::W,
-            EventSource::Keyboard(KeyboardKey::KEY_X) => EventSourceDef::X,
-            EventSource::Keyboard(KeyboardKey::KEY_Y) => EventSourceDef::Y,
-            EventSource::Keyboard(KeyboardKey::KEY_Z) => EventSourceDef::Z,
-            EventSource::Keyboard(KeyboardKey::KEY_LEFT_BRACKET) => EventSourceDef::LeftBracket,
-            EventSource::Keyboard(KeyboardKey::KEY_BACKSLASH) => EventSourceDef::Backslash,
-            EventSource::Keyboard(KeyboardKey::KEY_RIGHT_BRACKET) => EventSourceDef::RightBracket,
-            EventSource::Keyboard(KeyboardKey::KEY_GRAVE) => EventSourceDef::Grave,
-            EventSource::Keyboard(KeyboardKey::KEY_SPACE) => EventSourceDef::Space,
-            EventSource::Keyboard(KeyboardKey::KEY_ESCAPE) => EventSourceDef::Escape,
-            EventSource::Keyboard(KeyboardKey::KEY_ENTER) => EventSourceDef::Enter,
-            EventSource::Keyboard(KeyboardKey::KEY_TAB) => EventSourceDef::Tab,
-            EventSource::Keyboard(KeyboardKey::KEY_BACKSPACE) => EventSourceDef::Backspace,
-            EventSource::Keyboard(KeyboardKey::KEY_INSERT) => EventSourceDef::Insert,
-            EventSource::Keyboard(KeyboardKey::KEY_DELETE) => EventSourceDef::Delete,
-            EventSource::Keyboard(KeyboardKey::KEY_RIGHT) => EventSourceDef::Right,
-            EventSource::Keyboard(KeyboardKey::KEY_LEFT) => EventSourceDef::Left,
-            EventSource::Keyboard(KeyboardKey::KEY_DOWN) => EventSourceDef::Down,
-            EventSource::Keyboard(KeyboardKey::KEY_UP) => EventSourceDef::Up,
-            EventSource::Keyboard(KeyboardKey::KEY_PAGE_UP) => EventSourceDef::PageUp,
-            EventSource::Keyboard(KeyboardKey::KEY_PAGE_DOWN) => EventSourceDef::PageDown,
-            EventSource::Keyboard(KeyboardKey::KEY_HOME) => EventSourceDef::Home,
-            EventSource::Keyboard(KeyboardKey::KEY_END) => EventSourceDef::End,
-            EventSource::Keyboard(KeyboardKey::KEY_CAPS_LOCK) => EventSourceDef::CapsLock,
-            EventSource::Keyboard(KeyboardKey::KEY_SCROLL_LOCK) => EventSourceDef::ScrollLock,
-            EventSource::Keyboard(KeyboardKey::KEY_NUM_LOCK) => EventSourceDef::NumLock,
-            EventSource::Keyboard(KeyboardKey::KEY_PRINT_SCREEN) => EventSourceDef::PrintScreen,
-            EventSource::Keyboard(KeyboardKey::KEY_PAUSE) => EventSourceDef::Pause,
-            EventSource::Keyboard(KeyboardKey::KEY_F1) => EventSourceDef::F1,
-            EventSource::Keyboard(KeyboardKey::KEY_F2) => EventSourceDef::F2,
-            EventSource::Keyboard(KeyboardKey::KEY_F3) => EventSourceDef::F3,
-            EventSource::Keyboard(KeyboardKey::KEY_F4) => EventSourceDef::F4,
-            EventSource::Keyboard(KeyboardKey::KEY_F5) => EventSourceDef::F5,
-            EventSource::Keyboard(KeyboardKey::KEY_F6) => EventSourceDef::F6,
-            EventSource::Keyboard(KeyboardKey::KEY_F7) => EventSourceDef::F7,
-            EventSource::Keyboard(KeyboardKey::KEY_F8) => EventSourceDef::F8,
-            EventSource::Keyboard(KeyboardKey::KEY_F9) => EventSourceDef::F9,
-            EventSource::Keyboard(KeyboardKey::KEY_F10) => EventSourceDef::F10,
-            EventSource::Keyboard(KeyboardKey::KEY_F11) => EventSourceDef::F11,
-            EventSource::Keyboard(KeyboardKey::KEY_F12) => EventSourceDef::F12,
-            EventSource::Keyboard(KeyboardKey::KEY_LEFT_SHIFT) => EventSourceDef::LeftShift,
-            EventSource::Keyboard(KeyboardKey::KEY_LEFT_CONTROL) => EventSourceDef::LeftControl,
-            EventSource::Keyboard(KeyboardKey::KEY_LEFT_ALT) => EventSourceDef::LeftAlt,
-            EventSource::Keyboard(KeyboardKey::KEY_LEFT_SUPER) => EventSourceDef::LeftSuper,
-            EventSource::Keyboard(KeyboardKey::KEY_RIGHT_SHIFT) => EventSourceDef::RightShift,
-            EventSource::Keyboard(KeyboardKey::KEY_RIGHT_CONTROL) => EventSourceDef::RightControl,
-            EventSource::Keyboard(KeyboardKey::KEY_RIGHT_ALT) => EventSourceDef::RightAlt,
-            EventSource::Keyboard(KeyboardKey::KEY_RIGHT_SUPER) => EventSourceDef::RightSuper,
-            EventSource::Keyboard(KeyboardKey::KEY_KB_MENU) => EventSourceDef::KbMenu,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_0) => EventSourceDef::Kp0,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_1) => EventSourceDef::Kp1,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_2) => EventSourceDef::Kp2,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_3) => EventSourceDef::Kp3,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_4) => EventSourceDef::Kp4,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_5) => EventSourceDef::Kp5,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_6) => EventSourceDef::Kp6,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_7) => EventSourceDef::Kp7,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_8) => EventSourceDef::Kp8,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_9) => EventSourceDef::Kp9,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_DECIMAL) => EventSourceDef::KpDecimal,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_DIVIDE) => EventSourceDef::KpDivide,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_MULTIPLY) => EventSourceDef::KpMultiply,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_SUBTRACT) => EventSourceDef::KpSubtract,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_ADD) => EventSourceDef::KpAdd,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_ENTER) => EventSourceDef::KpEnter,
-            EventSource::Keyboard(KeyboardKey::KEY_KP_EQUAL) => EventSourceDef::KpEqual,
-            EventSource::Keyboard(KeyboardKey::KEY_BACK) => EventSourceDef::Back,
-            EventSource::Keyboard(KeyboardKey::KEY_MENU) => EventSourceDef::Menu,
-            EventSource::Keyboard(KeyboardKey::KEY_VOLUME_UP) => EventSourceDef::VolumeUp,
-            EventSource::Keyboard(KeyboardKey::KEY_VOLUME_DOWN) => EventSourceDef::VolumeDown,
-            EventSource::Mouse(MouseButton::MOUSE_BUTTON_LEFT) => EventSourceDef::MouseLeft,
-            EventSource::Mouse(MouseButton::MOUSE_BUTTON_RIGHT) => EventSourceDef::MouseRight,
-            EventSource::Mouse(MouseButton::MOUSE_BUTTON_MIDDLE) => EventSourceDef::MouseMiddle,
-            EventSource::Mouse(MouseButton::MOUSE_BUTTON_SIDE) => EventSourceDef::MouseSide,
-            EventSource::Mouse(MouseButton::MOUSE_BUTTON_EXTRA) => EventSourceDef::MouseExtra,
-            EventSource::Mouse(MouseButton::MOUSE_BUTTON_FORWARD) => EventSourceDef::MouseForward,
-            EventSource::Mouse(MouseButton::MOUSE_BUTTON_BACK) => EventSourceDef::MouseBack,
-            EventSource::All(x) => {
-                EventSourceDef::All(x.into_iter().map(EventSourceDef::from).collect())
-            }
-            EventSource::Any(x) => {
-                EventSourceDef::Any(x.into_iter().map(EventSourceDef::from).collect())
-            }
-            EventSource::Not(x) => EventSourceDef::Not(Box::from(EventSourceDef::from(*x))),
-        }
-    }
-}
-
-impl From<EventSourceDef> for EventSource {
-    fn from(value: EventSourceDef) -> Self {
-        match value {
-            EventSourceDef::Inactive => EventSource::Constant(Event::Inactive),
-            EventSourceDef::Starting => EventSource::Constant(Event::Starting),
-            EventSourceDef::Active => EventSource::Constant(Event::Active),
-            EventSourceDef::Ending => EventSource::Constant(Event::Ending),
-            EventSourceDef::Apostrophe => EventSource::Keyboard(KeyboardKey::KEY_APOSTROPHE),
-            EventSourceDef::Comma => EventSource::Keyboard(KeyboardKey::KEY_COMMA),
-            EventSourceDef::Minus => EventSource::Keyboard(KeyboardKey::KEY_MINUS),
-            EventSourceDef::Period => EventSource::Keyboard(KeyboardKey::KEY_PERIOD),
-            EventSourceDef::Slash => EventSource::Keyboard(KeyboardKey::KEY_SLASH),
-            EventSourceDef::Zero => EventSource::Keyboard(KeyboardKey::KEY_ZERO),
-            EventSourceDef::One => EventSource::Keyboard(KeyboardKey::KEY_ONE),
-            EventSourceDef::Two => EventSource::Keyboard(KeyboardKey::KEY_TWO),
-            EventSourceDef::Three => EventSource::Keyboard(KeyboardKey::KEY_THREE),
-            EventSourceDef::Four => EventSource::Keyboard(KeyboardKey::KEY_FOUR),
-            EventSourceDef::Five => EventSource::Keyboard(KeyboardKey::KEY_FIVE),
-            EventSourceDef::Six => EventSource::Keyboard(KeyboardKey::KEY_SIX),
-            EventSourceDef::Seven => EventSource::Keyboard(KeyboardKey::KEY_SEVEN),
-            EventSourceDef::Eight => EventSource::Keyboard(KeyboardKey::KEY_EIGHT),
-            EventSourceDef::Nine => EventSource::Keyboard(KeyboardKey::KEY_NINE),
-            EventSourceDef::Semicolon => EventSource::Keyboard(KeyboardKey::KEY_SEMICOLON),
-            EventSourceDef::Equal => EventSource::Keyboard(KeyboardKey::KEY_EQUAL),
-            EventSourceDef::A => EventSource::Keyboard(KeyboardKey::KEY_A),
-            EventSourceDef::B => EventSource::Keyboard(KeyboardKey::KEY_B),
-            EventSourceDef::C => EventSource::Keyboard(KeyboardKey::KEY_C),
-            EventSourceDef::D => EventSource::Keyboard(KeyboardKey::KEY_D),
-            EventSourceDef::E => EventSource::Keyboard(KeyboardKey::KEY_E),
-            EventSourceDef::F => EventSource::Keyboard(KeyboardKey::KEY_F),
-            EventSourceDef::G => EventSource::Keyboard(KeyboardKey::KEY_G),
-            EventSourceDef::H => EventSource::Keyboard(KeyboardKey::KEY_H),
-            EventSourceDef::I => EventSource::Keyboard(KeyboardKey::KEY_I),
-            EventSourceDef::J => EventSource::Keyboard(KeyboardKey::KEY_J),
-            EventSourceDef::K => EventSource::Keyboard(KeyboardKey::KEY_K),
-            EventSourceDef::L => EventSource::Keyboard(KeyboardKey::KEY_L),
-            EventSourceDef::M => EventSource::Keyboard(KeyboardKey::KEY_M),
-            EventSourceDef::N => EventSource::Keyboard(KeyboardKey::KEY_N),
-            EventSourceDef::O => EventSource::Keyboard(KeyboardKey::KEY_O),
-            EventSourceDef::P => EventSource::Keyboard(KeyboardKey::KEY_P),
-            EventSourceDef::Q => EventSource::Keyboard(KeyboardKey::KEY_Q),
-            EventSourceDef::R => EventSource::Keyboard(KeyboardKey::KEY_R),
-            EventSourceDef::S => EventSource::Keyboard(KeyboardKey::KEY_S),
-            EventSourceDef::T => EventSource::Keyboard(KeyboardKey::KEY_T),
-            EventSourceDef::U => EventSource::Keyboard(KeyboardKey::KEY_U),
-            EventSourceDef::V => EventSource::Keyboard(KeyboardKey::KEY_V),
-            EventSourceDef::W => EventSource::Keyboard(KeyboardKey::KEY_W),
-            EventSourceDef::X => EventSource::Keyboard(KeyboardKey::KEY_X),
-            EventSourceDef::Y => EventSource::Keyboard(KeyboardKey::KEY_Y),
-            EventSourceDef::Z => EventSource::Keyboard(KeyboardKey::KEY_Z),
-            EventSourceDef::LeftBracket => EventSource::Keyboard(KeyboardKey::KEY_LEFT_BRACKET),
-            EventSourceDef::Backslash => EventSource::Keyboard(KeyboardKey::KEY_BACKSLASH),
-            EventSourceDef::RightBracket => EventSource::Keyboard(KeyboardKey::KEY_RIGHT_BRACKET),
-            EventSourceDef::Grave => EventSource::Keyboard(KeyboardKey::KEY_GRAVE),
-            EventSourceDef::Space => EventSource::Keyboard(KeyboardKey::KEY_SPACE),
-            EventSourceDef::Escape => EventSource::Keyboard(KeyboardKey::KEY_ESCAPE),
-            EventSourceDef::Enter => EventSource::Keyboard(KeyboardKey::KEY_ENTER),
-            EventSourceDef::Tab => EventSource::Keyboard(KeyboardKey::KEY_TAB),
-            EventSourceDef::Backspace => EventSource::Keyboard(KeyboardKey::KEY_BACKSPACE),
-            EventSourceDef::Insert => EventSource::Keyboard(KeyboardKey::KEY_INSERT),
-            EventSourceDef::Delete => EventSource::Keyboard(KeyboardKey::KEY_DELETE),
-            EventSourceDef::Right => EventSource::Keyboard(KeyboardKey::KEY_RIGHT),
-            EventSourceDef::Left => EventSource::Keyboard(KeyboardKey::KEY_LEFT),
-            EventSourceDef::Down => EventSource::Keyboard(KeyboardKey::KEY_DOWN),
-            EventSourceDef::Up => EventSource::Keyboard(KeyboardKey::KEY_UP),
-            EventSourceDef::PageUp => EventSource::Keyboard(KeyboardKey::KEY_PAGE_UP),
-            EventSourceDef::PageDown => EventSource::Keyboard(KeyboardKey::KEY_PAGE_DOWN),
-            EventSourceDef::Home => EventSource::Keyboard(KeyboardKey::KEY_HOME),
-            EventSourceDef::End => EventSource::Keyboard(KeyboardKey::KEY_END),
-            EventSourceDef::CapsLock => EventSource::Keyboard(KeyboardKey::KEY_CAPS_LOCK),
-            EventSourceDef::ScrollLock => EventSource::Keyboard(KeyboardKey::KEY_SCROLL_LOCK),
-            EventSourceDef::NumLock => EventSource::Keyboard(KeyboardKey::KEY_NUM_LOCK),
-            EventSourceDef::PrintScreen => EventSource::Keyboard(KeyboardKey::KEY_PRINT_SCREEN),
-            EventSourceDef::Pause => EventSource::Keyboard(KeyboardKey::KEY_PAUSE),
-            EventSourceDef::F1 => EventSource::Keyboard(KeyboardKey::KEY_F1),
-            EventSourceDef::F2 => EventSource::Keyboard(KeyboardKey::KEY_F2),
-            EventSourceDef::F3 => EventSource::Keyboard(KeyboardKey::KEY_F3),
-            EventSourceDef::F4 => EventSource::Keyboard(KeyboardKey::KEY_F4),
-            EventSourceDef::F5 => EventSource::Keyboard(KeyboardKey::KEY_F5),
-            EventSourceDef::F6 => EventSource::Keyboard(KeyboardKey::KEY_F6),
-            EventSourceDef::F7 => EventSource::Keyboard(KeyboardKey::KEY_F7),
-            EventSourceDef::F8 => EventSource::Keyboard(KeyboardKey::KEY_F8),
-            EventSourceDef::F9 => EventSource::Keyboard(KeyboardKey::KEY_F9),
-            EventSourceDef::F10 => EventSource::Keyboard(KeyboardKey::KEY_F10),
-            EventSourceDef::F11 => EventSource::Keyboard(KeyboardKey::KEY_F11),
-            EventSourceDef::F12 => EventSource::Keyboard(KeyboardKey::KEY_F12),
-            EventSourceDef::LeftShift => EventSource::Keyboard(KeyboardKey::KEY_LEFT_SHIFT),
-            EventSourceDef::LeftControl => EventSource::Keyboard(KeyboardKey::KEY_LEFT_CONTROL),
-            EventSourceDef::LeftAlt => EventSource::Keyboard(KeyboardKey::KEY_LEFT_ALT),
-            EventSourceDef::LeftSuper => EventSource::Keyboard(KeyboardKey::KEY_LEFT_SUPER),
-            EventSourceDef::RightShift => EventSource::Keyboard(KeyboardKey::KEY_RIGHT_SHIFT),
-            EventSourceDef::RightControl => EventSource::Keyboard(KeyboardKey::KEY_RIGHT_CONTROL),
-            EventSourceDef::RightAlt => EventSource::Keyboard(KeyboardKey::KEY_RIGHT_ALT),
-            EventSourceDef::RightSuper => EventSource::Keyboard(KeyboardKey::KEY_RIGHT_SUPER),
-            EventSourceDef::KbMenu => EventSource::Keyboard(KeyboardKey::KEY_KB_MENU),
-            EventSourceDef::Kp0 => EventSource::Keyboard(KeyboardKey::KEY_KP_0),
-            EventSourceDef::Kp1 => EventSource::Keyboard(KeyboardKey::KEY_KP_1),
-            EventSourceDef::Kp2 => EventSource::Keyboard(KeyboardKey::KEY_KP_2),
-            EventSourceDef::Kp3 => EventSource::Keyboard(KeyboardKey::KEY_KP_3),
-            EventSourceDef::Kp4 => EventSource::Keyboard(KeyboardKey::KEY_KP_4),
-            EventSourceDef::Kp5 => EventSource::Keyboard(KeyboardKey::KEY_KP_5),
-            EventSourceDef::Kp6 => EventSource::Keyboard(KeyboardKey::KEY_KP_6),
-            EventSourceDef::Kp7 => EventSource::Keyboard(KeyboardKey::KEY_KP_7),
-            EventSourceDef::Kp8 => EventSource::Keyboard(KeyboardKey::KEY_KP_8),
-            EventSourceDef::Kp9 => EventSource::Keyboard(KeyboardKey::KEY_KP_9),
-            EventSourceDef::KpDecimal => EventSource::Keyboard(KeyboardKey::KEY_KP_DECIMAL),
-            EventSourceDef::KpDivide => EventSource::Keyboard(KeyboardKey::KEY_KP_DIVIDE),
-            EventSourceDef::KpMultiply => EventSource::Keyboard(KeyboardKey::KEY_KP_MULTIPLY),
-            EventSourceDef::KpSubtract => EventSource::Keyboard(KeyboardKey::KEY_KP_SUBTRACT),
-            EventSourceDef::KpAdd => EventSource::Keyboard(KeyboardKey::KEY_KP_ADD),
-            EventSourceDef::KpEnter => EventSource::Keyboard(KeyboardKey::KEY_KP_ENTER),
-            EventSourceDef::KpEqual => EventSource::Keyboard(KeyboardKey::KEY_KP_EQUAL),
-            EventSourceDef::Back => EventSource::Keyboard(KeyboardKey::KEY_BACK),
-            EventSourceDef::Menu => EventSource::Keyboard(KeyboardKey::KEY_MENU),
-            EventSourceDef::VolumeUp => EventSource::Keyboard(KeyboardKey::KEY_VOLUME_UP),
-            EventSourceDef::VolumeDown => EventSource::Keyboard(KeyboardKey::KEY_VOLUME_DOWN),
-            EventSourceDef::MouseLeft => EventSource::Mouse(MouseButton::MOUSE_BUTTON_LEFT),
-            EventSourceDef::MouseRight => EventSource::Mouse(MouseButton::MOUSE_BUTTON_RIGHT),
-            EventSourceDef::MouseMiddle => EventSource::Mouse(MouseButton::MOUSE_BUTTON_MIDDLE),
-            EventSourceDef::MouseSide => EventSource::Mouse(MouseButton::MOUSE_BUTTON_SIDE),
-            EventSourceDef::MouseExtra => EventSource::Mouse(MouseButton::MOUSE_BUTTON_EXTRA),
-            EventSourceDef::MouseForward => EventSource::Mouse(MouseButton::MOUSE_BUTTON_FORWARD),
-            EventSourceDef::MouseBack => EventSource::Mouse(MouseButton::MOUSE_BUTTON_BACK),
-            EventSourceDef::All(x) => {
-                EventSource::All(x.into_iter().map(EventSource::from).collect())
-            }
-            EventSourceDef::Any(x) => {
-                EventSource::Any(x.into_iter().map(EventSource::from).collect())
-            }
-            EventSourceDef::Not(x) => EventSource::Not(Box::from(EventSource::from(*x))),
-        }
-    }
-}
-
-impl Serialize for EventSource {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        EventSourceDef::serialize(&EventSourceDef::from(self.clone()), serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for EventSource {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        EventSourceDef::deserialize(deserializer).map(EventSource::from)
-    }
+    Keyboard(#[serde(with = "KeyboardKeyDef")] KeyboardKey),
+    Mouse(#[serde(with = "MouseButtonDef")] MouseButton),
+    Combo(EventCombo),
 }
 
 impl EventSource {
@@ -566,9 +292,9 @@ impl EventSource {
             Self::Constant(event) => event.is_active(),
             Self::Keyboard(key) => rl.is_key_down(*key),
             Self::Mouse(button) => rl.is_mouse_button_down(*button),
-            Self::All(items) => items.iter_mut().any(|x| x.is_active(rl)),
-            Self::Any(items) => items.iter_mut().all(|x| x.is_active(rl)),
-            Self::Not(item) => !item.is_active(rl),
+            Self::Combo(EventCombo::All(items)) => items.iter_mut().any(|x| x.is_active(rl)),
+            Self::Combo(EventCombo::Any(items)) => items.iter_mut().all(|x| x.is_active(rl)),
+            Self::Combo(EventCombo::Not(item)) => !item.is_active(rl),
         }
     }
 
@@ -578,12 +304,12 @@ impl EventSource {
             Self::Constant(event) => event.is_starting(),
             Self::Keyboard(key) => rl.is_key_pressed(*key),
             Self::Mouse(button) => rl.is_mouse_button_pressed(*button),
-            Self::All(items) => items.iter_mut().any(|x| x.is_starting(rl)),
-            Self::Any(items) => {
+            Self::Combo(EventCombo::All(items)) => items.iter_mut().any(|x| x.is_starting(rl)),
+            Self::Combo(EventCombo::Any(items)) => {
                 items.iter_mut().any(|x| x.is_starting(rl))
                     && items.iter_mut().all(|x| x.is_active(rl))
             }
-            Self::Not(item) => !item.is_starting(rl),
+            Self::Combo(EventCombo::Not(item)) => !item.is_starting(rl),
         }
     }
 
@@ -593,17 +319,17 @@ impl EventSource {
             Self::Constant(event) => event.is_ending(),
             Self::Keyboard(key) => rl.is_key_released(*key),
             Self::Mouse(button) => rl.is_mouse_button_released(*button),
-            Self::All(items) => {
+            Self::Combo(EventCombo::All(items)) => {
                 items.iter_mut().any(|x| x.is_ending(rl))
                     && items.iter_mut().all(
                         |x| !x.is_active(rl), // assumes that if an item is ending, it is also inactive
                     )
             }
-            Self::Any(items) => {
+            Self::Combo(EventCombo::Any(items)) => {
                 items.iter_mut().any(|x| x.is_ending(rl))
                     && items.iter_mut().all(|x| x.is_active(rl) || x.is_ending(rl))
             }
-            Self::Not(item) => !item.is_ending(rl),
+            Self::Combo(EventCombo::Not(item)) => !item.is_ending(rl),
         }
     }
 }
@@ -785,7 +511,7 @@ impl Source for AxisSource {
 #[serde(rename_all = "snake_case")]
 pub enum VectorSource {
     #[serde(rename = "const")]
-    Constant(Vector2),
+    Constant(#[serde(with = "Vector2Def")] Vector2),
     MousePosition,
     MouseDelta,
     EventMix(SelectorSource<VectorSource>),
