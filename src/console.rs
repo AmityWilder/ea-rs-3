@@ -6,10 +6,10 @@ use crate::{
         wire::{Wire, WireId},
     },
     input::Inputs,
-    ivec::{AsIVec2, IBounds, IRect, IVec2},
+    ivec::{AsIVec2, Bounds, IBounds, IRect, IVec2},
     rich_text::{ColorAct, ColorRef, RichStr, RichString},
     tab::TabList,
-    theme::{ColorId, Theme},
+    theme::{ColorId, Fonts, Theme},
     tool::ToolId,
     toolpane::ToolPane,
 };
@@ -363,12 +363,12 @@ pub struct ConsoleAnchoring {
 pub struct Console {
     content: RichString,
     pub bottom_offset: f64,
-    pub bounds: IBounds,
+    pub bounds: Bounds,
     pub anchoring: ConsoleAnchoring,
 }
 
 impl Console {
-    pub fn new(capacity: usize, bounds: IBounds, anchoring: ConsoleAnchoring) -> Self {
+    pub fn new(capacity: usize, bounds: Bounds, anchoring: ConsoleAnchoring) -> Self {
         Self {
             content: RichString::with_capacity(capacity),
             bounds,
@@ -416,11 +416,11 @@ impl Console {
         self.content.as_rich_str()
     }
 
-    pub fn displayable_lines(&self, theme: &Theme) -> i32 {
-        ((self.bounds.max.y - theme.console_padding_bottom)
+    pub fn displayable_lines(&self, theme: &Theme) -> usize {
+        (((self.bounds.max.y - theme.console_padding_bottom)
             - (self.bounds.min.y + theme.console_padding_top)
             + /* Off by one otherwise */ theme.console_line_spacing)
-            / theme.console_line_height()
+            / theme.console_line_height()) as usize
     }
 
     pub fn content(&self) -> impl Iterator<Item = (ColorRef, &str)> {
@@ -448,9 +448,9 @@ impl Console {
                     .lines()
                     .count()
                     .saturating_sub(self.bottom_offset.trunc().clamp(0.0, MAX_ROW) as usize)
-                    .saturating_sub(usize::try_from(self.displayable_lines(theme)).unwrap()),
+                    .saturating_sub(self.displayable_lines(theme)),
             )
-            .take(self.displayable_lines(theme).try_into().unwrap())
+            .take(self.displayable_lines(theme))
             .flat_map(|line| RichStr::new(line).iter())
             .map(move |item| match item {
                 Ok((color, text)) => {
@@ -464,34 +464,45 @@ impl Console {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn draw<D, F>(
+    pub fn draw<D>(
         &self,
         d: &mut D,
-        measure_text: F,
         theme: &Theme,
+        fonts: &Fonts,
         input: &Inputs,
         graphs: &GraphList,
         tabs: &TabList,
         toolpane: &ToolPane,
     ) where
         D: RaylibDraw,
-        F: Fn(&D, &str, i32) -> i32,
     {
-        let IRect { x, y, w, h } = IRect::from(self.bounds);
+        let Rectangle {
+            x,
+            y,
+            width,
+            height,
+        } = Rectangle::from(self.bounds);
 
         // content
         {
-            d.draw_rectangle(x, y, w, h, theme.background2);
-            d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, theme.background1);
+            d.draw_rectangle_rec(Rectangle::new(x, y, width, height), theme.background2);
+            d.draw_rectangle_rec(
+                Rectangle::new(x + 1.0, y + 1.0, width - 2.0, height - 2.0),
+                theme.background1,
+            );
 
             let mut x = x + theme.console_padding_left;
             let mut y = self.bounds.max.y
                 - theme.console_padding_bottom
-                - self.displayable_lines(theme) * theme.console_line_height();
+                - self.displayable_lines(theme) as f32 * theme.console_line_height();
             let left = x;
             for (color, text) in self.visible_content(theme) {
-                let width = measure_text(d, text, theme.console_font_size);
-                let hyper_rec = IRect::new(x, y, width, theme.console_font_size);
+                let size = fonts.console.measure_text(
+                    text,
+                    theme.console_font_size,
+                    theme.console_char_spacing,
+                );
+                let hyper_rec = IRect::new(x as i32, y as i32, size.x as i32, size.y as i32);
                 let is_live = if let Ok(hr) = text.parse::<HyperRef>() {
                     let is_live = match hr {
                         HyperRef::Gate(_) => Some(()),
@@ -514,11 +525,12 @@ impl Console {
                 } else {
                     None
                 };
-                d.draw_text(
+                d.draw_text_ex(
+                    &fonts.console,
                     text,
-                    x,
-                    y,
+                    rvec2(x, y),
                     theme.console_font_size,
+                    theme.console_char_spacing,
                     if is_live.is_none_or(|x| x) {
                         color.get(theme)
                     } else {
@@ -529,7 +541,7 @@ impl Console {
                     y += theme.console_line_height();
                     x = left;
                 } else {
-                    x += width;
+                    x += size.x;
                 }
             }
         }
@@ -537,21 +549,31 @@ impl Console {
         // title
         {
             let title = "Log";
-            let title_text_width = measure_text(d, title, theme.console_font_size);
-            let title_width = title_text_width + 2 * theme.title_padding_x;
-            let title_height = theme.console_font_size + 2 * theme.title_padding_y;
-            d.draw_rectangle(
-                self.bounds.max.x - title_width,
-                self.bounds.min.y,
-                title_width,
-                title_height,
+            let title_text_size = fonts.general.measure_text(
+                title,
+                theme.console_font_size,
+                theme.console_char_spacing,
+            );
+            let title_width = title_text_size.x + 2.0 * theme.title_padding_x;
+            let title_height = title_text_size.y + 2.0 * theme.title_padding_y;
+            d.draw_rectangle_rec(
+                Rectangle::new(
+                    self.bounds.max.x - title_width,
+                    self.bounds.min.y,
+                    title_width,
+                    title_height,
+                ),
                 theme.background2,
             );
-            d.draw_text(
+            d.draw_text_ex(
+                &fonts.console,
                 title,
-                self.bounds.max.x - title_width + theme.title_padding_x,
-                self.bounds.min.y + theme.title_padding_y,
+                Vector2::new(
+                    self.bounds.max.x - title_width + theme.title_padding_x,
+                    self.bounds.min.y + theme.title_padding_y,
+                ),
                 theme.console_font_size,
+                theme.console_char_spacing,
                 theme.foreground,
             );
         }

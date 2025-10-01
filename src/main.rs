@@ -16,9 +16,12 @@ use crate::{
     tool::{EditDragging, Tool, ToolId},
     toolpane::ToolPane,
 };
+use ivec::Bounds;
+use properties::{PropertiesPanel, Property, PropertyGroup};
 use raylib::prelude::*;
 use rl_input::Event;
 use std::{io::Write, sync::Arc};
+use theme::{Fonts, OptionalFont};
 use toolpane::ButtonAction;
 
 mod config;
@@ -27,11 +30,13 @@ mod graph;
 mod icon_sheets;
 mod input;
 mod ivec;
+mod properties;
 mod rich_text;
 mod tab;
 mod theme;
 mod tool;
 mod toolpane;
+mod ui;
 
 pub const GRID_SIZE: u8 = 8;
 
@@ -60,26 +65,26 @@ fn draw_hyper_ref_link<D>(
     match hyper_ref {
         HyperRef::Gate(gate_ref) => {
             // HACK: only matches against the icon of the button!
-            if let Some((rec, _)) = toolpane.buttons(IVec2::zero(), theme).find(|(_, button)| {
-                matches!(
-                    (button.icon, gate_ref.0),
-                    (Some(ButtonIconId::Or), GateId::Or)
-                        | (Some(ButtonIconId::And), GateId::And)
-                        | (Some(ButtonIconId::Nor), GateId::Nor)
-                        | (Some(ButtonIconId::Xor), GateId::Xor)
-                        | (Some(ButtonIconId::Resistor), GateId::Resistor)
-                        | (Some(ButtonIconId::Capacitor), GateId::Capacitor)
-                        | (Some(ButtonIconId::Led), GateId::Led)
-                        | (Some(ButtonIconId::Delay), GateId::Delay)
-                        | (Some(ButtonIconId::Battery), GateId::Battery)
-                )
-            }) {
+            if let Some((rec, _)) = toolpane
+                .buttons(Vector2::zero(), theme)
+                .find(|(_, button)| {
+                    matches!(
+                        (button.icon, gate_ref.0),
+                        (Some(ButtonIconId::Or), GateId::Or)
+                            | (Some(ButtonIconId::And), GateId::And)
+                            | (Some(ButtonIconId::Nor), GateId::Nor)
+                            | (Some(ButtonIconId::Xor), GateId::Xor)
+                            | (Some(ButtonIconId::Resistor), GateId::Resistor)
+                            | (Some(ButtonIconId::Capacitor), GateId::Capacitor)
+                            | (Some(ButtonIconId::Led), GateId::Led)
+                            | (Some(ButtonIconId::Delay), GateId::Delay)
+                            | (Some(ButtonIconId::Battery), GateId::Battery)
+                    )
+                })
+            {
                 d.draw_line_v(
                     link_anchor,
-                    Vector2::new(
-                        rec.x as f32 + 0.5 * rec.w as f32,
-                        rec.y as f32 + 0.5 * rec.h as f32,
-                    ),
+                    Vector2::new(rec.x + 0.5 * rec.width, rec.y + 0.5 * rec.height),
                     theme.hyperref,
                 );
             }
@@ -87,21 +92,21 @@ fn draw_hyper_ref_link<D>(
 
         HyperRef::Tool(tool_ref) => {
             // HACK: only matches against the icon of the button!
-            if let Some((rec, _)) = toolpane.buttons(IVec2::zero(), theme).find(|(_, button)| {
-                matches!(
-                    (button.icon, tool_ref.0),
-                    (Some(ButtonIconId::Pen), ToolId::Create)
-                        | (Some(ButtonIconId::Erase), ToolId::Erase)
-                        | (Some(ButtonIconId::Edit), ToolId::Edit)
-                        | (Some(ButtonIconId::Interact), ToolId::Interact)
-                )
-            }) {
+            if let Some((rec, _)) = toolpane
+                .buttons(Vector2::zero(), theme)
+                .find(|(_, button)| {
+                    matches!(
+                        (button.icon, tool_ref.0),
+                        (Some(ButtonIconId::Pen), ToolId::Create)
+                            | (Some(ButtonIconId::Erase), ToolId::Erase)
+                            | (Some(ButtonIconId::Edit), ToolId::Edit)
+                            | (Some(ButtonIconId::Interact), ToolId::Interact)
+                    )
+                })
+            {
                 d.draw_line_v(
                     link_anchor,
-                    Vector2::new(
-                        rec.x as f32 + 0.5 * rec.w as f32,
-                        rec.y as f32 + 0.5 * rec.h as f32,
-                    ),
+                    Vector2::new(rec.x + 0.5 * rec.width, rec.y + 0.5 * rec.height),
                     theme.hyperref,
                 );
             }
@@ -191,13 +196,18 @@ fn main() {
     let button_icon_sheets = ButtonIconSheets::load(&mut rl, &thread).unwrap();
     let node_icon_sheets = NodeIconSheetSets::load(&mut rl, &thread).unwrap();
 
+    let fonts = Fonts {
+        general: OptionalFont::load(&mut rl, &thread, theme.general_font.as_ref()),
+        console: OptionalFont::load(&mut rl, &thread, theme.console_font.as_ref()),
+    };
+
     let mut graphs = GraphList::new();
 
     let mut tabs = TabList::from([Tab::Editor(
         EditorTab::new(
             &mut rl,
             &thread,
-            IBounds::new(IVec2::zero(), IVec2::new(1280, 720)),
+            Bounds::new(Vector2::zero(), Vector2::new(1280.0, 720.0)),
             Arc::downgrade(graphs.create_graph()),
         )
         .unwrap(),
@@ -205,7 +215,7 @@ fn main() {
 
     let mut console = Console::new(
         327_680, // 4096 rows with 80 columns
-        IBounds::new(IVec2::new(0, 570), IVec2::new(1280, 720)),
+        Bounds::new(Vector2::new(0.0, 570.0), Vector2::new(1280.0, 720.0)),
         ConsoleAnchoring {
             left: true,
             top: false,
@@ -221,6 +231,17 @@ fn main() {
         theme.toolpane_anchoring,
         theme.toolpane_visibility,
         theme.button_icon_scale,
+    );
+
+    let properties = PropertiesPanel::with_data(
+        IBounds::new(
+            IVec2::new(rl.get_screen_width() - 300, 0),
+            IVec2::new(rl.get_screen_width(), rl.get_screen_height()),
+        ),
+        vec![PropertyGroup::with_data(
+            "Tool",
+            vec![Property::new("squeak", 5), Property::new("foo", true)],
+        )],
     );
 
     let mut hovering_console_top = Event::Inactive;
@@ -241,39 +262,43 @@ fn main() {
             let window_height = rl.get_screen_height();
             if console.anchoring.right {
                 if console.anchoring.left {
-                    console.bounds.max.x = window_width;
+                    console.bounds.max.x = window_width as f32;
                 } else {
                     let width = console.bounds.max.x - console.bounds.min.x;
-                    console.bounds.min.x = window_width - width;
-                    console.bounds.max.x = window_width;
+                    console.bounds.min.x = window_width as f32 - width;
+                    console.bounds.max.x = window_width as f32;
                 }
             }
             if console.anchoring.bottom {
                 if console.anchoring.top {
-                    console.bounds.max.y = window_width;
+                    console.bounds.max.y = window_width as f32;
                 } else {
                     let height = console.bounds.max.y - console.bounds.min.y;
-                    console.bounds.min.y = window_height - height;
-                    console.bounds.max.y = window_height;
+                    console.bounds.min.y = window_height as f32 - height;
+                    console.bounds.max.y = window_height as f32;
                 }
             }
         }
 
         if toolpane
             .bounds(
-                rl.get_screen_width(),
-                rl.get_screen_height().min(console.bounds.min.y),
+                rl.get_screen_width() as f32,
+                (rl.get_screen_height() as f32).min(console.bounds.min.y),
                 &theme,
             )
-            .contains(input.cursor.as_ivec2())
+            .contains(input.cursor)
         {
             if input.primary.is_starting() {
-                let bounds = toolpane.bounds(rl.get_screen_width(), rl.get_screen_height(), &theme);
+                let bounds = toolpane.bounds(
+                    rl.get_screen_width() as f32,
+                    rl.get_screen_height() as f32,
+                    &theme,
+                );
                 let action = toolpane
-                    .buttons(IVec2::new(bounds.min.x, bounds.min.y), &theme)
+                    .buttons(Vector2::new(bounds.min.x, bounds.min.y), &theme)
                     .find_map(|(button_rec, button)| {
-                        IBounds::from(button_rec)
-                            .contains(input.cursor.as_ivec2())
+                        Bounds::from(button_rec)
+                            .contains(input.cursor)
                             .then_some(button.action)
                     });
                 if let Some(action) = action {
@@ -299,30 +324,27 @@ fn main() {
                     }
                 }
             }
-        } else if console.bounds.contains(input.cursor.as_ivec2())
-            || dragging_console_top.is_active()
-        {
+        } else if console.bounds.contains(input.cursor) || dragging_console_top.is_active() {
             console.bottom_offset = (console.bottom_offset + input.scroll_console as f64).clamp(
                 0.0,
                 console
                     .content_str()
                     .lines()
                     .count()
-                    .saturating_sub(console.displayable_lines(&theme).try_into().unwrap())
-                    as f64,
+                    .saturating_sub(console.displayable_lines(&theme)) as f64,
             );
 
             let mut x = console.bounds.min.x + theme.console_padding_left;
             let mut y = console.bounds.min.y + theme.console_padding_top;
             let left = x;
             for (_, text) in console.visible_content(&theme) {
-                if IBounds::from(IRect::new(
-                    x,
-                    y,
-                    rl.measure_text(text, theme.console_font_size),
+                let text_size = fonts.console.measure_text(
+                    text,
                     theme.console_font_size,
-                ))
-                .contains(input.cursor.as_ivec2())
+                    theme.console_char_spacing,
+                );
+                if Rectangle::new(x, y, text_size.x, text_size.y)
+                    .check_collision_point_rec(input.cursor)
                     && let Ok(hyper_ref) = text.parse::<HyperRef>()
                 {
                     match hyper_ref {
@@ -361,7 +383,10 @@ fn main() {
                     y += theme.console_line_height();
                     x = left;
                 } else {
-                    x += rl.measure_text(text, theme.console_font_size);
+                    x += fonts
+                        .console
+                        .measure_text(text, theme.console_font_size, theme.console_char_spacing)
+                        .x;
                 }
             }
         } else if let Some(tab) = tabs.focused_tab_mut() {
@@ -375,9 +400,9 @@ fn main() {
                     }
 
                     if rl.is_window_resized() {
-                        let bounds = IBounds::new(
-                            IVec2::zero(),
-                            IVec2::new(rl.get_screen_width(), rl.get_screen_height()),
+                        let bounds = Bounds::new(
+                            Vector2::zero(),
+                            rvec2(rl.get_screen_width(), rl.get_screen_height()),
                         );
                         tab.update_bounds(&mut rl, &thread, bounds).unwrap();
                     }
@@ -480,7 +505,7 @@ fn main() {
         }
 
         // TODO: does it make more sense to have dedicated inputs for this?
-        if (console.bounds.min.y..console.bounds.min.y + 3).contains(&(input.cursor.y as i32)) {
+        if (console.bounds.min.y..console.bounds.min.y + 3.0).contains(&(input.cursor.y)) {
             hovering_console_top.activate();
             if input.primary.is_starting() {
                 dragging_console_top.activate();
@@ -492,7 +517,7 @@ fn main() {
             dragging_console_top.deactivate();
         }
         if dragging_console_top.is_active() {
-            console.bounds.min.y = (input.cursor.y as i32).clamp(
+            console.bounds.min.y = input.cursor.y.clamp(
                 theme.console_padding_top, // arbitrary
                 console.bounds.max.y
                     - theme.console_padding_bottom
@@ -526,8 +551,8 @@ fn main() {
 
         // toolpane
         {
-            let container_width = d.get_screen_width();
-            let container_height = d.get_screen_height();
+            let container_width = d.get_screen_width() as f32;
+            let container_height = d.get_screen_height() as f32;
             toolpane.draw(
                 &mut d,
                 container_width,
@@ -538,17 +563,14 @@ fn main() {
             );
         }
 
+        // properties
+        {
+            properties.draw(&mut d, &theme, &fonts);
+        }
+
         // console
         {
-            console.draw(
-                &mut d,
-                |d, text, font_size| d.measure_text(text, font_size),
-                &theme,
-                &input,
-                &graphs,
-                &tabs,
-                &toolpane,
-            );
+            console.draw(&mut d, &theme, &fonts, &input, &graphs, &tabs, &toolpane);
         }
     }
 }

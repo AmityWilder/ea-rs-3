@@ -1,4 +1,4 @@
-use crate::{graph::node::GateId, tool::ToolId, toolpane::Visibility};
+use crate::{graph::node::GateId, tool::ToolId, ui::Visibility};
 use raylib::prelude::*;
 use rl_input::{
     AxisSource, BoolSource, Event, EventCombo, EventSource, SelectorItem, SelectorSource, Source,

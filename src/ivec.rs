@@ -1,5 +1,47 @@
 use raylib::prelude::*;
 
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Bounds {
+    pub min: Vector2,
+    pub max: Vector2,
+}
+
+impl From<Bounds> for Rectangle {
+    fn from(value: Bounds) -> Self {
+        Rectangle {
+            x: value.min.x,
+            y: value.min.y,
+            width: value.max.x - value.min.x,
+            height: value.max.y - value.min.y,
+        }
+    }
+}
+
+impl From<Rectangle> for Bounds {
+    fn from(value: Rectangle) -> Self {
+        Bounds {
+            min: Vector2 {
+                x: value.x,
+                y: value.y,
+            },
+            max: Vector2 {
+                x: value.x + value.width,
+                y: value.y + value.height,
+            },
+        }
+    }
+}
+
+impl Bounds {
+    pub const fn new(min: Vector2, max: Vector2) -> Self {
+        Self { min, max }
+    }
+
+    pub const fn contains(&self, p: Vector2) -> bool {
+        self.min.x <= p.x && p.x < self.max.x && self.min.y <= p.y && p.y < self.max.y
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct IVec2 {
     pub x: i32,

@@ -1,12 +1,12 @@
 use crate::{
-    GRID_SIZE, IBounds, IVec2, Theme,
+    GRID_SIZE, IVec2, Theme,
     graph::{
         Graph,
         wire::{Flow, Wire},
     },
     icon_sheets::{NodeIconSheetId, NodeIconSheetSets},
     input::Inputs,
-    ivec::{AsIVec2, IRect},
+    ivec::{AsIVec2, Bounds},
     tool::{EditDragging, Tool},
     toolpane::ToolPane,
 };
@@ -17,7 +17,7 @@ use std::sync::{RwLock, Weak};
 pub struct EditorTab {
     camera_target: Vector2,
     zoom_exp: f32,
-    bounds: IBounds,
+    bounds: Bounds,
     grid: RenderTexture2D,
     dirty: bool,
     pub graph: Weak<RwLock<Graph>>,
@@ -27,13 +27,13 @@ impl EditorTab {
     pub fn new(
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
-        bounds: IBounds,
+        bounds: Bounds,
         graph: Weak<RwLock<Graph>>,
     ) -> Result<Self, raylib::error::Error> {
         let grid = rl.load_render_texture(
             thread,
-            bounds.max.x.abs_diff(bounds.min.x),
-            bounds.max.y.abs_diff(bounds.min.y),
+            u32::try_from((bounds.max.x - bounds.min.x).ceil() as i32).unwrap(),
+            u32::try_from((bounds.max.y - bounds.min.y).ceil() as i32).unwrap(),
         )?;
         Ok(Self {
             camera_target: Vector2::zero(),
@@ -89,7 +89,7 @@ impl EditorTab {
         }
     }
 
-    pub const fn bounds(&self) -> &IBounds {
+    pub const fn bounds(&self) -> &Bounds {
         &self.bounds
     }
 
@@ -97,14 +97,14 @@ impl EditorTab {
         &mut self,
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
-        value: IBounds,
+        value: Bounds,
     ) -> Result<(), raylib::error::Error> {
         if self.bounds != value {
             self.bounds = value;
             self.grid = rl.load_render_texture(
                 thread,
-                value.max.x.abs_diff(value.min.x),
-                value.max.y.abs_diff(value.min.y),
+                u32::try_from((value.max.x - value.min.x).ceil() as i32).unwrap(),
+                u32::try_from((value.max.y - value.min.y).ceil() as i32).unwrap(),
             )?;
             self.dirty = true;
         }
@@ -117,11 +117,8 @@ impl EditorTab {
 
             let camera = self.camera();
 
-            let mut start =
-                IVec2::from_vec2(rl.get_screen_to_world2D(self.bounds.min.as_vec2(), camera));
-
-            let mut end =
-                IVec2::from_vec2(rl.get_screen_to_world2D(self.bounds.max.as_vec2(), camera));
+            let mut start = IVec2::from_vec2(rl.get_screen_to_world2D(self.bounds.min, camera));
+            let mut end = IVec2::from_vec2(rl.get_screen_to_world2D(self.bounds.max, camera));
 
             start = start.snap(GRID_SIZE.into());
             start.x -= i32::from(GRID_SIZE);
@@ -174,12 +171,17 @@ impl EditorTab {
         toolpane: &ToolPane,
         node_icon_sheets: &NodeIconSheetSets,
     ) {
-        let IRect { x, y, w, h } = IRect::from(*self.bounds());
-        let mut d = d.begin_scissor_mode(x, y, w, h);
+        let Rectangle {
+            x,
+            y,
+            width,
+            height,
+        } = Rectangle::from(*self.bounds());
+        let mut d = d.begin_scissor_mode(x as i32, y as i32, width as i32, height as i32);
         d.draw_texture_pro(
             self.grid_tex(),
-            rrect(x, y, w, -h),
-            rrect(x, y, w, h),
+            Rectangle::new(x, y, width, -height),
+            Rectangle::new(x, y, width, height),
             Vector2::zero(),
             0.0,
             Color::WHITE,

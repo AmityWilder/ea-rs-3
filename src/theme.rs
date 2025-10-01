@@ -1,9 +1,7 @@
-use crate::{
-    icon_sheets::ButtonIconSheetId,
-    toolpane::{ToolPaneAnchoring, Visibility},
-};
+use crate::{icon_sheets::ButtonIconSheetId, toolpane::ToolPaneAnchoring, ui::Visibility};
 use raylib::prelude::*;
 use serde_derive::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 mod color {
     use raylib::color::Color;
@@ -150,23 +148,35 @@ static DARK_THEME: Theme = Theme {
     resistance7: Color::PURPLE,
     resistance8: Color::GRAY,
     resistance9: Color::WHITE,
-    console_font_size: 10,
-    console_char_spacing: 1,
-    console_line_spacing: 2,
-    console_padding_left: 15,
-    console_padding_top: 5,
-    console_padding_right: 5,
-    console_padding_bottom: 5,
-    title_padding_x: 6,
-    title_padding_y: 3,
+    general_font: None,
+    console_font: None,
+    console_font_size: 10.0,
+    console_char_spacing: 1.0,
+    console_line_spacing: 2.0,
+    console_padding_left: 15.0,
+    console_padding_top: 5.0,
+    console_padding_right: 5.0,
+    console_padding_bottom: 5.0,
+    title_padding_x: 6.0,
+    title_padding_y: 3.0,
     button_icon_scale: ButtonIconSheetId::X16,
     toolpane_anchoring: ToolPaneAnchoring::LeftTop,
     toolpane_visibility: Visibility::Expanded,
-    toolpane_padding_across: 3,
-    toolpane_padding_along: 5,
-    toolpane_group_expanded_gap: 16,
-    toolpane_group_collapsed_gap: 16,
-    toolpane_button_gap: 1,
+    toolpane_padding_across: 3.0,
+    toolpane_padding_along: 5.0,
+    toolpane_group_expanded_gap: 16.0,
+    toolpane_group_collapsed_gap: 16.0,
+    toolpane_button_gap: 1.0,
+    properties_group_font_size: 10.0,
+    properties_group_char_spacing: 1.0,
+    properties_group_line_spacing: 2.0,
+    properties_item_font_size: 10.0,
+    properties_item_char_spacing: 2.0,
+    properties_item_line_spacing: 2.0,
+    properties_padding_left: 15.0,
+    properties_padding_top: 5.0,
+    properties_padding_right: 5.0,
+    properties_padding_bottom: 5.0,
 };
 
 static LIGHT_THEME: Theme = Theme {
@@ -200,26 +210,38 @@ static LIGHT_THEME: Theme = Theme {
     resistance7: Color::PURPLE,
     resistance8: Color::GRAY,
     resistance9: Color::WHITE,
-    console_font_size: 10,
-    console_char_spacing: 1,
-    console_line_spacing: 2,
-    console_padding_left: 15,
-    console_padding_top: 5,
-    console_padding_right: 5,
-    console_padding_bottom: 5,
-    title_padding_x: 6,
-    title_padding_y: 3,
+    general_font: None,
+    console_font: None,
+    console_font_size: 10.0,
+    console_char_spacing: 1.0,
+    console_line_spacing: 2.0,
+    console_padding_left: 15.0,
+    console_padding_top: 5.0,
+    console_padding_right: 5.0,
+    console_padding_bottom: 5.0,
+    title_padding_x: 6.0,
+    title_padding_y: 3.0,
     button_icon_scale: ButtonIconSheetId::X16,
     toolpane_anchoring: ToolPaneAnchoring::LeftTop,
     toolpane_visibility: Visibility::Expanded,
-    toolpane_padding_across: 3,
-    toolpane_padding_along: 5,
-    toolpane_group_expanded_gap: 16,
-    toolpane_group_collapsed_gap: 16,
-    toolpane_button_gap: 1,
+    toolpane_padding_across: 3.0,
+    toolpane_padding_along: 5.0,
+    toolpane_group_expanded_gap: 16.0,
+    toolpane_group_collapsed_gap: 16.0,
+    toolpane_button_gap: 1.0,
+    properties_group_font_size: 10.0,
+    properties_group_char_spacing: 1.0,
+    properties_group_line_spacing: 2.0,
+    properties_item_font_size: 10.0,
+    properties_item_char_spacing: 2.0,
+    properties_item_line_spacing: 2.0,
+    properties_padding_left: 15.0,
+    properties_padding_top: 5.0,
+    properties_padding_right: 5.0,
+    properties_padding_bottom: 5.0,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Theme {
     #[serde(with = "color")]
     pub background: Color,
@@ -281,28 +303,40 @@ pub struct Theme {
     pub resistance8: Color,
     #[serde(with = "color")]
     pub resistance9: Color,
-    pub console_font_size: i32,
-    pub console_char_spacing: i32,
-    pub console_line_spacing: i32,
-    pub console_padding_left: i32,
-    pub console_padding_top: i32,
-    pub console_padding_right: i32,
-    pub console_padding_bottom: i32,
-    pub title_padding_x: i32,
-    pub title_padding_y: i32,
+    pub general_font: Option<PathBuf>,
+    pub console_font: Option<PathBuf>,
+    pub console_font_size: f32,
+    pub console_char_spacing: f32,
+    pub console_line_spacing: f32,
+    pub console_padding_left: f32,
+    pub console_padding_top: f32,
+    pub console_padding_right: f32,
+    pub console_padding_bottom: f32,
+    pub title_padding_x: f32,
+    pub title_padding_y: f32,
     pub button_icon_scale: ButtonIconSheetId,
     pub toolpane_anchoring: ToolPaneAnchoring,
     pub toolpane_visibility: Visibility,
-    pub toolpane_padding_across: i32,
-    pub toolpane_padding_along: i32,
-    pub toolpane_group_expanded_gap: i32,
-    pub toolpane_group_collapsed_gap: i32,
-    pub toolpane_button_gap: i32,
+    pub toolpane_padding_across: f32,
+    pub toolpane_padding_along: f32,
+    pub toolpane_group_expanded_gap: f32,
+    pub toolpane_group_collapsed_gap: f32,
+    pub toolpane_button_gap: f32,
+    pub properties_group_font_size: f32,
+    pub properties_group_char_spacing: f32,
+    pub properties_group_line_spacing: f32,
+    pub properties_item_font_size: f32,
+    pub properties_item_char_spacing: f32,
+    pub properties_item_line_spacing: f32,
+    pub properties_padding_left: f32,
+    pub properties_padding_top: f32,
+    pub properties_padding_right: f32,
+    pub properties_padding_bottom: f32,
 }
 
 impl Default for Theme {
     fn default() -> Self {
-        DARK_THEME
+        DARK_THEME.clone()
     }
 }
 
@@ -329,7 +363,7 @@ fn parse_color(s: &str) -> Result<Color, ()> {
 }
 
 impl Theme {
-    pub const fn console_line_height(&self) -> i32 {
+    pub const fn console_line_height(&self) -> f32 {
         self.console_font_size + self.console_line_spacing
     }
 }
@@ -520,4 +554,56 @@ impl std::ops::IndexMut<ColorId> for Theme {
             ColorId::Resistance9 => &mut self.resistance9,
         }
     }
+}
+
+#[derive(Debug)]
+pub enum OptionalFont {
+    Strong(Font),
+    Weak(WeakFont),
+}
+
+impl OptionalFont {
+    pub fn load<P>(rl: &mut RaylibHandle, _: &RaylibThread, path: Option<P>) -> Self
+    where
+        P: AsRef<Path>,
+    {
+        if let Some(path) = path
+            && let Ok(filename) =
+                std::ffi::CString::new(path.as_ref().as_os_str().as_encoded_bytes())
+        {
+            // SAFETY: LoadFont just opens the file under the hood, which uses the OS encoding
+            let f = unsafe { ffi::LoadFont(filename.as_ptr()) };
+            if !(f.glyphs.is_null() || f.texture.id == 0) {
+                // SAFETY: guaranteed not to have duplicates of what we just created and didnt copy
+                return Self::Strong(unsafe { Font::from_raw(f) });
+            }
+        }
+        Self::Weak(rl.get_font_default())
+    }
+}
+
+impl AsRef<ffi::Font> for OptionalFont {
+    fn as_ref(&self) -> &ffi::Font {
+        match self {
+            Self::Strong(font) => font.as_ref(),
+            Self::Weak(font) => font.as_ref(),
+        }
+    }
+}
+
+impl AsMut<ffi::Font> for OptionalFont {
+    fn as_mut(&mut self) -> &mut ffi::Font {
+        match self {
+            Self::Strong(font) => font.as_mut(),
+            Self::Weak(font) => font.as_mut(),
+        }
+    }
+}
+
+impl RaylibFont for OptionalFont {}
+
+#[derive(Debug)]
+pub struct Fonts {
+    pub general: OptionalFont,
+    pub console: OptionalFont,
 }
