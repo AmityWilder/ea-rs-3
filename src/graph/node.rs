@@ -164,20 +164,79 @@ impl Gate {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum GateNtd {
+    #[default]
+    Or,
+    And,
+    Nor,
+    Xor,
+    Resistor {
+        resistance: u8,
+    },
+    Capacitor {
+        capacity: u8,
+        stored: u8,
+    },
+    Led {
+        color: u8,
+    },
+    Delay {
+        prev: bool,
+    },
+    Battery,
+}
+
+impl GateNtd {
+    pub const fn from_gate(gate: Gate) -> Self {
+        match gate {
+            Gate::Or => Self::Or,
+            Gate::And => Self::And,
+            Gate::Nor => Self::Nor,
+            Gate::Xor => Self::Xor,
+            Gate::Resistor { resistance } => Self::Resistor { resistance },
+            Gate::Capacitor { capacity } => Self::Capacitor {
+                capacity,
+                stored: 0,
+            },
+            Gate::Led { color } => Self::Led { color },
+            Gate::Delay => Self::Delay { prev: false },
+            Gate::Battery => Self::Battery,
+        }
+    }
+
+    pub const fn as_gate(self) -> Gate {
+        match self {
+            Self::Or => Gate::Or {},
+            Self::And => Gate::And {},
+            Self::Nor => Gate::Nor {},
+            Self::Xor => Gate::Xor {},
+            Self::Resistor { resistance } => Gate::Resistor { resistance },
+            Self::Capacitor {
+                capacity,
+                stored: _,
+            } => Gate::Capacitor { capacity },
+            Self::Led { color } => Gate::Led { color },
+            Self::Delay { prev: _ } => Gate::Delay {},
+            Self::Battery => Gate::Battery {},
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Node {
-    pub(super) state: u8,
+    pub(super) state: bool,
     id: NodeId,
-    pub gate: Gate,
+    pub(super) gate: GateNtd,
     pub(super) position: IVec2,
 }
 
 impl Node {
     pub const fn new(id: NodeId, gate: Gate, position: IVec2) -> Self {
         Self {
-            state: 0,
+            state: false,
             id,
-            gate,
+            gate: GateNtd::from_gate(gate),
             position,
         }
     }
@@ -186,11 +245,15 @@ impl Node {
         &self.id
     }
 
-    pub const fn state(&self) -> u8 {
+    pub const fn state(&self) -> bool {
         self.state
     }
 
     pub const fn position(&self) -> IVec2 {
         self.position
+    }
+
+    pub const fn gate_ntd(&self) -> &GateNtd {
+        &self.gate
     }
 }

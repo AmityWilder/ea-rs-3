@@ -505,9 +505,15 @@ impl ToolPane {
         }
     }
 
-    pub fn set_ntd(&mut self, data: u8) {
+    pub fn set_ntd(&mut self, data: u8, console: &mut Console) {
         if self.ntd != data {
             self.ntd = data;
+            logln!(
+                console,
+                LogType::Info,
+                "set non-transistor data to {}",
+                self.ntd
+            );
         }
     }
 

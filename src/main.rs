@@ -20,7 +20,11 @@ use ivec::Bounds;
 use properties::{PropertiesPanel, Property, PropertyGroup};
 use raylib::prelude::*;
 use rl_input::Event;
-use std::{io::Write, sync::Arc};
+use std::{
+    io::Write,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use theme::{Fonts, OptionalFont};
 use toolpane::ButtonAction;
 
@@ -247,6 +251,9 @@ fn main() {
     let mut hovering_console_top = Event::Inactive;
     let mut dragging_console_top = Event::Inactive;
 
+    let mut next_eval_tick = Instant::now();
+    let eval_duration = Duration::from_millis(200);
+
     logln!(&mut console, LogType::Success, "initialized");
 
     while !rl.window_should_close() {
@@ -310,7 +317,7 @@ fn main() {
                             toolpane.set_gate(gate_id, &mut console);
                         }
                         ButtonAction::SetNtd(data) => {
-                            toolpane.set_ntd(data);
+                            toolpane.set_ntd(data, &mut console);
                         }
                         ButtonAction::Blueprints => {
                             // TODO
@@ -533,7 +540,11 @@ fn main() {
         }
 
         for mut graph in graphs.iter_mut().filter_map(|g| g.try_write().ok()) {
-            graph.evaluate();
+            let now = Instant::now();
+            while now >= next_eval_tick {
+                graph.evaluate();
+                next_eval_tick = now + eval_duration;
+            }
         }
 
         // Draw

@@ -8,6 +8,7 @@ use crate::{
     ivec::IVec2,
     logln,
 };
+use node::GateNtd;
 use rustc_hash::FxHashMap;
 use std::sync::{Arc, RwLock};
 
@@ -235,7 +236,7 @@ impl Graph {
     }
 
     pub fn evaluate(&mut self) {
-        let node_states: FxHashMap<NodeId, u8> = self
+        let node_states: FxHashMap<NodeId, bool> = self
             .nodes
             .iter()
             .map(|(id, node)| (*id, node.state))
@@ -254,21 +255,26 @@ impl Graph {
                 .peekable();
 
             node.state = match node.gate {
-                Gate::Or | Gate::Led { .. } => inputs.any(|x| x != 0) as u8,
-                Gate::And => (inputs.peek().is_some() && inputs.all(|x| x != 0)) as u8,
-                Gate::Nor => !inputs.any(|x| x != 0) as u8,
-                Gate::Xor => (inputs.filter(|&x| x != 0).count() == 1) as u8,
-                Gate::Resistor { resistance } => (inputs.sum::<u8>() > resistance) as u8,
-                Gate::Capacitor { capacity } => {
-                    let total = inputs.sum::<u8>().min(capacity);
-                    if total > 0 {
-                        total
-                    } else {
-                        node.state.saturating_sub(1)
+                GateNtd::Or | GateNtd::Led { .. } => inputs.any(|x| x),
+                GateNtd::And => inputs.peek().is_some() && inputs.all(|x| x),
+                GateNtd::Nor => !inputs.any(|x| x),
+                GateNtd::Xor => inputs.filter(|&x| x).count() == 1,
+                GateNtd::Resistor { resistance } => {
+                    inputs.map(|x| x as u8).sum::<u8>() > resistance
+                }
+                GateNtd::Capacitor {
+                    capacity,
+                    ref mut stored,
+                } => {
+                    let total = inputs.map(|x| x as u8).sum::<u8>();
+                    *stored = (*stored + total).min(capacity);
+                    total > 0 || {
+                        *stored = stored.saturating_sub(1);
+                        *stored > 0
                     }
                 }
-                Gate::Delay => 0, // TODO
-                Gate::Battery => 1,
+                GateNtd::Delay { ref mut prev } => std::mem::replace(prev, inputs.any(|x| x)),
+                GateNtd::Battery => true,
             };
         }
     }

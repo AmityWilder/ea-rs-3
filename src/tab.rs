@@ -276,7 +276,7 @@ impl EditorTab {
                                 width: GRID_SIZE.into(),
                                 height: GRID_SIZE.into(),
                             },
-                            node.gate,
+                            node.gate_ntd().as_gate(),
                             Vector2::zero(),
                             0.0,
                             theme.special,
@@ -300,10 +300,10 @@ impl EditorTab {
                         width: GRID_SIZE.into(),
                         height: GRID_SIZE.into(),
                     },
-                    node.gate,
+                    node.gate_ntd().as_gate(),
                     Vector2::zero(),
                     0.0,
-                    if node.state() != 0 {
+                    if node.state() {
                         theme.active
                     } else {
                         theme.foreground
@@ -338,7 +338,7 @@ impl EditorTab {
                         width: GRID_SIZE.into(),
                         height: GRID_SIZE.into(),
                     },
-                    node.gate,
+                    node.gate_ntd().as_gate(),
                     Vector2::zero(),
                     0.0,
                     theme.special,
