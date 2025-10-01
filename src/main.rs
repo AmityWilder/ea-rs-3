@@ -550,6 +550,7 @@ fn main() {
                 &mut d,
                 container_width,
                 container_height,
+                &input,
                 &theme,
                 &button_icon_sheets,
             );

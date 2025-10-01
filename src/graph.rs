@@ -212,7 +212,7 @@ impl Graph {
                         node.state.saturating_sub(1)
                     }
                 }
-                Gate::Delay { ticks: _ } => 0, // TODO
+                Gate::Delay => 0, // TODO
                 Gate::Battery => 1,
             };
         }

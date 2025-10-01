@@ -1,6 +1,5 @@
-use serde_derive::{Deserialize, Serialize};
-
 use crate::ivec::IVec2;
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub(super) u128);
@@ -82,7 +81,7 @@ impl GateId {
             GateId::Resistor => Gate::Resistor { resistance: ntd },
             GateId::Capacitor => Gate::Capacitor { capacity: ntd },
             GateId::Led => Gate::Led { color: ntd },
-            GateId::Delay => Gate::Delay { ticks: ntd },
+            GateId::Delay => Gate::Delay,
             GateId::Battery => Gate::Battery,
         }
     }
@@ -104,9 +103,7 @@ pub enum Gate {
     Led {
         color: u8,
     },
-    Delay {
-        ticks: u8,
-    },
+    Delay,
     Battery,
 }
 
@@ -120,7 +117,7 @@ impl std::fmt::Display for Gate {
             Gate::Resistor { resistance } => write!(f, "resistor.{resistance}"),
             Gate::Capacitor { capacity } => write!(f, "capacitor.{capacity}"),
             Gate::Led { color } => write!(f, "led.{color}"),
-            Gate::Delay { ticks } => write!(f, "delay.{ticks}"),
+            Gate::Delay => write!(f, "delay"),
             Gate::Battery => "battery".fmt(f),
         }
     }
@@ -143,7 +140,7 @@ impl std::str::FromStr for Gate {
                     "resistor" => Some(Gate::Resistor { resistance: value }),
                     "capacitor" => Some(Gate::Capacitor { capacity: value }),
                     "led" => Some(Gate::Led { color: value }),
-                    "delay" => Some(Gate::Delay { ticks: value }),
+                    "delay" => Some(Gate::Delay),
                     _ => None,
                 })
                 .ok_or(()),
@@ -161,7 +158,7 @@ impl Gate {
             Gate::Resistor { .. } => GateId::Resistor,
             Gate::Capacitor { .. } => GateId::Capacitor,
             Gate::Led { .. } => GateId::Led,
-            Gate::Delay { .. } => GateId::Delay,
+            Gate::Delay => GateId::Delay,
             Gate::Battery => GateId::Battery,
         }
     }

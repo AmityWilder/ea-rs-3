@@ -1,10 +1,14 @@
 use crate::{
-    graph::{node::Gate, wire::Elbow},
+    graph::{
+        node::{Gate, GateId},
+        wire::Elbow,
+    },
     icon_sheets::{ButtonIconId, ButtonIconSheetId, ButtonIconSheets},
-    ivec::{IBounds, IRect, IVec2},
+    input::Inputs,
+    ivec::{AsIVec2, IBounds, IRect, IVec2},
     rich_text::ColorRef,
     theme::Theme,
-    tool::Tool,
+    tool::{Tool, ToolId},
 };
 use raylib::prelude::*;
 use serde_derive::{Deserialize, Serialize};
@@ -117,6 +121,7 @@ pub struct Button {
     pub desc: Option<&'static str>,
     pub color: Option<ColorRef>,
     pub icon: Option<ButtonIconId>,
+    pub action: ButtonAction,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -188,10 +193,21 @@ impl ButtonGroup {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ButtonAction {
+    SetTool(ToolId),
+    SetGate(GateId),
+    SetNtd(u8),
+    Blueprints,
+    Clipboard,
+    Settings,
+}
+
 #[derive(Debug, Clone)]
 pub struct ToolPane {
     pub tool: Tool,
     pub gate: Gate,
+    pub ntd: u8,
     pub elbow: Elbow,
     pub anchoring: ToolPaneAnchoring,
     pub visibility: Visibility,
@@ -211,6 +227,7 @@ impl ToolPane {
         Self {
             tool,
             gate,
+            ntd: 0,
             elbow,
             anchoring,
             visibility,
@@ -225,6 +242,7 @@ impl ToolPane {
                             desc: None,
                             color: None,
                             icon: Some(ButtonIconId::Pen),
+                            action: ButtonAction::SetTool(ToolId::Create),
                         },
                         Button {
                             text: None,
@@ -232,6 +250,7 @@ impl ToolPane {
                             desc: None,
                             color: None,
                             icon: Some(ButtonIconId::Edit),
+                            action: ButtonAction::SetTool(ToolId::Edit),
                         },
                         Button {
                             text: None,
@@ -239,6 +258,7 @@ impl ToolPane {
                             desc: None,
                             color: None,
                             icon: Some(ButtonIconId::Erase),
+                            action: ButtonAction::SetTool(ToolId::Erase),
                         },
                         Button {
                             text: None,
@@ -246,6 +266,7 @@ impl ToolPane {
                             desc: None,
                             color: None,
                             icon: Some(ButtonIconId::BlueprintSelect),
+                            action: ButtonAction::Blueprints,
                         },
                         Button {
                             text: None,
@@ -253,6 +274,7 @@ impl ToolPane {
                             desc: None,
                             color: None,
                             icon: Some(ButtonIconId::Interact),
+                            action: ButtonAction::SetTool(ToolId::Interact),
                         },
                         Button {
                             text: None,
@@ -260,6 +282,7 @@ impl ToolPane {
                             desc: None,
                             color: None,
                             icon: Some(ButtonIconId::Clipboard),
+                            action: ButtonAction::Clipboard,
                         },
                     ],
                 },
@@ -272,6 +295,7 @@ impl ToolPane {
                             desc: None,
                             color: None,
                             icon: Some(ButtonIconId::Or),
+                            action: ButtonAction::SetGate(GateId::Or),
                         },
                         Button {
                             text: None,
@@ -279,6 +303,7 @@ impl ToolPane {
                             desc: None,
                             color: None,
                             icon: Some(ButtonIconId::And),
+                            action: ButtonAction::SetGate(GateId::And),
                         },
                         Button {
                             text: None,
@@ -286,6 +311,7 @@ impl ToolPane {
                             desc: None,
                             color: None,
                             icon: Some(ButtonIconId::Nor),
+                            action: ButtonAction::SetGate(GateId::Nor),
                         },
                         Button {
                             text: None,
@@ -293,6 +319,7 @@ impl ToolPane {
                             desc: None,
                             color: None,
                             icon: Some(ButtonIconId::Xor),
+                            action: ButtonAction::SetGate(GateId::Xor),
                         },
                         Button {
                             text: None,
@@ -300,6 +327,7 @@ impl ToolPane {
                             desc: None,
                             color: None,
                             icon: Some(ButtonIconId::Resistor),
+                            action: ButtonAction::SetGate(GateId::Resistor),
                         },
                         Button {
                             text: None,
@@ -307,6 +335,7 @@ impl ToolPane {
                             desc: None,
                             color: None,
                             icon: Some(ButtonIconId::Capacitor),
+                            action: ButtonAction::SetGate(GateId::Capacitor),
                         },
                         Button {
                             text: None,
@@ -314,6 +343,7 @@ impl ToolPane {
                             desc: None,
                             color: None,
                             icon: Some(ButtonIconId::Led),
+                            action: ButtonAction::SetGate(GateId::Led),
                         },
                         Button {
                             text: None,
@@ -321,6 +351,7 @@ impl ToolPane {
                             desc: None,
                             color: None,
                             icon: Some(ButtonIconId::Delay),
+                            action: ButtonAction::SetGate(GateId::Delay),
                         },
                         Button {
                             text: None,
@@ -328,6 +359,7 @@ impl ToolPane {
                             desc: None,
                             color: None,
                             icon: Some(ButtonIconId::Battery),
+                            action: ButtonAction::SetGate(GateId::Battery),
                         },
                     ],
                 },
@@ -340,6 +372,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::WHITE)),
                             icon: None,
+                            action: ButtonAction::SetNtd(9),
                         },
                         Button {
                             text: Some("8"),
@@ -347,6 +380,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::GRAY)),
                             icon: None,
+                            action: ButtonAction::SetNtd(8),
                         },
                         Button {
                             text: Some("7"),
@@ -354,6 +388,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::PURPLE)),
                             icon: None,
+                            action: ButtonAction::SetNtd(7),
                         },
                         Button {
                             text: Some("6"),
@@ -361,6 +396,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::BLUE)),
                             icon: None,
+                            action: ButtonAction::SetNtd(6),
                         },
                         Button {
                             text: Some("5"),
@@ -368,6 +404,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::GREEN)),
                             icon: None,
+                            action: ButtonAction::SetNtd(5),
                         },
                         Button {
                             text: Some("4"),
@@ -375,6 +412,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::YELLOW)),
                             icon: None,
+                            action: ButtonAction::SetNtd(4),
                         },
                         Button {
                             text: Some("3"),
@@ -382,6 +420,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::ORANGE)),
                             icon: None,
+                            action: ButtonAction::SetNtd(3),
                         },
                         Button {
                             text: Some("2"),
@@ -389,6 +428,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::RED)),
                             icon: None,
+                            action: ButtonAction::SetNtd(2),
                         },
                         Button {
                             text: Some("1"),
@@ -396,6 +436,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::BROWN)),
                             icon: None,
+                            action: ButtonAction::SetNtd(1),
                         },
                         Button {
                             text: Some("0"),
@@ -403,6 +444,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::BLACK)),
                             icon: None,
+                            action: ButtonAction::SetNtd(0),
                         },
                     ],
                 },
@@ -414,12 +456,14 @@ impl ToolPane {
                         desc: None,
                         color: None,
                         icon: Some(ButtonIconId::Settings),
+                        action: ButtonAction::Settings,
                     }],
                 },
             ],
         }
     }
 
+    /// get `position` from [`Self::bounds`]
     pub fn buttons(
         &self,
         position: IVec2,
@@ -542,6 +586,7 @@ impl ToolPane {
         d: &mut D,
         container_width: i32,
         container_height: i32,
+        input: &Inputs,
         theme: &Theme,
         button_icon_sheets: &ButtonIconSheets,
     ) where
@@ -552,8 +597,19 @@ impl ToolPane {
         d.draw_rectangle(x, y, w, h, theme.background2);
         d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, theme.background1);
 
+        let cusor = input.cursor.as_ivec2();
+
         for (button_rec, button) in self.buttons(IVec2::new(x, y), theme) {
             if let Some(icon) = button.icon {
+                let is_hovered = IBounds::from(button_rec).contains(cusor);
+                let is_selected = match button.action {
+                    ButtonAction::SetTool(tool_id) => tool_id == self.tool.id(),
+                    ButtonAction::SetGate(gate_id) => gate_id == self.gate.id(),
+                    ButtonAction::SetNtd(data) => data == self.ntd,
+                    ButtonAction::Blueprints => false,
+                    ButtonAction::Clipboard => false,
+                    ButtonAction::Settings => false,
+                };
                 button_icon_sheets.draw(
                     d,
                     self.scale,
@@ -561,7 +617,11 @@ impl ToolPane {
                     icon,
                     Vector2::zero(),
                     0.0,
-                    theme.foreground2,
+                    match (is_selected, is_hovered) {
+                        (true, false) => theme.foreground,
+                        (false, true) | (true, true) => theme.foreground1,
+                        (false, false) => theme.foreground2,
+                    },
                 );
             } else {
                 let IRect { x, y, w, h } = button_rec;

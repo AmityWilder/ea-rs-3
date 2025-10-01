@@ -196,7 +196,7 @@ impl NodeIconSheetSets {
             Gate::Resistor { .. } => IVec2::new(0, 1),
             Gate::Capacitor { .. } => IVec2::new(1, 1),
             Gate::Led { .. } => IVec2::new(2, 1),
-            Gate::Delay { .. } => IVec2::new(3, 1),
+            Gate::Delay => IVec2::new(3, 1),
             Gate::Battery => IVec2::new(0, 2),
         };
         let width = scale.icon_width();
