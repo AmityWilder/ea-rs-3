@@ -1,12 +1,15 @@
 use crate::{graph::node::NodeId, ivec::IVec2};
 use raylib::prelude::*;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ToolId {
     #[default]
     Create,
     Erase,
     Edit,
+    Interact,
 }
 
 impl std::fmt::Display for ToolId {
@@ -15,6 +18,7 @@ impl std::fmt::Display for ToolId {
             ToolId::Create => "create",
             ToolId::Erase => "erase",
             ToolId::Edit => "edit",
+            ToolId::Interact => "ineteract",
         }
         .fmt(f)
     }
@@ -28,6 +32,7 @@ impl std::str::FromStr for ToolId {
             "create" => Ok(ToolId::Create),
             "erase" => Ok(ToolId::Erase),
             "edit" => Ok(ToolId::Edit),
+            "ineteract" => Ok(ToolId::Interact),
             _ => Err(()),
         }
     }
@@ -39,6 +44,7 @@ impl ToolId {
             ToolId::Create => Tool::Create { current_node: None },
             ToolId::Erase => Tool::Erase {},
             ToolId::Edit => Tool::Edit { target: None },
+            ToolId::Interact => Tool::Interact {},
         }
     }
 }

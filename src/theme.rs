@@ -1,6 +1,10 @@
-use std::fs::read_to_string;
-
 use raylib::prelude::*;
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    icon_sheets::ButtonIconSheetId,
+    toolpane::{ToolPaneAnchoring, Visibility},
+};
 
 pub const SPACE_GRAY: Color = Color::new(28, 26, 41, 255);
 pub const LIFELESS_NEBULA: Color = Color::new(75, 78, 94, 255);
@@ -14,52 +18,6 @@ pub const INPUT_LAVENDER: Color = Color::new(128, 106, 217, 255);
 pub const OUTPUT_APRICOT: Color = Color::new(207, 107, 35, 255);
 pub const WIP_BLUE: Color = Color::new(26, 68, 161, 255);
 pub const CAUTION_YELLOW: Color = Color::new(250, 222, 37, 255);
-
-// static LIGHT_THEME: Theme = Theme {
-//     background: todo!(),
-//     background1: todo!(),
-//     background2: todo!(),
-//     background3: todo!(),
-//     foreground3: todo!(),
-//     foreground2: todo!(),
-//     foreground1: todo!(),
-//     foreground: todo!(),
-//     input: todo!(),
-//     output: todo!(),
-//     available: todo!(),
-//     interact: todo!(),
-//     active: todo!(),
-//     error: todo!(),
-//     destructive: todo!(),
-//     special: todo!(),
-//     hyperref: todo!(),
-//     dead_link: todo!(),
-//     caution: todo!(),
-//     blueprints_background: todo!(),
-//     resistance: [
-//         Color::BLACK,
-//         Color::BROWN,
-//         Color::RED,
-//         Color::ORANGE,
-//         Color::YELLOW,
-//         Color::GREEN,
-//         Color::BLUE,
-//         Color::PURPLE,
-//         Color::GRAY,
-//         Color::WHITE,
-//     ],
-//     console_font_size: todo!(),
-//     console_char_spacing: todo!(),
-//     console_line_spacing: todo!(),
-//     console_padding_left: todo!(),
-//     console_padding_top: todo!(),
-//     console_padding_right: todo!(),
-//     console_padding_bottom: todo!(),
-//     title_padding_x: todo!(),
-//     title_padding_y: todo!(),
-//     toolpane_padding_across: todo!(),
-//     toolpane_padding_along: todo!(),
-// };
 
 static DARK_THEME: Theme = Theme {
     background: Color::BLACK,
@@ -103,57 +61,17 @@ static DARK_THEME: Theme = Theme {
     console_padding_bottom: 5,
     title_padding_x: 6,
     title_padding_y: 3,
+    button_icon_scale: ButtonIconSheetId::X16,
+    toolpane_anchoring: ToolPaneAnchoring::LeftTop,
+    toolpane_visibility: Visibility::Expanded,
     toolpane_padding_across: 3,
     toolpane_padding_along: 5,
+    toolpane_group_expanded_gap: 16,
+    toolpane_group_collapsed_gap: 16,
+    toolpane_button_gap: 1,
 };
 
-// static AMOLED_THEME: Theme = Theme {
-//     background: Color::BLACK,
-//     background1: Color::BLACK,
-//     background2: Color::BLACK,
-//     background3: Color::BLACK,
-//     foreground3: Color::LIGHTGRAY,
-//     foreground2: Color::LIGHTGRAY,
-//     foreground1: Color::LIGHTGRAY,
-//     foreground: Color::LIGHTGRAY,
-//     input: todo!(),
-//     output: todo!(),
-//     available: todo!(),
-//     interact: todo!(),
-//     active: todo!(),
-//     error: todo!(),
-//     destructive: todo!(),
-//     special: todo!(),
-//     hyperref: todo!(),
-//     dead_link: todo!(),
-//     caution: todo!(),
-//     blueprints_background: todo!(),
-//     resistance: [
-//         Color::BLACK,
-//         Color::BROWN,
-//         Color::RED,
-//         Color::ORANGE,
-//         Color::YELLOW,
-//         Color::GREEN,
-//         Color::BLUE,
-//         Color::PURPLE,
-//         Color::GRAY,
-//         Color::WHITE,
-//     ],
-//     console_font_size: todo!(),
-//     console_char_spacing: todo!(),
-//     console_line_spacing: todo!(),
-//     console_padding_left: todo!(),
-//     console_padding_top: todo!(),
-//     console_padding_right: todo!(),
-//     console_padding_bottom: todo!(),
-//     title_padding_x: todo!(),
-//     title_padding_y: todo!(),
-//     toolpane_padding_across: todo!(),
-//     toolpane_padding_along: todo!(),
-// };
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Theme {
     pub background: Color,
     pub background1: Color,
@@ -185,8 +103,14 @@ pub struct Theme {
     pub console_padding_bottom: i32,
     pub title_padding_x: i32,
     pub title_padding_y: i32,
+    pub button_icon_scale: ButtonIconSheetId,
+    pub toolpane_anchoring: ToolPaneAnchoring,
+    pub toolpane_visibility: Visibility,
     pub toolpane_padding_across: i32,
     pub toolpane_padding_along: i32,
+    pub toolpane_group_expanded_gap: i32,
+    pub toolpane_group_collapsed_gap: i32,
+    pub toolpane_button_gap: i32,
 }
 
 impl Default for Theme {
@@ -217,95 +141,9 @@ fn parse_color(s: &str) -> Result<Color, ()> {
     }
 }
 
-impl std::str::FromStr for Theme {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut theme = Self::default();
-        theme.load_base(s).map(|()| theme)
-    }
-}
-
 impl Theme {
     pub const fn console_line_height(&self) -> i32 {
         self.console_font_size + self.console_line_spacing
-    }
-
-    fn load_base(&mut self, s: &str) -> Result<(), ()> {
-        for mut line in s.lines() {
-            if let Some(n) = line.find("//") {
-                line = &line[..n];
-            }
-            if let Some((mut key, mut val)) = line.split_once("=") {
-                key = key.trim();
-                val = val.trim();
-                match key {
-                    "base" => match val {
-                        "dark" => self.clone_from(&DARK_THEME),
-                        _ => self.load_base(read_to_string(val).map_err(|_| ())?.as_str())?,
-                    },
-                    "background" => self.background = parse_color(val)?,
-                    "background1" => self.background1 = parse_color(val)?,
-                    "background2" => self.background2 = parse_color(val)?,
-                    "background3" => self.background3 = parse_color(val)?,
-                    "foreground3" => self.foreground3 = parse_color(val)?,
-                    "foreground2" => self.foreground2 = parse_color(val)?,
-                    "foreground1" => self.foreground1 = parse_color(val)?,
-                    "foreground" => self.foreground = parse_color(val)?,
-                    "input" => self.input = parse_color(val)?,
-                    "output" => self.output = parse_color(val)?,
-                    "available" => self.available = parse_color(val)?,
-                    "interact" => self.interact = parse_color(val)?,
-                    "active" => self.active = parse_color(val)?,
-                    "error" => self.error = parse_color(val)?,
-                    "destructive" => self.destructive = parse_color(val)?,
-                    "special" => self.special = parse_color(val)?,
-                    "hyperref" => self.hyperref = parse_color(val)?,
-                    "dead_link" => self.dead_link = parse_color(val)?,
-                    "caution" => self.caution = parse_color(val)?,
-                    "blueprints_background" => self.blueprints_background = parse_color(val)?,
-                    "resistance0" => self.resistance[0] = parse_color(val)?,
-                    "resistance1" => self.resistance[1] = parse_color(val)?,
-                    "resistance2" => self.resistance[2] = parse_color(val)?,
-                    "resistance3" => self.resistance[3] = parse_color(val)?,
-                    "resistance4" => self.resistance[4] = parse_color(val)?,
-                    "resistance5" => self.resistance[5] = parse_color(val)?,
-                    "resistance6" => self.resistance[6] = parse_color(val)?,
-                    "resistance7" => self.resistance[7] = parse_color(val)?,
-                    "resistance8" => self.resistance[8] = parse_color(val)?,
-                    "resistance9" => self.resistance[9] = parse_color(val)?,
-                    "console_font_size" => self.console_font_size = val.parse().map_err(|_| ())?,
-                    "console_char_spacing" => {
-                        self.console_char_spacing = val.parse().map_err(|_| ())?
-                    }
-                    "console_line_spacing" => {
-                        self.console_line_spacing = val.parse().map_err(|_| ())?
-                    }
-                    "console_padding_left" => {
-                        self.console_padding_left = val.parse().map_err(|_| ())?
-                    }
-                    "console_padding_top" => {
-                        self.console_padding_top = val.parse().map_err(|_| ())?
-                    }
-                    "console_padding_right" => {
-                        self.console_padding_right = val.parse().map_err(|_| ())?
-                    }
-                    "console_padding_bottom" => {
-                        self.console_padding_bottom = val.parse().map_err(|_| ())?
-                    }
-                    "title_padding_x" => self.title_padding_x = val.parse().map_err(|_| ())?,
-                    "title_padding_y" => self.title_padding_y = val.parse().map_err(|_| ())?,
-                    "toolpane_padding_across" => {
-                        self.toolpane_padding_across = val.parse().map_err(|_| ())?
-                    }
-                    "toolpane_padding_along" => {
-                        self.toolpane_padding_along = val.parse().map_err(|_| ())?
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Ok(())
     }
 }
 

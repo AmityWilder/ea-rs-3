@@ -1,11 +1,14 @@
 use crate::{
+    draw_hyper_ref_link,
     graph::{
         Graph, GraphId, GraphList,
         node::{Gate, Node, NodeId},
         wire::{Wire, WireId},
     },
-    ivec::{IBounds, IVec2},
+    input::Inputs,
+    ivec::{AsIVec2, IBounds, IRect, IVec2},
     rich_text::{ColorAct, ColorRef, RichStr, RichString},
+    tab::TabList,
     theme::{ColorId, Theme},
     tool::ToolId,
 };
@@ -453,6 +456,98 @@ impl Console {
                 }
                 Err(e) => panic!("{e}"),
             })
+    }
+
+    pub fn draw<D, F>(
+        &self,
+        d: &mut D,
+        measure_text: F,
+        theme: &Theme,
+        input: &Inputs,
+        graphs: &GraphList,
+        tabs: &TabList,
+    ) where
+        D: RaylibDraw,
+        F: Fn(&D, &str, i32) -> i32,
+    {
+        let IRect { x, y, w, h } = IRect::from(self.bounds);
+
+        // content
+        {
+            d.draw_rectangle(x, y, w, h, theme.background2);
+            d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, theme.background1);
+
+            let mut x = x + theme.console_padding_left;
+            let mut y = self.bounds.max.y
+                - theme.console_padding_bottom
+                - self.displayable_lines(theme) * theme.console_line_height();
+            let left = x;
+            for (color, text) in self.visible_content(theme) {
+                let width = measure_text(d, text, theme.console_font_size);
+                let hyper_rec = IRect::new(x, y, width, theme.console_font_size);
+                let is_live = if let Ok(hr) = text.parse::<HyperRef>() {
+                    let is_live = match hr {
+                        HyperRef::Gate(_) => Some(()),
+                        HyperRef::Tool(_) => Some(()),
+                        HyperRef::Position(_) => Some(()),
+                        HyperRef::Graph(graph_ref) => graph_ref.deref_with(graphs, |_, _| {}),
+                        HyperRef::Node(node_ref) => node_ref.deref_with(graphs, |_, _, _| {}),
+                        HyperRef::Wire(wire_ref) => wire_ref.deref_with(graphs, |_, _, _| {}),
+                    }
+                    .is_some();
+
+                    if is_live
+                        && IBounds::from(hyper_rec).contains(input.cursor.as_ivec2())
+                        && let Ok(hr) = text.parse::<HyperRef>()
+                    {
+                        draw_hyper_ref_link(d, hr, hyper_rec, theme, graphs, tabs);
+                    }
+
+                    Some(is_live)
+                } else {
+                    None
+                };
+                d.draw_text(
+                    text,
+                    x,
+                    y,
+                    theme.console_font_size,
+                    if is_live.is_none_or(|x| x) {
+                        color.get(theme)
+                    } else {
+                        theme.dead_link
+                    },
+                );
+                if text.ends_with('\n') {
+                    y += theme.console_line_height();
+                    x = left;
+                } else {
+                    x += width;
+                }
+            }
+        }
+
+        // title
+        {
+            let title = "Log";
+            let title_text_width = measure_text(d, title, theme.console_font_size);
+            let title_width = title_text_width + 2 * theme.title_padding_x;
+            let title_height = theme.console_font_size + 2 * theme.title_padding_y;
+            d.draw_rectangle(
+                self.bounds.max.x - title_width,
+                self.bounds.min.y,
+                title_width,
+                title_height,
+                theme.background2,
+            );
+            d.draw_text(
+                title,
+                self.bounds.max.x - title_width + theme.title_padding_x,
+                self.bounds.min.y + theme.title_padding_y,
+                theme.console_font_size,
+                theme.foreground,
+            );
+        }
     }
 }
 

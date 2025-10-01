@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::ivec::IVec2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -20,7 +22,37 @@ impl std::str::FromStr for NodeId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum GateId {
+    #[default]
+    Or,
+    And,
+    Nor,
+    Xor,
+    Resistor,
+    Capacitor,
+    Led,
+    Delay,
+    Battery,
+}
+
+impl GateId {
+    pub fn to_gate(self, ntd: u8) -> Gate {
+        match self {
+            GateId::Or => Gate::Or,
+            GateId::And => Gate::And,
+            GateId::Nor => Gate::Nor,
+            GateId::Xor => Gate::Xor,
+            GateId::Resistor => Gate::Resistor { resistance: ntd },
+            GateId::Capacitor => Gate::Capacitor { capacity: ntd },
+            GateId::Led => Gate::Led { color: ntd },
+            GateId::Delay => Gate::Delay { ticks: ntd },
+            GateId::Battery => Gate::Battery,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum Gate {
     #[default]
     Or,

@@ -4,4 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-raylib = "5.5.1"
+raylib = { version = "5.5.1", features = ["with_serde"] }
+serde = "1.0.228"
+serde_derive = "1.0.228"

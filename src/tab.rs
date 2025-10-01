@@ -1,4 +1,15 @@
-use crate::{GRID_SIZE, IBounds, IVec2, Theme, graph::Graph};
+use crate::{
+    GRID_SIZE, IBounds, IVec2, Theme,
+    graph::{
+        Graph,
+        wire::{Flow, Wire},
+    },
+    icon_sheets::{NodeIconSheetId, NodeIconSheetSets},
+    input::Inputs,
+    ivec::{AsIVec2, IRect},
+    tool::{EditDragging, Tool},
+    toolpane::ToolPane,
+};
 use raylib::prelude::*;
 use std::sync::{RwLock, Weak};
 
@@ -151,6 +162,190 @@ impl EditorTab {
     pub fn world_to_screen(&self, world_pos: Vector2) -> Vector2 {
         // SAFETY: GetWorldToScreen2D is a pure function with no preconditions
         unsafe { ffi::GetWorldToScreen2D(world_pos.into(), self.camera().into()) }.into()
+    }
+
+    pub fn draw<D: RaylibDraw>(
+        &self,
+        d: &mut D,
+        theme: &Theme,
+        input: &Inputs,
+        toolpane: &ToolPane,
+        node_icon_sheets: &NodeIconSheetSets,
+    ) {
+        let IRect { x, y, w, h } = IRect::from(*self.bounds());
+        let mut d = d.begin_scissor_mode(x, y, w, h);
+        d.draw_texture_pro(
+            self.grid_tex(),
+            rrect(x, y, w, -h),
+            rrect(x, y, w, h),
+            Vector2::zero(),
+            0.0,
+            Color::WHITE,
+        );
+        let mut d = d.begin_mode2D(self.camera());
+        let zoom_exp = self.zoom_exp().ceil() as i32;
+        if let Some(graph) = self.graph.upgrade() {
+            let graph = graph.try_read().unwrap();
+
+            // tool - background layer
+            match &toolpane.tool {
+                Tool::Create { current_node: _ } => {}
+                Tool::Erase {} => {}
+                Tool::Edit { target: _ } => {}
+                Tool::Interact {} => {}
+            }
+
+            // wires
+            for wire in graph.wires_iter() {
+                wire.draw(
+                    &mut d,
+                    &graph,
+                    rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                    theme.foreground,
+                )
+                .expect("all wires should be valid");
+            }
+
+            // tool - wire layer
+            match &toolpane.tool {
+                Tool::Create { current_node } => {
+                    if let Some(&current_node) = current_node.as_ref() {
+                        Wire::draw_immediate(
+                            &mut d,
+                            graph
+                                .node(&current_node)
+                                .expect("current node should always be valid")
+                                .position()
+                                .as_vec2()
+                                + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                            self.screen_to_world(input.cursor),
+                            toolpane.elbow,
+                            theme.foreground,
+                        );
+                    }
+                }
+
+                Tool::Erase {} => {}
+
+                Tool::Edit { target } => {
+                    if let Some(EditDragging {
+                        start_pos: _,
+                        temp_pos,
+                        id,
+                    }) = target
+                    {
+                        for (_, wire, flow) in graph.wires_of(id) {
+                            let (start_pos, end_pos) = match flow {
+                                Flow::Input => (
+                                    graph
+                                        .node(wire.src())
+                                        .expect("all wires should be valid")
+                                        .position()
+                                        .as_vec2()
+                                        + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                                    *temp_pos + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                                ),
+                                Flow::Output => (
+                                    *temp_pos + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                                    graph
+                                        .node(wire.dst())
+                                        .expect("all wires should be valid")
+                                        .position()
+                                        .as_vec2()
+                                        + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                                ),
+                                Flow::Loop => {
+                                    todo!()
+                                }
+                            };
+                            Wire::draw_immediate(
+                                &mut d,
+                                start_pos,
+                                end_pos,
+                                wire.elbow,
+                                theme.special,
+                            );
+                        }
+                        let node = graph.node(id).expect("node being dragged should be valid");
+                        node_icon_sheets.draw(
+                            &mut d,
+                            zoom_exp,
+                            NodeIconSheetId::Basic,
+                            Rectangle {
+                                x: temp_pos.x,
+                                y: temp_pos.y,
+                                width: GRID_SIZE.into(),
+                                height: GRID_SIZE.into(),
+                            },
+                            node.gate,
+                            Vector2::zero(),
+                            0.0,
+                            theme.special,
+                        );
+                    }
+                }
+
+                Tool::Interact {} => {}
+            }
+
+            // nodes
+            for node in graph.nodes_iter() {
+                let node_position = node.position().as_vec2();
+                node_icon_sheets.draw(
+                    &mut d,
+                    zoom_exp,
+                    NodeIconSheetId::Basic,
+                    Rectangle {
+                        x: node_position.x,
+                        y: node_position.y,
+                        width: GRID_SIZE.into(),
+                        height: GRID_SIZE.into(),
+                    },
+                    node.gate,
+                    Vector2::zero(),
+                    0.0,
+                    if node.state() != 0 {
+                        theme.active
+                    } else {
+                        theme.foreground
+                    },
+                );
+            }
+
+            // tool - nodes layer
+            match &toolpane.tool {
+                Tool::Create { current_node: _ } => {}
+                Tool::Erase {} => {}
+                Tool::Edit { target: _ } => {}
+                Tool::Interact {} => {}
+            }
+
+            if let Some(id) = graph.find_node_at(
+                self.screen_to_world(input.cursor)
+                    .as_ivec2()
+                    .snap(GRID_SIZE.into()),
+            ) {
+                let node = graph
+                    .node(id)
+                    .expect("find_node_at should never return an invalid node");
+                let node_position = node.position().as_vec2();
+                node_icon_sheets.draw(
+                    &mut d,
+                    zoom_exp,
+                    NodeIconSheetId::Highlight,
+                    Rectangle {
+                        x: node_position.x,
+                        y: node_position.y,
+                        width: GRID_SIZE.into(),
+                        height: GRID_SIZE.into(),
+                    },
+                    node.gate,
+                    Vector2::zero(),
+                    0.0,
+                    theme.special,
+                );
+            }
+        }
     }
 }
 

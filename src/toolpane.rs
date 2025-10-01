@@ -1,14 +1,32 @@
 use crate::{
     graph::{node::Gate, wire::Elbow},
-    icon_sheets::{ButtonIconId, ButtonIconSheetId},
+    icon_sheets::{ButtonIconId, ButtonIconSheetId, ButtonIconSheets},
     ivec::{IBounds, IRect, IVec2},
     rich_text::ColorRef,
     theme::Theme,
     tool::Tool,
 };
 use raylib::prelude::*;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Visibility {
+    #[default]
+    Expanded,
+    Collapsed,
+    Hidden,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Orientation {
+    Horizontal,
+    #[default]
+    Vertical,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ToolPaneAnchoring {
     /// ```not_code
     /// .-.---------.-.
@@ -77,15 +95,19 @@ pub enum ToolPaneAnchoring {
     LeftFull,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct ButtonTemplate {
-    pub text: Option<&'static str>,
-    pub tooltip: Option<&'static str>,
-    pub desc: Option<&'static str>,
-    pub color: Option<ColorRef>,
-    pub icon: Option<ButtonIconId>,
-    pub rel_pos: IVec2,
-    pub rel_ord: i32,
+impl ToolPaneAnchoring {
+    pub const fn orientation(&self) -> Orientation {
+        match self {
+            Self::Top { .. }
+            | Self::TopLeft { .. }
+            | Self::TopRight { .. }
+            | Self::TopFull { .. } => Orientation::Horizontal,
+            Self::Left { .. }
+            | Self::LeftTop { .. }
+            | Self::LeftBottom { .. }
+            | Self::LeftFull { .. } => Orientation::Vertical,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -93,9 +115,59 @@ pub struct Button {
     pub text: Option<&'static str>,
     pub tooltip: Option<&'static str>,
     pub desc: Option<&'static str>,
-    pub color: ColorRef,
+    pub color: Option<ColorRef>,
     pub icon: Option<ButtonIconId>,
-    pub rec: IRect,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ButtonGroup(Vec<Button>);
+
+impl ButtonGroup {
+    pub fn cols(&self, visibility: Visibility) -> usize {
+        match visibility {
+            Visibility::Expanded => 3,
+            Visibility::Collapsed => 1,
+            Visibility::Hidden => 0,
+        }
+    }
+
+    pub fn rows(&self, visibility: Visibility) -> usize {
+        match visibility {
+            Visibility::Expanded => self.0.len().div_ceil(3),
+            Visibility::Collapsed => self.0.len(),
+            Visibility::Hidden => 0,
+        }
+    }
+
+    pub fn positions(
+        &self,
+        icon_width: i32,
+        gap: i32,
+        visibility: Visibility,
+        orientation: Orientation,
+    ) -> impl Iterator<Item = (IVec2, &Button)> {
+        match visibility {
+            Visibility::Expanded => self.0.chunks(3),
+            Visibility::Collapsed => self.0.chunks(1),
+            Visibility::Hidden => [].as_slice().chunks(1),
+        }
+        .enumerate()
+        .flat_map(move |(row, seg)| {
+            seg.iter().enumerate().map(move |(col, button)| {
+                let (x, y) = match orientation {
+                    Orientation::Horizontal => (row, col),
+                    Orientation::Vertical => (col, row),
+                };
+                (
+                    IVec2::new(
+                        i32::try_from(x).unwrap() * icon_width * (1 + gap) - gap,
+                        i32::try_from(y).unwrap() * icon_width * (1 + gap) - gap,
+                    ),
+                    button,
+                )
+            })
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -104,8 +176,9 @@ pub struct ToolPane {
     pub gate: Gate,
     pub elbow: Elbow,
     pub anchoring: ToolPaneAnchoring,
-    pub collapsed: bool,
+    pub visibility: Visibility,
     pub scale: ButtonIconSheetId,
+    pub button_groups: Vec<ButtonGroup>,
 }
 
 impl ToolPane {
@@ -114,6 +187,7 @@ impl ToolPane {
         gate: Gate,
         elbow: Elbow,
         anchoring: ToolPaneAnchoring,
+        visibility: Visibility,
         scale: ButtonIconSheetId,
     ) -> Self {
         Self {
@@ -121,317 +195,272 @@ impl ToolPane {
             gate,
             elbow,
             anchoring,
-            collapsed: false,
+            visibility,
             scale,
+            button_groups: vec![
+                ButtonGroup(vec![
+                    Button {
+                        text: None,
+                        tooltip: None,
+                        desc: None,
+                        color: None,
+                        icon: Some(ButtonIconId::Pen),
+                    },
+                    Button {
+                        text: None,
+                        tooltip: None,
+                        desc: None,
+                        color: None,
+                        icon: Some(ButtonIconId::Edit),
+                    },
+                    Button {
+                        text: None,
+                        tooltip: None,
+                        desc: None,
+                        color: None,
+                        icon: Some(ButtonIconId::Erase),
+                    },
+                    Button {
+                        text: None,
+                        tooltip: None,
+                        desc: None,
+                        color: None,
+                        icon: Some(ButtonIconId::BlueprintSelect),
+                    },
+                    Button {
+                        text: None,
+                        tooltip: None,
+                        desc: None,
+                        color: None,
+                        icon: Some(ButtonIconId::Interact),
+                    },
+                    Button {
+                        text: None,
+                        tooltip: None,
+                        desc: None,
+                        color: None,
+                        icon: Some(ButtonIconId::Clipboard),
+                    },
+                ]),
+                ButtonGroup(vec![
+                    Button {
+                        text: None,
+                        tooltip: None,
+                        desc: None,
+                        color: None,
+                        icon: Some(ButtonIconId::Or),
+                    },
+                    Button {
+                        text: None,
+                        tooltip: None,
+                        desc: None,
+                        color: None,
+                        icon: Some(ButtonIconId::And),
+                    },
+                    Button {
+                        text: None,
+                        tooltip: None,
+                        desc: None,
+                        color: None,
+                        icon: Some(ButtonIconId::Nor),
+                    },
+                    Button {
+                        text: None,
+                        tooltip: None,
+                        desc: None,
+                        color: None,
+                        icon: Some(ButtonIconId::Xor),
+                    },
+                    Button {
+                        text: None,
+                        tooltip: None,
+                        desc: None,
+                        color: None,
+                        icon: Some(ButtonIconId::Resistor),
+                    },
+                    Button {
+                        text: None,
+                        tooltip: None,
+                        desc: None,
+                        color: None,
+                        icon: Some(ButtonIconId::Capacitor),
+                    },
+                    Button {
+                        text: None,
+                        tooltip: None,
+                        desc: None,
+                        color: None,
+                        icon: Some(ButtonIconId::Led),
+                    },
+                    Button {
+                        text: None,
+                        tooltip: None,
+                        desc: None,
+                        color: None,
+                        icon: Some(ButtonIconId::Delay),
+                    },
+                    Button {
+                        text: None,
+                        tooltip: None,
+                        desc: None,
+                        color: None,
+                        icon: Some(ButtonIconId::Battery),
+                    },
+                ]),
+                ButtonGroup(vec![
+                    Button {
+                        text: Some("9"),
+                        tooltip: None,
+                        desc: None,
+                        color: Some(ColorRef::Exact(Color::WHITE)),
+                        icon: None,
+                    },
+                    Button {
+                        text: Some("8"),
+                        tooltip: None,
+                        desc: None,
+                        color: Some(ColorRef::Exact(Color::GRAY)),
+                        icon: None,
+                    },
+                    Button {
+                        text: Some("7"),
+                        tooltip: None,
+                        desc: None,
+                        color: Some(ColorRef::Exact(Color::PURPLE)),
+                        icon: None,
+                    },
+                    Button {
+                        text: Some("6"),
+                        tooltip: None,
+                        desc: None,
+                        color: Some(ColorRef::Exact(Color::BLUE)),
+                        icon: None,
+                    },
+                    Button {
+                        text: Some("5"),
+                        tooltip: None,
+                        desc: None,
+                        color: Some(ColorRef::Exact(Color::GREEN)),
+                        icon: None,
+                    },
+                    Button {
+                        text: Some("4"),
+                        tooltip: None,
+                        desc: None,
+                        color: Some(ColorRef::Exact(Color::YELLOW)),
+                        icon: None,
+                    },
+                    Button {
+                        text: Some("3"),
+                        tooltip: None,
+                        desc: None,
+                        color: Some(ColorRef::Exact(Color::ORANGE)),
+                        icon: None,
+                    },
+                    Button {
+                        text: Some("2"),
+                        tooltip: None,
+                        desc: None,
+                        color: Some(ColorRef::Exact(Color::RED)),
+                        icon: None,
+                    },
+                    Button {
+                        text: Some("1"),
+                        tooltip: None,
+                        desc: None,
+                        color: Some(ColorRef::Exact(Color::BROWN)),
+                        icon: None,
+                    },
+                    Button {
+                        text: Some("0"),
+                        tooltip: None,
+                        desc: None,
+                        color: Some(ColorRef::Exact(Color::BLACK)),
+                        icon: None,
+                    },
+                ]),
+                ButtonGroup(vec![Button {
+                    text: None,
+                    tooltip: None,
+                    desc: None,
+                    color: None,
+                    icon: Some(ButtonIconId::Settings),
+                }]),
+            ],
         }
     }
 
-    pub fn buttons(&self, theme: &Theme) -> [Button; 26] {
+    pub fn buttons(
+        &self,
+        position: IVec2,
+        theme: &Theme,
+    ) -> impl Iterator<Item = (IRect, &Button)> {
+        let orientation = self.anchoring.orientation();
+        let visibility = self.visibility;
         let scale = self.scale;
-        let padding = match self.anchoring {
-            ToolPaneAnchoring::Top { .. }
-            | ToolPaneAnchoring::TopLeft
-            | ToolPaneAnchoring::TopRight
-            | ToolPaneAnchoring::TopFull => {
-                IVec2::new(theme.toolpane_padding_along, theme.toolpane_padding_across)
-            }
-            ToolPaneAnchoring::Left { .. }
-            | ToolPaneAnchoring::LeftTop
-            | ToolPaneAnchoring::LeftBottom
-            | ToolPaneAnchoring::LeftFull => {
-                IVec2::new(theme.toolpane_padding_across, theme.toolpane_padding_along)
-            }
+        let icon_width = scale.icon_width();
+        let group_gap = match visibility {
+            Visibility::Expanded => theme.toolpane_group_expanded_gap,
+            Visibility::Collapsed => theme.toolpane_group_collapsed_gap,
+            Visibility::Hidden => 0,
         };
-        let width = scale.icon_width();
-        [
-            ButtonTemplate {
-                text: None,
-                tooltip: None,
-                desc: None,
-                color: None,
-                icon: Some(ButtonIconId::Pen),
-                rel_pos: IVec2::new(0, 0),
-                rel_ord: 0,
-            },
-            ButtonTemplate {
-                text: None,
-                tooltip: None,
-                desc: None,
-                color: None,
-                icon: Some(ButtonIconId::Edit),
-                rel_pos: IVec2::new(1, 0),
-                rel_ord: 1,
-            },
-            ButtonTemplate {
-                text: None,
-                tooltip: None,
-                desc: None,
-                color: None,
-                icon: Some(ButtonIconId::Erase),
-                rel_pos: IVec2::new(2, 0),
-                rel_ord: 2,
-            },
-            ButtonTemplate {
-                text: None,
-                tooltip: None,
-                desc: None,
-                color: None,
-                icon: Some(ButtonIconId::BlueprintSelect),
-                rel_pos: IVec2::new(0, 1),
-                rel_ord: 3,
-            },
-            ButtonTemplate {
-                text: None,
-                tooltip: None,
-                desc: None,
-                color: None,
-                icon: Some(ButtonIconId::Interact),
-                rel_pos: IVec2::new(1, 1),
-                rel_ord: 4,
-            },
-            ButtonTemplate {
-                text: None,
-                tooltip: None,
-                desc: None,
-                color: None,
-                icon: Some(ButtonIconId::Clipboard),
-                rel_pos: IVec2::new(2, 1),
-                rel_ord: 5,
-            },
-            ButtonTemplate {
-                text: None,
-                tooltip: None,
-                desc: None,
-                color: None,
-                icon: Some(ButtonIconId::Or),
-                rel_pos: IVec2::new(0, 3),
-                rel_ord: 7,
-            },
-            ButtonTemplate {
-                text: None,
-                tooltip: None,
-                desc: None,
-                color: None,
-                icon: Some(ButtonIconId::And),
-                rel_pos: IVec2::new(1, 3),
-                rel_ord: 8,
-            },
-            ButtonTemplate {
-                text: None,
-                tooltip: None,
-                desc: None,
-                color: None,
-                icon: Some(ButtonIconId::Nor),
-                rel_pos: IVec2::new(2, 3),
-                rel_ord: 9,
-            },
-            ButtonTemplate {
-                text: None,
-                tooltip: None,
-                desc: None,
-                color: None,
-                icon: Some(ButtonIconId::Xor),
-                rel_pos: IVec2::new(0, 4),
-                rel_ord: 10,
-            },
-            ButtonTemplate {
-                text: None,
-                tooltip: None,
-                desc: None,
-                color: None,
-                icon: Some(ButtonIconId::Resistor),
-                rel_pos: IVec2::new(1, 4),
-                rel_ord: 11,
-            },
-            ButtonTemplate {
-                text: None,
-                tooltip: None,
-                desc: None,
-                color: None,
-                icon: Some(ButtonIconId::Capacitor),
-                rel_pos: IVec2::new(2, 4),
-                rel_ord: 12,
-            },
-            ButtonTemplate {
-                text: None,
-                tooltip: None,
-                desc: None,
-                color: None,
-                icon: Some(ButtonIconId::Led),
-                rel_pos: IVec2::new(0, 5),
-                rel_ord: 13,
-            },
-            ButtonTemplate {
-                text: None,
-                tooltip: None,
-                desc: None,
-                color: None,
-                icon: Some(ButtonIconId::Delay),
-                rel_pos: IVec2::new(1, 5),
-                rel_ord: 14,
-            },
-            ButtonTemplate {
-                text: None,
-                tooltip: None,
-                desc: None,
-                color: None,
-                icon: Some(ButtonIconId::Battery),
-                rel_pos: IVec2::new(2, 5),
-                rel_ord: 15,
-            },
-            ButtonTemplate {
-                text: Some("9"),
-                tooltip: None,
-                desc: None,
-                color: Some(ColorRef::Exact(Color::WHITE)),
-                icon: None,
-                rel_pos: IVec2::new(2, 7),
-                rel_ord: 17,
-            },
-            ButtonTemplate {
-                text: Some("8"),
-                tooltip: None,
-                desc: None,
-                color: Some(ColorRef::Exact(Color::GRAY)),
-                icon: None,
-                rel_pos: IVec2::new(1, 7),
-                rel_ord: 18,
-            },
-            ButtonTemplate {
-                text: Some("7"),
-                tooltip: None,
-                desc: None,
-                color: Some(ColorRef::Exact(Color::PURPLE)),
-                icon: None,
-                rel_pos: IVec2::new(0, 7),
-                rel_ord: 19,
-            },
-            ButtonTemplate {
-                text: Some("6"),
-                tooltip: None,
-                desc: None,
-                color: Some(ColorRef::Exact(Color::BLUE)),
-                icon: None,
-                rel_pos: IVec2::new(2, 8),
-                rel_ord: 20,
-            },
-            ButtonTemplate {
-                text: Some("5"),
-                tooltip: None,
-                desc: None,
-                color: Some(ColorRef::Exact(Color::GREEN)),
-                icon: None,
-                rel_pos: IVec2::new(1, 8),
-                rel_ord: 21,
-            },
-            ButtonTemplate {
-                text: Some("4"),
-                tooltip: None,
-                desc: None,
-                color: Some(ColorRef::Exact(Color::YELLOW)),
-                icon: None,
-                rel_pos: IVec2::new(0, 8),
-                rel_ord: 22,
-            },
-            ButtonTemplate {
-                text: Some("3"),
-                tooltip: None,
-                desc: None,
-                color: Some(ColorRef::Exact(Color::ORANGE)),
-                icon: None,
-                rel_pos: IVec2::new(2, 9),
-                rel_ord: 23,
-            },
-            ButtonTemplate {
-                text: Some("2"),
-                tooltip: None,
-                desc: None,
-                color: Some(ColorRef::Exact(Color::RED)),
-                icon: None,
-                rel_pos: IVec2::new(1, 9),
-                rel_ord: 24,
-            },
-            ButtonTemplate {
-                text: Some("1"),
-                tooltip: None,
-                desc: None,
-                color: Some(ColorRef::Exact(Color::BROWN)),
-                icon: None,
-                rel_pos: IVec2::new(0, 9),
-                rel_ord: 23,
-            },
-            ButtonTemplate {
-                text: Some("0"),
-                tooltip: None,
-                desc: None,
-                color: Some(ColorRef::Exact(Color::BLACK)),
-                icon: None,
-                rel_pos: IVec2::new(1, 10),
-                rel_ord: 24,
-            },
-            ButtonTemplate {
-                text: None,
-                tooltip: None,
-                desc: None,
-                color: None,
-                icon: Some(ButtonIconId::Settings),
-                rel_pos: IVec2::new(1, 12),
-                rel_ord: 26,
-            },
-        ]
-        .map(
-            |ButtonTemplate {
-                 text,
-                 tooltip,
-                 desc,
-                 color,
-                 icon,
-                 rel_pos,
-                 rel_ord,
-             }| {
-                let pos = if self.collapsed {
-                    match self.anchoring {
-                        ToolPaneAnchoring::Top { .. }
-                        | ToolPaneAnchoring::TopLeft
-                        | ToolPaneAnchoring::TopRight
-                        | ToolPaneAnchoring::TopFull => IVec2::new(rel_ord, 0),
-                        ToolPaneAnchoring::Left { .. }
-                        | ToolPaneAnchoring::LeftTop
-                        | ToolPaneAnchoring::LeftBottom
-                        | ToolPaneAnchoring::LeftFull => IVec2::new(0, rel_ord),
+        let (mut along, padding) = match orientation {
+            Orientation::Horizontal => (
+                position.x,
+                IVec2::new(theme.toolpane_padding_along, theme.toolpane_padding_across),
+            ),
+            Orientation::Vertical => (
+                position.y,
+                IVec2::new(theme.toolpane_padding_across, theme.toolpane_padding_along),
+            ),
+        };
+        self.button_groups
+            .iter()
+            .flat_map(move |group| {
+                let it = std::iter::repeat(match orientation {
+                    Orientation::Horizontal => {
+                        (position.x + padding.x + along, position.y + padding.y)
                     }
-                } else {
-                    rel_pos
-                };
-                Button {
-                    text,
-                    tooltip,
-                    desc,
-                    color: color.unwrap_or(ColorRef::Exact(Color::BLANK)),
-                    icon,
-                    rec: IRect {
-                        x: padding.x + pos.x * width,
-                        y: padding.y + pos.y * width,
-                        w: width,
-                        h: width,
-                    },
-                }
-            },
-        )
+                    Orientation::Vertical => {
+                        (position.x + padding.x, position.y + padding.y + along)
+                    }
+                })
+                .zip(group.positions(icon_width, 0, visibility, orientation));
+                along += i32::try_from(group.rows(visibility)).unwrap() * icon_width + group_gap;
+                it
+            })
+            .map(move |((x, y), (v, btn))| {
+                (IRect::new(v.x + x, v.y + y, icon_width, icon_width), btn)
+            })
     }
 
     fn thickness(&self, theme: &Theme) -> i32 {
-        self.scale.icon_width() * if self.collapsed { 1 } else { 3 }
+        self.scale.icon_width()
+            * match self.visibility {
+                Visibility::Expanded => 3,
+                Visibility::Collapsed => 1,
+                Visibility::Hidden => 0,
+            }
             + 2 * theme.toolpane_padding_across
     }
 
-    fn length(&self, theme: &Theme) -> i32 {
+    fn length(&self, container_length: i32, theme: &Theme) -> i32 {
+        match self.anchoring {
+            ToolPaneAnchoring::TopFull | ToolPaneAnchoring::LeftFull => return container_length,
+            _ => {}
+        }
+        let group_gap = match self.visibility {
+            Visibility::Expanded => theme.toolpane_group_expanded_gap,
+            Visibility::Collapsed => theme.toolpane_group_collapsed_gap,
+            Visibility::Hidden => 0,
+        };
         self.scale.icon_width()
-            * if self.collapsed {
-                6 + 1 + 9 + 1 + 10
-            } else {
-                2 + 1 + 3 + 1 + 4
-            }
+            * self
+                .button_groups
+                .iter()
+                .map(|g| i32::try_from(g.rows(self.visibility)).unwrap())
+                .sum::<i32>()
+            + group_gap * (i32::try_from(self.button_groups.len()).unwrap() - 1)
             + 2 * theme.toolpane_padding_along
     }
 
@@ -439,14 +468,17 @@ impl ToolPane {
         match self.anchoring {
             ToolPaneAnchoring::Top { left } => IBounds::new(
                 IVec2::new(left, 0),
-                IVec2::new(left + self.length(theme), self.thickness(theme)),
+                IVec2::new(
+                    left + self.length(container_width, theme),
+                    self.thickness(theme),
+                ),
             ),
             ToolPaneAnchoring::TopLeft => IBounds::new(
                 IVec2::new(0, 0),
-                IVec2::new(self.length(theme), self.thickness(theme)),
+                IVec2::new(self.length(container_width, theme), self.thickness(theme)),
             ),
             ToolPaneAnchoring::TopRight => IBounds::new(
-                IVec2::new(container_width - self.length(theme), 0),
+                IVec2::new(container_width - self.length(container_width, theme), 0),
                 IVec2::new(container_width, self.thickness(theme)),
             ),
             ToolPaneAnchoring::TopFull => IBounds::new(
@@ -455,20 +487,59 @@ impl ToolPane {
             ),
             ToolPaneAnchoring::Left { top } => IBounds::new(
                 IVec2::new(0, top),
-                IVec2::new(self.thickness(theme), top + self.length(theme)),
+                IVec2::new(
+                    self.thickness(theme),
+                    top + self.length(container_height, theme),
+                ),
             ),
             ToolPaneAnchoring::LeftTop => IBounds::new(
                 IVec2::new(0, 0),
-                IVec2::new(self.thickness(theme), self.length(theme)),
+                IVec2::new(self.thickness(theme), self.length(container_height, theme)),
             ),
             ToolPaneAnchoring::LeftBottom => IBounds::new(
-                IVec2::new(0, container_height - self.length(theme)),
+                IVec2::new(0, container_height - self.length(container_height, theme)),
                 IVec2::new(self.thickness(theme), container_height),
             ),
             ToolPaneAnchoring::LeftFull => IBounds::new(
                 IVec2::new(0, 0),
                 IVec2::new(self.thickness(theme), container_height),
             ),
+        }
+    }
+
+    pub fn draw<D>(
+        &self,
+        d: &mut D,
+        container_width: i32,
+        container_height: i32,
+        theme: &Theme,
+        button_icon_sheets: &ButtonIconSheets,
+    ) where
+        D: RaylibDraw,
+    {
+        let IRect { x, y, w, h } = self.bounds(container_width, container_height, theme).into();
+
+        d.draw_rectangle(x, y, w, h, theme.background2);
+        d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, theme.background1);
+
+        for (button_rec, button) in self.buttons(IVec2::new(x, y), theme) {
+            if let Some(icon) = button.icon {
+                button_icon_sheets.draw(
+                    d,
+                    self.scale,
+                    button_rec.as_rect(),
+                    icon,
+                    Vector2::zero(),
+                    0.0,
+                    theme.foreground,
+                );
+            } else {
+                let IRect { x, y, w, h } = button_rec;
+                d.draw_rectangle(x, y, w, h, theme.background2);
+                if let Some(color) = button.color {
+                    d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, color.get(theme));
+                }
+            }
         }
     }
 }

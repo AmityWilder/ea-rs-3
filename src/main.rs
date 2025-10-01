@@ -2,26 +2,23 @@
 #![allow(dead_code, reason = "for future use")]
 
 use crate::{
-    console::{Console, ConsoleAnchoring, GateRef, HyperRef, LogType, PositionRef, ToolRef},
-    graph::{
-        GraphList,
-        node::Gate,
-        wire::{Elbow, Flow, Wire},
+    config::Config,
+    console::{
+        Console, ConsoleAnchoring, GateRef, GraphRef, HyperRef, LogType, PositionRef, ToolRef,
     },
-    icon_sheets::{ButtonIconSheets, NodeIconSheetId, NodeIconSheetSets},
-    input::Bindings,
-    ivec::{IBounds, IRect, IVec2},
+    graph::{GraphList, node::Gate, wire::Elbow},
+    icon_sheets::{ButtonIconSheets, NodeIconSheetSets},
+    ivec::{AsIVec2, IBounds, IRect, IVec2},
     tab::{EditorTab, Tab, TabList},
     theme::Theme,
     tool::{EditDragging, Tool},
-    toolpane::{ToolPane, ToolPaneAnchoring},
+    toolpane::ToolPane,
 };
-use console::GraphRef;
-use ivec::AsIVec2;
 use raylib::prelude::*;
 use rl_input::Event;
-use std::sync::Arc;
+use std::{io::Write, sync::Arc};
 
+mod config;
 mod console;
 mod graph;
 mod icon_sheets;
@@ -121,8 +118,24 @@ fn main() {
         rl.set_window_icon(icon);
     }
 
-    let theme = Theme::default();
-    let binds = Bindings::default();
+    // load preferences
+    let Config { theme, mut binds } = {
+        const CONFIG_PATH: &str = "config.toml";
+        match std::fs::read_to_string(CONFIG_PATH) {
+            Ok(s) => toml::from_str(&s).unwrap(),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                let config = Config::default();
+                std::fs::File::create(CONFIG_PATH)
+                    .unwrap()
+                    .write_all(toml::to_string_pretty(&config).unwrap().as_bytes())
+                    .unwrap();
+                config
+            }
+            Err(e) => {
+                panic!("{e}");
+            }
+        }
+    };
 
     let button_icon_sheets = ButtonIconSheets::load(&mut rl, &thread).unwrap();
     let node_icon_sheets = NodeIconSheetSets::load(&mut rl, &thread).unwrap();
@@ -154,8 +167,9 @@ fn main() {
         Tool::default(),
         Gate::default(),
         Elbow::default(),
-        ToolPaneAnchoring::default(),
-        icon_sheets::ButtonIconSheetId::X16,
+        theme.toolpane_anchoring,
+        theme.toolpane_visibility,
+        theme.button_icon_scale,
     );
 
     let mut hovering_console_top = Event::Inactive;
@@ -270,11 +284,16 @@ fn main() {
         } else if let Some(tab) = tabs.focused_tab_mut() {
             match tab {
                 Tab::Editor(tab) => {
-                    if let Some(gate) = input.gate_hotkey {
-                        toolpane.gate = gate;
-                        logln!(console, LogType::Info, "set gate to {}", GateRef(gate));
+                    if let Some(gate) = input.gate() {
+                        toolpane.gate = gate.to_gate(0);
+                        logln!(
+                            console,
+                            LogType::Info,
+                            "set gate to {}",
+                            GateRef(toolpane.gate)
+                        );
                     }
-                    if let Some(tool_id) = input.tool_hotkey {
+                    if let Some(tool_id) = input.tool() {
                         toolpane.tool = tool_id.init();
                         logln!(console, LogType::Info, "set tool to {}", ToolRef(tool_id));
                     }
@@ -464,291 +483,34 @@ fn main() {
         for tab in &tabs {
             match tab {
                 Tab::Editor(tab) => {
-                    let IRect { x, y, w, h } = IRect::from(*tab.bounds());
-                    let mut d = d.begin_scissor_mode(x, y, w, h);
-                    d.draw_texture_pro(
-                        tab.grid_tex(),
-                        rrect(x, y, w, -h),
-                        rrect(x, y, w, h),
-                        Vector2::zero(),
-                        0.0,
-                        Color::WHITE,
-                    );
-                    let mut d = d.begin_mode2D(tab.camera());
-                    let zoom_exp = tab.zoom_exp().ceil() as i32;
-                    if let Some(graph) = tab.graph.upgrade() {
-                        let graph = graph.read().unwrap();
-                        // wires
-                        for wire in graph.wires_iter() {
-                            wire.draw(
-                                &mut d,
-                                &graph,
-                                rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                                theme.foreground,
-                            )
-                            .expect("all wires should be valid");
-                        }
-                        match &toolpane.tool {
-                            Tool::Create { current_node } => {
-                                if let Some(&current_node) = current_node.as_ref() {
-                                    Wire::draw_immediate(
-                                        &mut d,
-                                        graph
-                                            .node(&current_node)
-                                            .expect("current node should always be valid")
-                                            .position()
-                                            .as_vec2()
-                                            + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                                        tab.screen_to_world(input.cursor),
-                                        toolpane.elbow,
-                                        theme.foreground,
-                                    );
-                                }
-                            }
-
-                            Tool::Erase {} => {}
-
-                            Tool::Edit { target } => {
-                                if let Some(EditDragging {
-                                    start_pos: _,
-                                    temp_pos,
-                                    id,
-                                }) = target
-                                {
-                                    for (_, wire, flow) in graph.wires_of(id) {
-                                        let (start_pos, end_pos) = match flow {
-                                            Flow::Input => (
-                                                graph
-                                                    .node(wire.src())
-                                                    .expect("all wires should be valid")
-                                                    .position()
-                                                    .as_vec2()
-                                                    + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                                                *temp_pos + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                                            ),
-                                            Flow::Output => (
-                                                *temp_pos + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                                                graph
-                                                    .node(wire.dst())
-                                                    .expect("all wires should be valid")
-                                                    .position()
-                                                    .as_vec2()
-                                                    + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                                            ),
-                                            Flow::Loop => {
-                                                todo!()
-                                            }
-                                        };
-                                        Wire::draw_immediate(
-                                            &mut d,
-                                            start_pos,
-                                            end_pos,
-                                            wire.elbow,
-                                            theme.special,
-                                        );
-                                    }
-                                    let node =
-                                        graph.node(id).expect("node being dragged should be valid");
-                                    node_icon_sheets.draw(
-                                        &mut d,
-                                        zoom_exp,
-                                        NodeIconSheetId::Basic,
-                                        Rectangle {
-                                            x: temp_pos.x,
-                                            y: temp_pos.y,
-                                            width: GRID_SIZE.into(),
-                                            height: GRID_SIZE.into(),
-                                        },
-                                        node.gate,
-                                        Vector2::zero(),
-                                        0.0,
-                                        theme.special,
-                                    );
-                                }
-                            }
-
-                            Tool::Interact {} => {}
-                        }
-
-                        // nodes
-                        for node in graph.nodes_iter() {
-                            let node_position = node.position().as_vec2();
-                            node_icon_sheets.draw(
-                                &mut d,
-                                zoom_exp,
-                                NodeIconSheetId::Basic,
-                                Rectangle {
-                                    x: node_position.x,
-                                    y: node_position.y,
-                                    width: GRID_SIZE.into(),
-                                    height: GRID_SIZE.into(),
-                                },
-                                node.gate,
-                                Vector2::zero(),
-                                0.0,
-                                if node.state() != 0 {
-                                    theme.active
-                                } else {
-                                    theme.foreground
-                                },
-                            );
-                        }
-                        match &toolpane.tool {
-                            Tool::Create { current_node: _ } => {}
-                            Tool::Erase {} => {}
-                            Tool::Edit { target: _ } => {}
-                            Tool::Interact {} => {}
-                        }
-
-                        if let Some(id) = graph.find_node_at(
-                            tab.screen_to_world(input.cursor)
-                                .as_ivec2()
-                                .snap(GRID_SIZE.into()),
-                        ) {
-                            let node = graph
-                                .node(id)
-                                .expect("find_node_at should never return an invalid node");
-                            let node_position = node.position().as_vec2();
-                            node_icon_sheets.draw(
-                                &mut d,
-                                zoom_exp,
-                                NodeIconSheetId::Highlight,
-                                Rectangle {
-                                    x: node_position.x,
-                                    y: node_position.y,
-                                    width: GRID_SIZE.into(),
-                                    height: GRID_SIZE.into(),
-                                },
-                                node.gate,
-                                Vector2::zero(),
-                                0.0,
-                                theme.special,
-                            );
-                        }
-                    }
+                    tab.draw(&mut d, &theme, &input, &toolpane, &node_icon_sheets);
                 }
             }
         }
 
         // console
         {
-            let IRect { x, y, w, h } = IRect::from(console.bounds);
-            // let mut d = d.begin_scissor_mode(x, y, w, h);
-
-            // content
-            {
-                d.draw_rectangle(x, y, w, h, theme.background2);
-                d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, theme.background1);
-                // let mut d = d.begin_scissor_mode(
-                //     x + theme.console_padding_left,
-                //     y + theme.console_padding_top,
-                //     w - theme.console_padding_left - theme.console_padding_right,
-                //     h - theme.console_padding_top - theme.console_padding_bottom,
-                // );
-
-                let mut x = x + theme.console_padding_left;
-                let mut y = console.bounds.max.y
-                    - theme.console_padding_bottom
-                    - console.displayable_lines(&theme) * theme.console_line_height();
-                let left = x;
-                for (color, text) in console.visible_content(&theme) {
-                    let width = d.measure_text(text, theme.console_font_size);
-                    let hyper_rec = IRect::new(x, y, width, theme.console_font_size);
-                    let is_live = if let Ok(hr) = text.parse::<HyperRef>() {
-                        let is_live = match hr {
-                            HyperRef::Gate(_) => Some(()),
-                            HyperRef::Tool(_) => Some(()),
-                            HyperRef::Position(_) => Some(()),
-                            HyperRef::Graph(graph_ref) => graph_ref.deref_with(&graphs, |_, _| {}),
-                            HyperRef::Node(node_ref) => node_ref.deref_with(&graphs, |_, _, _| {}),
-                            HyperRef::Wire(wire_ref) => wire_ref.deref_with(&graphs, |_, _, _| {}),
-                        }
-                        .is_some();
-
-                        if is_live
-                            && IBounds::from(hyper_rec).contains(input.cursor.as_ivec2())
-                            && let Ok(hr) = text.parse::<HyperRef>()
-                        {
-                            draw_hyper_ref_link(&mut d, hr, hyper_rec, &theme, &graphs, &tabs);
-                        }
-
-                        Some(is_live)
-                    } else {
-                        None
-                    };
-                    d.draw_text(
-                        text,
-                        x,
-                        y,
-                        theme.console_font_size,
-                        if is_live.is_none_or(|x| x) {
-                            color.get(&theme)
-                        } else {
-                            theme.dead_link
-                        },
-                    );
-                    if text.ends_with('\n') {
-                        y += theme.console_line_height();
-                        x = left;
-                    } else {
-                        x += width;
-                    }
-                }
-            }
-
-            // title
-            {
-                let title = "Log";
-                let title_text_width = d.measure_text(title, theme.console_font_size);
-                let title_width = title_text_width + 2 * theme.title_padding_x;
-                let title_height = theme.console_font_size + 2 * theme.title_padding_y;
-                d.draw_rectangle(
-                    console.bounds.max.x - title_width,
-                    console.bounds.min.y,
-                    title_width,
-                    title_height,
-                    theme.background2,
-                );
-                d.draw_text(
-                    title,
-                    console.bounds.max.x - title_width + theme.title_padding_x,
-                    console.bounds.min.y + theme.title_padding_y,
-                    theme.console_font_size,
-                    theme.foreground,
-                );
-            }
+            console.draw(
+                &mut d,
+                |d, text, font_size| d.measure_text(text, font_size),
+                &theme,
+                &input,
+                &graphs,
+                &tabs,
+            );
         }
 
         // toolpane
         {
-            let IRect { x, y, w, h } = toolpane
-                .bounds(
-                    d.get_screen_width(),
-                    d.get_screen_height().min(console.bounds.min.y),
-                    &theme,
-                )
-                .into();
-
-            d.draw_rectangle(x, y, w, h, theme.background2);
-            d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, theme.background1);
-
-            for button in toolpane.buttons(&theme) {
-                if let Some(icon) = button.icon {
-                    button_icon_sheets.draw(
-                        &mut d,
-                        toolpane.scale,
-                        button.rec.as_rect(),
-                        icon,
-                        Vector2::zero(),
-                        0.0,
-                        theme.foreground,
-                    );
-                } else {
-                    let IRect { x, y, w, h } = button.rec;
-                    d.draw_rectangle(x, y, w, h, theme.background2);
-                    d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, button.color.get(&theme));
-                }
-            }
+            let container_width = d.get_screen_width();
+            let container_height = d.get_screen_height();
+            toolpane.draw(
+                &mut d,
+                container_width,
+                container_height,
+                &theme,
+                &button_icon_sheets,
+            );
         }
     }
 }
