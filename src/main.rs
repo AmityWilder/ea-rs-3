@@ -360,7 +360,7 @@ fn main() {
                         tab.update_bounds(&mut rl, &thread, bounds).unwrap();
                     }
 
-                    tab.zoom_and_pan(input.pan, input.zoom, 5.0);
+                    tab.zoom_and_pan(input.cursor, input.pan, input.zoom, 5.0);
 
                     if let Some(graph) = tab.graph.upgrade()
                         // if graph is being borrowed, don't edit it! it might be saving!

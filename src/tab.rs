@@ -59,11 +59,13 @@ impl EditorTab {
     }
 
     /// `pan_speed` is scaled by zoom (zoom applied first)
-    pub fn zoom_and_pan(&mut self, pan: Vector2, zoom: f32, pan_speed: f32) {
+    pub fn zoom_and_pan(&mut self, origin: Vector2, pan: Vector2, zoom: f32, pan_speed: f32) {
         if zoom != 0.0 {
             let new_zoom = (self.zoom_exp + zoom).clamp(-3.0, 2.0);
             if self.zoom_exp != new_zoom {
+                self.camera_target += origin / 2.0f32.powf(self.zoom_exp);
                 self.zoom_exp = new_zoom;
+                self.camera_target -= origin / 2.0f32.powf(self.zoom_exp);
                 self.dirty = true;
             }
         }
