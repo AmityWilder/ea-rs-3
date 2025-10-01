@@ -120,7 +120,10 @@ pub struct Button {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ButtonGroup(Vec<Button>);
+pub struct ButtonGroup {
+    buttons: Vec<Button>,
+    rev_rows: bool,
+}
 
 impl ButtonGroup {
     pub fn cols(&self, visibility: Visibility) -> usize {
@@ -133,8 +136,8 @@ impl ButtonGroup {
 
     pub fn rows(&self, visibility: Visibility) -> usize {
         match visibility {
-            Visibility::Expanded => self.0.len().div_ceil(3),
-            Visibility::Collapsed => self.0.len(),
+            Visibility::Expanded => self.buttons.len().div_ceil(3),
+            Visibility::Collapsed => self.buttons.len(),
             Visibility::Hidden => 0,
         }
     }
@@ -146,22 +149,37 @@ impl ButtonGroup {
         visibility: Visibility,
         orientation: Orientation,
     ) -> impl Iterator<Item = (IVec2, &Button)> {
+        let chunk_size = match visibility {
+            Visibility::Expanded => 3,
+            Visibility::Collapsed => 1,
+            Visibility::Hidden => 1,
+        };
         match visibility {
-            Visibility::Expanded => self.0.chunks(3),
-            Visibility::Collapsed => self.0.chunks(1),
-            Visibility::Hidden => [].as_slice().chunks(1),
+            Visibility::Expanded | Visibility::Collapsed => self.buttons.as_slice(),
+            Visibility::Hidden => [].as_slice(),
         }
+        .chunks(chunk_size)
         .enumerate()
         .flat_map(move |(row, seg)| {
             seg.iter().enumerate().map(move |(col, button)| {
+                let col = i32::try_from(if self.rev_rows {
+                    seg.len() - 1 - col
+                } else {
+                    col
+                })
+                .unwrap();
+                let row = i32::try_from(row).unwrap();
+                let chunk_size = i32::try_from(chunk_size).unwrap();
+                let n = i32::try_from(seg.len()).unwrap();
+                let across = col + (chunk_size - n) / 2;
                 let (x, y) = match orientation {
-                    Orientation::Horizontal => (row, col),
-                    Orientation::Vertical => (col, row),
+                    Orientation::Horizontal => (row, across),
+                    Orientation::Vertical => (across, row),
                 };
                 (
                     IVec2::new(
-                        i32::try_from(x).unwrap() * icon_width * (1 + gap) - gap,
-                        i32::try_from(y).unwrap() * icon_width * (1 + gap) - gap,
+                        x * icon_width * (1 + gap) - gap,
+                        y * icon_width * (1 + gap) - gap,
                     ),
                     button,
                 )
@@ -198,194 +216,206 @@ impl ToolPane {
             visibility,
             scale,
             button_groups: vec![
-                ButtonGroup(vec![
-                    Button {
+                ButtonGroup {
+                    rev_rows: false,
+                    buttons: vec![
+                        Button {
+                            text: None,
+                            tooltip: None,
+                            desc: None,
+                            color: None,
+                            icon: Some(ButtonIconId::Pen),
+                        },
+                        Button {
+                            text: None,
+                            tooltip: None,
+                            desc: None,
+                            color: None,
+                            icon: Some(ButtonIconId::Edit),
+                        },
+                        Button {
+                            text: None,
+                            tooltip: None,
+                            desc: None,
+                            color: None,
+                            icon: Some(ButtonIconId::Erase),
+                        },
+                        Button {
+                            text: None,
+                            tooltip: None,
+                            desc: None,
+                            color: None,
+                            icon: Some(ButtonIconId::BlueprintSelect),
+                        },
+                        Button {
+                            text: None,
+                            tooltip: None,
+                            desc: None,
+                            color: None,
+                            icon: Some(ButtonIconId::Interact),
+                        },
+                        Button {
+                            text: None,
+                            tooltip: None,
+                            desc: None,
+                            color: None,
+                            icon: Some(ButtonIconId::Clipboard),
+                        },
+                    ],
+                },
+                ButtonGroup {
+                    rev_rows: false,
+                    buttons: vec![
+                        Button {
+                            text: None,
+                            tooltip: None,
+                            desc: None,
+                            color: None,
+                            icon: Some(ButtonIconId::Or),
+                        },
+                        Button {
+                            text: None,
+                            tooltip: None,
+                            desc: None,
+                            color: None,
+                            icon: Some(ButtonIconId::And),
+                        },
+                        Button {
+                            text: None,
+                            tooltip: None,
+                            desc: None,
+                            color: None,
+                            icon: Some(ButtonIconId::Nor),
+                        },
+                        Button {
+                            text: None,
+                            tooltip: None,
+                            desc: None,
+                            color: None,
+                            icon: Some(ButtonIconId::Xor),
+                        },
+                        Button {
+                            text: None,
+                            tooltip: None,
+                            desc: None,
+                            color: None,
+                            icon: Some(ButtonIconId::Resistor),
+                        },
+                        Button {
+                            text: None,
+                            tooltip: None,
+                            desc: None,
+                            color: None,
+                            icon: Some(ButtonIconId::Capacitor),
+                        },
+                        Button {
+                            text: None,
+                            tooltip: None,
+                            desc: None,
+                            color: None,
+                            icon: Some(ButtonIconId::Led),
+                        },
+                        Button {
+                            text: None,
+                            tooltip: None,
+                            desc: None,
+                            color: None,
+                            icon: Some(ButtonIconId::Delay),
+                        },
+                        Button {
+                            text: None,
+                            tooltip: None,
+                            desc: None,
+                            color: None,
+                            icon: Some(ButtonIconId::Battery),
+                        },
+                    ],
+                },
+                ButtonGroup {
+                    rev_rows: true,
+                    buttons: vec![
+                        Button {
+                            text: Some("9"),
+                            tooltip: None,
+                            desc: None,
+                            color: Some(ColorRef::Exact(Color::WHITE)),
+                            icon: None,
+                        },
+                        Button {
+                            text: Some("8"),
+                            tooltip: None,
+                            desc: None,
+                            color: Some(ColorRef::Exact(Color::GRAY)),
+                            icon: None,
+                        },
+                        Button {
+                            text: Some("7"),
+                            tooltip: None,
+                            desc: None,
+                            color: Some(ColorRef::Exact(Color::PURPLE)),
+                            icon: None,
+                        },
+                        Button {
+                            text: Some("6"),
+                            tooltip: None,
+                            desc: None,
+                            color: Some(ColorRef::Exact(Color::BLUE)),
+                            icon: None,
+                        },
+                        Button {
+                            text: Some("5"),
+                            tooltip: None,
+                            desc: None,
+                            color: Some(ColorRef::Exact(Color::GREEN)),
+                            icon: None,
+                        },
+                        Button {
+                            text: Some("4"),
+                            tooltip: None,
+                            desc: None,
+                            color: Some(ColorRef::Exact(Color::YELLOW)),
+                            icon: None,
+                        },
+                        Button {
+                            text: Some("3"),
+                            tooltip: None,
+                            desc: None,
+                            color: Some(ColorRef::Exact(Color::ORANGE)),
+                            icon: None,
+                        },
+                        Button {
+                            text: Some("2"),
+                            tooltip: None,
+                            desc: None,
+                            color: Some(ColorRef::Exact(Color::RED)),
+                            icon: None,
+                        },
+                        Button {
+                            text: Some("1"),
+                            tooltip: None,
+                            desc: None,
+                            color: Some(ColorRef::Exact(Color::BROWN)),
+                            icon: None,
+                        },
+                        Button {
+                            text: Some("0"),
+                            tooltip: None,
+                            desc: None,
+                            color: Some(ColorRef::Exact(Color::BLACK)),
+                            icon: None,
+                        },
+                    ],
+                },
+                ButtonGroup {
+                    rev_rows: bool::default(), // only one item in row anyway
+                    buttons: vec![Button {
                         text: None,
                         tooltip: None,
                         desc: None,
                         color: None,
-                        icon: Some(ButtonIconId::Pen),
-                    },
-                    Button {
-                        text: None,
-                        tooltip: None,
-                        desc: None,
-                        color: None,
-                        icon: Some(ButtonIconId::Edit),
-                    },
-                    Button {
-                        text: None,
-                        tooltip: None,
-                        desc: None,
-                        color: None,
-                        icon: Some(ButtonIconId::Erase),
-                    },
-                    Button {
-                        text: None,
-                        tooltip: None,
-                        desc: None,
-                        color: None,
-                        icon: Some(ButtonIconId::BlueprintSelect),
-                    },
-                    Button {
-                        text: None,
-                        tooltip: None,
-                        desc: None,
-                        color: None,
-                        icon: Some(ButtonIconId::Interact),
-                    },
-                    Button {
-                        text: None,
-                        tooltip: None,
-                        desc: None,
-                        color: None,
-                        icon: Some(ButtonIconId::Clipboard),
-                    },
-                ]),
-                ButtonGroup(vec![
-                    Button {
-                        text: None,
-                        tooltip: None,
-                        desc: None,
-                        color: None,
-                        icon: Some(ButtonIconId::Or),
-                    },
-                    Button {
-                        text: None,
-                        tooltip: None,
-                        desc: None,
-                        color: None,
-                        icon: Some(ButtonIconId::And),
-                    },
-                    Button {
-                        text: None,
-                        tooltip: None,
-                        desc: None,
-                        color: None,
-                        icon: Some(ButtonIconId::Nor),
-                    },
-                    Button {
-                        text: None,
-                        tooltip: None,
-                        desc: None,
-                        color: None,
-                        icon: Some(ButtonIconId::Xor),
-                    },
-                    Button {
-                        text: None,
-                        tooltip: None,
-                        desc: None,
-                        color: None,
-                        icon: Some(ButtonIconId::Resistor),
-                    },
-                    Button {
-                        text: None,
-                        tooltip: None,
-                        desc: None,
-                        color: None,
-                        icon: Some(ButtonIconId::Capacitor),
-                    },
-                    Button {
-                        text: None,
-                        tooltip: None,
-                        desc: None,
-                        color: None,
-                        icon: Some(ButtonIconId::Led),
-                    },
-                    Button {
-                        text: None,
-                        tooltip: None,
-                        desc: None,
-                        color: None,
-                        icon: Some(ButtonIconId::Delay),
-                    },
-                    Button {
-                        text: None,
-                        tooltip: None,
-                        desc: None,
-                        color: None,
-                        icon: Some(ButtonIconId::Battery),
-                    },
-                ]),
-                ButtonGroup(vec![
-                    Button {
-                        text: Some("9"),
-                        tooltip: None,
-                        desc: None,
-                        color: Some(ColorRef::Exact(Color::WHITE)),
-                        icon: None,
-                    },
-                    Button {
-                        text: Some("8"),
-                        tooltip: None,
-                        desc: None,
-                        color: Some(ColorRef::Exact(Color::GRAY)),
-                        icon: None,
-                    },
-                    Button {
-                        text: Some("7"),
-                        tooltip: None,
-                        desc: None,
-                        color: Some(ColorRef::Exact(Color::PURPLE)),
-                        icon: None,
-                    },
-                    Button {
-                        text: Some("6"),
-                        tooltip: None,
-                        desc: None,
-                        color: Some(ColorRef::Exact(Color::BLUE)),
-                        icon: None,
-                    },
-                    Button {
-                        text: Some("5"),
-                        tooltip: None,
-                        desc: None,
-                        color: Some(ColorRef::Exact(Color::GREEN)),
-                        icon: None,
-                    },
-                    Button {
-                        text: Some("4"),
-                        tooltip: None,
-                        desc: None,
-                        color: Some(ColorRef::Exact(Color::YELLOW)),
-                        icon: None,
-                    },
-                    Button {
-                        text: Some("3"),
-                        tooltip: None,
-                        desc: None,
-                        color: Some(ColorRef::Exact(Color::ORANGE)),
-                        icon: None,
-                    },
-                    Button {
-                        text: Some("2"),
-                        tooltip: None,
-                        desc: None,
-                        color: Some(ColorRef::Exact(Color::RED)),
-                        icon: None,
-                    },
-                    Button {
-                        text: Some("1"),
-                        tooltip: None,
-                        desc: None,
-                        color: Some(ColorRef::Exact(Color::BROWN)),
-                        icon: None,
-                    },
-                    Button {
-                        text: Some("0"),
-                        tooltip: None,
-                        desc: None,
-                        color: Some(ColorRef::Exact(Color::BLACK)),
-                        icon: None,
-                    },
-                ]),
-                ButtonGroup(vec![Button {
-                    text: None,
-                    tooltip: None,
-                    desc: None,
-                    color: None,
-                    icon: Some(ButtonIconId::Settings),
-                }]),
+                        icon: Some(ButtonIconId::Settings),
+                    }],
+                },
             ],
         }
     }
