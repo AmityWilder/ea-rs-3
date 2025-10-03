@@ -1,15 +1,16 @@
 use crate::{
-    draw_hyper_ref_link,
+    GRID_SIZE,
     graph::{
         Graph, GraphId, GraphList,
         node::{GateId, Node, NodeId},
         wire::{Wire, WireId},
     },
+    icon_sheets::ButtonIconId,
     input::Inputs,
     ivec::{AsIVec2, Bounds, IBounds, IRect, IVec2},
     rich_text::{ColorAct, ColorRef, RichStr, RichString},
     tab::TabList,
-    theme::{ColorId, Fonts, Theme},
+    theme::{ColorId, Theme},
     tool::ToolId,
     toolpane::ToolPane,
 };
@@ -351,6 +352,123 @@ impl std::str::FromStr for HyperRef {
     }
 }
 
+impl HyperRef {
+    fn draw_link<D>(
+        &self,
+        d: &mut D,
+        rec: IRect,
+        theme: &Theme,
+        graphs: &GraphList,
+        tabs: &TabList,
+        toolpane: &ToolPane,
+    ) where
+        D: RaylibDraw,
+    {
+        const GRID_CENTER_OFFSET: Vector2 =
+            Vector2::new((GRID_SIZE / 2) as f32, (GRID_SIZE / 2) as f32);
+
+        // highlight ref text
+        d.draw_rectangle(rec.x, rec.y, rec.w, rec.h, theme.hyperref.alpha(0.2));
+
+        let link_anchor = Vector2::new(
+            rec.x as f32 + rec.w as f32,
+            rec.y as f32 + rec.h as f32 * 0.5,
+        );
+
+        match self {
+            HyperRef::Gate(gate_ref) => {
+                // HACK: only matches against the icon of the button!
+                if let Some((rec, _)) =
+                    toolpane
+                        .buttons(Vector2::zero(), theme)
+                        .find(|(_, button)| {
+                            matches!(
+                                (button.icon, gate_ref.0),
+                                (Some(ButtonIconId::Or), GateId::Or)
+                                    | (Some(ButtonIconId::And), GateId::And)
+                                    | (Some(ButtonIconId::Nor), GateId::Nor)
+                                    | (Some(ButtonIconId::Xor), GateId::Xor)
+                                    | (Some(ButtonIconId::Resistor), GateId::Resistor)
+                                    | (Some(ButtonIconId::Capacitor), GateId::Capacitor)
+                                    | (Some(ButtonIconId::Led), GateId::Led)
+                                    | (Some(ButtonIconId::Delay), GateId::Delay)
+                                    | (Some(ButtonIconId::Battery), GateId::Battery)
+                            )
+                        })
+                {
+                    d.draw_line_v(
+                        link_anchor,
+                        Vector2::new(rec.x + 0.5 * rec.width, rec.y + 0.5 * rec.height),
+                        theme.hyperref,
+                    );
+                }
+            }
+
+            HyperRef::Tool(tool_ref) => {
+                // HACK: only matches against the icon of the button!
+                if let Some((rec, _)) =
+                    toolpane
+                        .buttons(Vector2::zero(), theme)
+                        .find(|(_, button)| {
+                            matches!(
+                                (button.icon, tool_ref.0),
+                                (Some(ButtonIconId::Pen), ToolId::Create)
+                                    | (Some(ButtonIconId::Erase), ToolId::Erase)
+                                    | (Some(ButtonIconId::Edit), ToolId::Edit)
+                                    | (Some(ButtonIconId::Interact), ToolId::Interact)
+                            )
+                        })
+                {
+                    d.draw_line_v(
+                        link_anchor,
+                        Vector2::new(rec.x + 0.5 * rec.width, rec.y + 0.5 * rec.height),
+                        theme.hyperref,
+                    );
+                }
+            }
+
+            HyperRef::Position(position_ref) => {
+                for tab in tabs.editors() {
+                    let pos = tab.world_to_screen(position_ref.as_vec2() + GRID_CENTER_OFFSET);
+                    d.draw_line_v(link_anchor, pos, theme.hyperref);
+                }
+            }
+
+            HyperRef::Graph(graph_ref) => {
+                graph_ref.deref_with(graphs, |g, _borrow| {
+                    for _tab in tabs.editors_of_graph(&Arc::downgrade(g)) {
+                        // TODO
+                    }
+                });
+            }
+
+            HyperRef::Node(node_ref) => {
+                node_ref.deref_with(graphs, |g, _borrow, node| {
+                    for tab in tabs.editors_of_graph(&Arc::downgrade(g)) {
+                        let pos =
+                            tab.world_to_screen(node.position().as_vec2() + GRID_CENTER_OFFSET);
+                        d.draw_line_v(link_anchor, pos, theme.hyperref);
+                    }
+                });
+            }
+
+            HyperRef::Wire(wire_ref) => {
+                wire_ref.deref_with(graphs, |g, borrow, wire| {
+                    for tab in tabs.editors_of_graph(&Arc::downgrade(g)) {
+                        let (start, end) = borrow
+                            .get_wire_nodes(wire)
+                            .expect("all wires should be valid");
+                        let start_pos = start.position().as_vec2() + GRID_CENTER_OFFSET;
+                        let end_pos = end.position().as_vec2() + GRID_CENTER_OFFSET;
+                        let pos = tab.world_to_screen(wire.elbow.calculate(start_pos, end_pos));
+                        d.draw_line_v(link_anchor, pos, theme.hyperref);
+                    }
+                });
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct ConsoleAnchoring {
     pub left: bool,
@@ -417,10 +535,10 @@ impl Console {
     }
 
     pub fn displayable_lines(&self, theme: &Theme) -> usize {
-        (((self.bounds.max.y - theme.console_padding_bottom)
-            - (self.bounds.min.y + theme.console_padding_top)
-            + /* Off by one otherwise */ theme.console_line_spacing)
-            / theme.console_line_height()) as usize
+        (((self.bounds.max.y - theme.console_padding.bottom)
+            - (self.bounds.min.y + theme.console_padding.top)
+            + /* Off by one otherwise */ theme.console_font.line_spacing)
+            / theme.console_font.line_height()) as usize
     }
 
     pub fn content(&self) -> impl Iterator<Item = (ColorRef, &str)> {
@@ -468,7 +586,6 @@ impl Console {
         &self,
         d: &mut D,
         theme: &Theme,
-        fonts: &Fonts,
         input: &Inputs,
         graphs: &GraphList,
         tabs: &TabList,
@@ -491,17 +608,13 @@ impl Console {
                 theme.background1,
             );
 
-            let mut x = x + theme.console_padding_left;
+            let mut x = x + theme.console_padding.left;
             let mut y = self.bounds.max.y
-                - theme.console_padding_bottom
-                - self.displayable_lines(theme) as f32 * theme.console_line_height();
+                - theme.console_padding.bottom
+                - self.displayable_lines(theme) as f32 * theme.console_font.line_height();
             let left = x;
             for (color, text) in self.visible_content(theme) {
-                let size = fonts.console.measure_text(
-                    text,
-                    theme.console_font_size,
-                    theme.console_char_spacing,
-                );
+                let size = theme.console_font.measure_text(text);
                 let hyper_rec = IRect::new(x as i32, y as i32, size.x as i32, size.y as i32);
                 let is_live = if let Ok(hr) = text.parse::<HyperRef>() {
                     let is_live = match hr {
@@ -518,19 +631,17 @@ impl Console {
                         && IBounds::from(hyper_rec).contains(input.cursor.as_ivec2())
                         && let Ok(hr) = text.parse::<HyperRef>()
                     {
-                        draw_hyper_ref_link(d, hr, hyper_rec, theme, graphs, tabs, toolpane);
+                        hr.draw_link(d, hyper_rec, theme, graphs, tabs, toolpane);
                     }
 
                     Some(is_live)
                 } else {
                     None
                 };
-                d.draw_text_ex(
-                    &fonts.console,
+                theme.console_font.draw_text(
+                    d,
                     text,
                     rvec2(x, y),
-                    theme.console_font_size,
-                    theme.console_char_spacing,
                     if is_live.is_none_or(|x| x) {
                         color.get(theme)
                     } else {
@@ -538,7 +649,7 @@ impl Console {
                     },
                 );
                 if text.ends_with('\n') {
-                    y += theme.console_line_height();
+                    y += theme.console_font.line_height();
                     x = left;
                 } else {
                     x += size.x;
@@ -549,13 +660,9 @@ impl Console {
         // title
         {
             let title = "Log";
-            let title_text_size = fonts.general.measure_text(
-                title,
-                theme.console_font_size,
-                theme.console_char_spacing,
-            );
-            let title_width = title_text_size.x + 2.0 * theme.title_padding_x;
-            let title_height = title_text_size.y + 2.0 * theme.title_padding_y;
+            let title_text_size = theme.general_font.measure_text(title);
+            let title_width = title_text_size.x + theme.title_padding.horizontal();
+            let title_height = title_text_size.y + theme.title_padding.vertical();
             d.draw_rectangle_rec(
                 Rectangle::new(
                     self.bounds.max.x - title_width,
@@ -565,15 +672,13 @@ impl Console {
                 ),
                 theme.background2,
             );
-            d.draw_text_ex(
-                &fonts.console,
+            theme.console_font.draw_text(
+                d,
                 title,
                 Vector2::new(
-                    self.bounds.max.x - title_width + theme.title_padding_x,
-                    self.bounds.min.y + theme.title_padding_y,
+                    self.bounds.max.x - title_width + theme.title_padding.right,
+                    self.bounds.min.y + theme.title_padding.top,
                 ),
-                theme.console_font_size,
-                theme.console_char_spacing,
                 theme.foreground,
             );
         }

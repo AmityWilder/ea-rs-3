@@ -1,4 +1,8 @@
-use crate::{icon_sheets::ButtonIconSheetId, toolpane::ToolPaneAnchoring, ui::Visibility};
+use crate::{
+    icon_sheets::ButtonIconSheetId,
+    toolpane::ToolPaneAnchoring,
+    ui::{Padding, Visibility},
+};
 use raylib::prelude::*;
 use serde_derive::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -117,131 +121,85 @@ pub trait CustomColors {
 
 impl CustomColors for Color {}
 
-static DARK_THEME: Theme = Theme {
-    background: Color::BLACK,
-    background1: Color::SPACE_GRAY,
-    background2: Color::LIFELESS_NEBULA,
-    background3: Color::GLEEFUL_DUST,
-    foreground3: Color::DEAD_CABLE,
-    foreground2: Color::HAUNTING_WHITE,
-    foreground1: Color::INTERFERENCE_GRAY,
-    foreground: Color::WHITE,
-    input: Color::INPUT_LAVENDER,
-    output: Color::OUTPUT_APRICOT,
-    available: Color::WIP_BLUE,
-    interact: Color::YELLOW,
-    active: Color::REDSTONE,
-    error: Color::MAGENTA,
-    destructive: Color::DESTRUCTIVE_RED,
-    special: Color::VIOLET,
-    hyperref: Color::GLEEFUL_DUST,
-    dead_link: Color::HAUNTING_WHITE,
-    caution: Color::CAUTION_YELLOW,
-    blueprints_background: Color::new(10, 15, 30, 255),
-    resistance0: Color::BLACK,
-    resistance1: Color::BROWN,
-    resistance2: Color::RED,
-    resistance3: Color::ORANGE,
-    resistance4: Color::YELLOW,
-    resistance5: Color::GREEN,
-    resistance6: Color::BLUE,
-    resistance7: Color::PURPLE,
-    resistance8: Color::GRAY,
-    resistance9: Color::WHITE,
-    general_font: None,
-    console_font: None,
-    console_font_size: 10.0,
-    console_char_spacing: 1.0,
-    console_line_spacing: 2.0,
-    console_padding_left: 15.0,
-    console_padding_top: 5.0,
-    console_padding_right: 5.0,
-    console_padding_bottom: 5.0,
-    title_padding_x: 6.0,
-    title_padding_y: 3.0,
-    button_icon_scale: ButtonIconSheetId::X16,
-    toolpane_anchoring: ToolPaneAnchoring::LeftTop,
-    toolpane_visibility: Visibility::Expanded,
-    toolpane_padding_across: 3.0,
-    toolpane_padding_along: 5.0,
-    toolpane_group_expanded_gap: 16.0,
-    toolpane_group_collapsed_gap: 16.0,
-    toolpane_button_gap: 1.0,
-    properties_group_font_size: 10.0,
-    properties_group_char_spacing: 1.0,
-    properties_group_line_spacing: 2.0,
-    properties_item_font_size: 10.0,
-    properties_item_char_spacing: 2.0,
-    properties_item_line_spacing: 2.0,
-    properties_padding_left: 15.0,
-    properties_padding_top: 5.0,
-    properties_padding_right: 5.0,
-    properties_padding_bottom: 5.0,
-};
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct ThemeFont {
+    pub path: Option<PathBuf>,
+    pub font_size: f32,
+    pub char_spacing: f32,
+    pub line_spacing: f32,
+    #[serde(skip)]
+    pub font: OptionalFont,
+}
 
-static LIGHT_THEME: Theme = Theme {
-    background: Color::WHITE,
-    background1: Color::new(226, 227, 227, 255),
-    background2: Color::new(188, 188, 188, 255),
-    background3: Color::GRAY,
-    foreground3: Color::DEAD_CABLE,
-    foreground2: Color::new(100, 100, 100, 255),
-    foreground1: Color::new(75, 75, 75, 255),
-    foreground: Color::new(40, 40, 40, 255),
-    input: Color::INPUT_LAVENDER,
-    output: Color::OUTPUT_APRICOT,
-    available: Color::new(26, 115, 232, 255),
-    interact: Color::new(231, 240, 253, 255),
-    active: Color::BLUE,
-    error: Color::MAGENTA,
-    destructive: Color::DESTRUCTIVE_RED,
-    special: Color::new(135, 60, 190, 255),
-    hyperref: Color::BLUE,
-    dead_link: Color::BISQUE,
-    caution: Color::CAUTION_YELLOW,
-    blueprints_background: Color::new(250, 250, 255, 255),
-    resistance0: Color::BLACK,
-    resistance1: Color::BROWN,
-    resistance2: Color::RED,
-    resistance3: Color::ORANGE,
-    resistance4: Color::YELLOW,
-    resistance5: Color::GREEN,
-    resistance6: Color::BLUE,
-    resistance7: Color::PURPLE,
-    resistance8: Color::GRAY,
-    resistance9: Color::WHITE,
-    general_font: None,
-    console_font: None,
-    console_font_size: 10.0,
-    console_char_spacing: 1.0,
-    console_line_spacing: 2.0,
-    console_padding_left: 15.0,
-    console_padding_top: 5.0,
-    console_padding_right: 5.0,
-    console_padding_bottom: 5.0,
-    title_padding_x: 6.0,
-    title_padding_y: 3.0,
-    button_icon_scale: ButtonIconSheetId::X16,
-    toolpane_anchoring: ToolPaneAnchoring::LeftTop,
-    toolpane_visibility: Visibility::Expanded,
-    toolpane_padding_across: 3.0,
-    toolpane_padding_along: 5.0,
-    toolpane_group_expanded_gap: 16.0,
-    toolpane_group_collapsed_gap: 16.0,
-    toolpane_button_gap: 1.0,
-    properties_group_font_size: 10.0,
-    properties_group_char_spacing: 1.0,
-    properties_group_line_spacing: 2.0,
-    properties_item_font_size: 10.0,
-    properties_item_char_spacing: 2.0,
-    properties_item_line_spacing: 2.0,
-    properties_padding_left: 15.0,
-    properties_padding_top: 5.0,
-    properties_padding_right: 5.0,
-    properties_padding_bottom: 5.0,
-};
+impl std::ops::Deref for ThemeFont {
+    type Target = OptionalFont;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    fn deref(&self) -> &Self::Target {
+        &self.font
+    }
+}
+
+impl std::ops::DerefMut for ThemeFont {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.font
+    }
+}
+
+impl AsRef<OptionalFont> for ThemeFont {
+    fn as_ref(&self) -> &OptionalFont {
+        self
+    }
+}
+
+impl AsMut<OptionalFont> for ThemeFont {
+    fn as_mut(&mut self) -> &mut OptionalFont {
+        self
+    }
+}
+
+impl AsRef<ffi::Font> for ThemeFont {
+    fn as_ref(&self) -> &ffi::Font {
+        self.font.as_ref()
+    }
+}
+
+impl AsMut<ffi::Font> for ThemeFont {
+    fn as_mut(&mut self) -> &mut ffi::Font {
+        self.font.as_mut()
+    }
+}
+
+impl RaylibFont for ThemeFont {}
+
+impl ThemeFont {
+    pub fn reload_font(&mut self, rl: &mut RaylibHandle, thread: &RaylibThread) {
+        self.font = OptionalFont::load(rl, thread, self.path.as_ref());
+    }
+
+    pub fn line_height(&self) -> f32 {
+        self.font_size + self.line_spacing
+    }
+
+    pub fn measure_text(&self, text: &str) -> Vector2 {
+        self.font
+            .measure_text(text, self.font_size, self.char_spacing)
+    }
+
+    pub fn draw_text<D: RaylibDraw>(&self, d: &mut D, text: &str, position: Vector2, tint: Color) {
+        d.draw_text_ex(
+            self,
+            text,
+            position,
+            self.font_size,
+            self.char_spacing,
+            tint,
+        );
+    }
+}
+
+/// # Safety
+/// DO NOT CONSTRUCT UNLESS RAYLIB WAS INITIALIZED AND ON THE CURRENT THREAD!
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Theme {
     #[serde(with = "color")]
     pub background: Color,
@@ -303,40 +261,136 @@ pub struct Theme {
     pub resistance8: Color,
     #[serde(with = "color")]
     pub resistance9: Color,
-    pub general_font: Option<PathBuf>,
-    pub console_font: Option<PathBuf>,
-    pub console_font_size: f32,
-    pub console_char_spacing: f32,
-    pub console_line_spacing: f32,
-    pub console_padding_left: f32,
-    pub console_padding_top: f32,
-    pub console_padding_right: f32,
-    pub console_padding_bottom: f32,
-    pub title_padding_x: f32,
-    pub title_padding_y: f32,
+    pub general_font: ThemeFont,
+    pub console_font: ThemeFont,
+    pub console_padding: Padding,
+    pub title_padding: Padding,
     pub button_icon_scale: ButtonIconSheetId,
     pub toolpane_anchoring: ToolPaneAnchoring,
     pub toolpane_visibility: Visibility,
-    pub toolpane_padding_across: f32,
-    pub toolpane_padding_along: f32,
+    /// Relative to toolpane orientation
+    pub toolpane_padding: Padding,
     pub toolpane_group_expanded_gap: f32,
     pub toolpane_group_collapsed_gap: f32,
     pub toolpane_button_gap: f32,
-    pub properties_group_font_size: f32,
-    pub properties_group_char_spacing: f32,
-    pub properties_group_line_spacing: f32,
-    pub properties_item_font_size: f32,
-    pub properties_item_char_spacing: f32,
-    pub properties_item_line_spacing: f32,
-    pub properties_padding_left: f32,
-    pub properties_padding_top: f32,
-    pub properties_padding_right: f32,
-    pub properties_padding_bottom: f32,
+    pub properties_padding: Padding,
 }
 
 impl Default for Theme {
     fn default() -> Self {
-        DARK_THEME.clone()
+        Self::dark_theme()
+    }
+}
+
+impl Theme {
+    pub fn reload_fonts(&mut self, rl: &mut RaylibHandle, thread: &RaylibThread) {
+        self.general_font.reload_font(rl, thread);
+        self.console_font.reload_font(rl, thread);
+    }
+
+    pub fn dark_theme() -> Self {
+        Self {
+            background: Color::BLACK,
+            background1: Color::SPACE_GRAY,
+            background2: Color::LIFELESS_NEBULA,
+            background3: Color::GLEEFUL_DUST,
+            foreground3: Color::DEAD_CABLE,
+            foreground2: Color::HAUNTING_WHITE,
+            foreground1: Color::INTERFERENCE_GRAY,
+            foreground: Color::WHITE,
+            input: Color::INPUT_LAVENDER,
+            output: Color::OUTPUT_APRICOT,
+            available: Color::WIP_BLUE,
+            interact: Color::YELLOW,
+            active: Color::REDSTONE,
+            error: Color::MAGENTA,
+            destructive: Color::DESTRUCTIVE_RED,
+            special: Color::VIOLET,
+            hyperref: Color::GLEEFUL_DUST,
+            dead_link: Color::HAUNTING_WHITE,
+            caution: Color::CAUTION_YELLOW,
+            blueprints_background: Color::new(10, 15, 30, 255),
+            resistance0: Color::BLACK,
+            resistance1: Color::BROWN,
+            resistance2: Color::RED,
+            resistance3: Color::ORANGE,
+            resistance4: Color::YELLOW,
+            resistance5: Color::GREEN,
+            resistance6: Color::BLUE,
+            resistance7: Color::PURPLE,
+            resistance8: Color::GRAY,
+            resistance9: Color::WHITE,
+            general_font: ThemeFont {
+                path: None,
+                font_size: 10.0,
+                char_spacing: 1.0,
+                line_spacing: 2.0,
+                font: OptionalFont::Unloaded,
+            },
+            console_font: ThemeFont {
+                path: None,
+                font_size: 10.0,
+                char_spacing: 1.0,
+                line_spacing: 2.0,
+                font: OptionalFont::Unloaded,
+            },
+            console_padding: Padding {
+                left: 15.0,
+                top: 5.0,
+                right: 5.0,
+                bottom: 5.0,
+            },
+            title_padding: Padding::block(6.0, 3.0),
+            button_icon_scale: ButtonIconSheetId::X16,
+            toolpane_anchoring: ToolPaneAnchoring::LeftTop,
+            toolpane_visibility: Visibility::Expanded,
+            toolpane_padding: Padding::block(3.0, 5.0),
+            toolpane_group_expanded_gap: 16.0,
+            toolpane_group_collapsed_gap: 16.0,
+            toolpane_button_gap: 1.0,
+            properties_padding: Padding {
+                left: 5.0,
+                top: 5.0,
+                right: 5.0,
+                bottom: 5.0,
+            },
+        }
+    }
+
+    pub fn light_theme() -> Self {
+        Self {
+            background: Color::WHITE,
+            background1: Color::new(226, 227, 227, 255),
+            background2: Color::new(188, 188, 188, 255),
+            background3: Color::GRAY,
+            foreground3: Color::DEAD_CABLE,
+            foreground2: Color::new(100, 100, 100, 255),
+            foreground1: Color::new(75, 75, 75, 255),
+            foreground: Color::new(40, 40, 40, 255),
+            input: Color::INPUT_LAVENDER,
+            output: Color::OUTPUT_APRICOT,
+            available: Color::new(26, 115, 232, 255),
+            interact: Color::new(231, 240, 253, 255),
+            active: Color::BLUE,
+            error: Color::MAGENTA,
+            destructive: Color::DESTRUCTIVE_RED,
+            special: Color::new(135, 60, 190, 255),
+            hyperref: Color::BLUE,
+            dead_link: Color::BISQUE,
+            caution: Color::CAUTION_YELLOW,
+            blueprints_background: Color::new(250, 250, 255, 255),
+            resistance0: Color::BLACK,
+            resistance1: Color::BROWN,
+            resistance2: Color::RED,
+            resistance3: Color::ORANGE,
+            resistance4: Color::YELLOW,
+            resistance5: Color::GREEN,
+            resistance6: Color::BLUE,
+            resistance7: Color::PURPLE,
+            resistance8: Color::GRAY,
+            resistance9: Color::WHITE,
+            ..Default::default()
+        }
     }
 }
 
@@ -359,12 +413,6 @@ fn parse_color(s: &str) -> Result<Color, ()> {
         })
     } else {
         Err(())
-    }
-}
-
-impl Theme {
-    pub const fn console_line_height(&self) -> f32 {
-        self.console_font_size + self.console_line_spacing
     }
 }
 
@@ -556,8 +604,10 @@ impl std::ops::IndexMut<ColorId> for Theme {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum OptionalFont {
+    #[default]
+    Unloaded,
     Strong(Font),
     Weak(WeakFont),
 }
@@ -585,6 +635,7 @@ impl OptionalFont {
 impl AsRef<ffi::Font> for OptionalFont {
     fn as_ref(&self) -> &ffi::Font {
         match self {
+            Self::Unloaded => panic!("font must be loaded before using"),
             Self::Strong(font) => font.as_ref(),
             Self::Weak(font) => font.as_ref(),
         }
@@ -594,6 +645,7 @@ impl AsRef<ffi::Font> for OptionalFont {
 impl AsMut<ffi::Font> for OptionalFont {
     fn as_mut(&mut self) -> &mut ffi::Font {
         match self {
+            Self::Unloaded => panic!("font must be loaded before using"),
             Self::Strong(font) => font.as_mut(),
             Self::Weak(font) => font.as_mut(),
         }
@@ -601,9 +653,3 @@ impl AsMut<ffi::Font> for OptionalFont {
 }
 
 impl RaylibFont for OptionalFont {}
-
-#[derive(Debug)]
-pub struct Fonts {
-    pub general: OptionalFont,
-    pub console: OptionalFont,
-}

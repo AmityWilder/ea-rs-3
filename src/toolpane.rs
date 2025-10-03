@@ -535,11 +535,11 @@ impl ToolPane {
         let (mut along, padding) = match orientation {
             Orientation::Horizontal => (
                 position.x,
-                Vector2::new(theme.toolpane_padding_along, theme.toolpane_padding_across),
+                Vector2::new(theme.toolpane_padding.top, theme.toolpane_padding.right),
             ),
             Orientation::Vertical => (
                 position.y,
-                Vector2::new(theme.toolpane_padding_across, theme.toolpane_padding_along),
+                Vector2::new(theme.toolpane_padding.left, theme.toolpane_padding.top),
             ),
         };
         self.button_groups
@@ -577,7 +577,7 @@ impl ToolPane {
                 Visibility::Collapsed => 1.0,
                 Visibility::Hidden => 0.0,
             }
-            + 2.0 * theme.toolpane_padding_across
+            + theme.toolpane_padding.horizontal()
     }
 
     fn length(&self, container_length: f32, theme: &Theme) -> f32 {
@@ -597,7 +597,7 @@ impl ToolPane {
                 .map(|g| g.rows(self.visibility) as f32)
                 .sum::<f32>()
             + group_gap * (self.button_groups.len() as f32 - 1.0)
-            + 2.0 * theme.toolpane_padding_along
+            + theme.toolpane_padding.vertical()
     }
 
     pub fn bounds(&self, container_width: f32, container_height: f32, theme: &Theme) -> Bounds {
