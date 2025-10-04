@@ -4,7 +4,7 @@ use crate::{
         Graph,
         wire::{Flow, Wire},
     },
-    icon_sheets::{NodeIconSheetId, NodeIconSheetSets},
+    icon_sheets::{NodeIconSheetId, NodeIconSheetSetId, NodeIconSheetSets},
     input::Inputs,
     ivec::{AsIVec2, Bounds},
     tool::{EditDragging, Tool},
@@ -188,6 +188,8 @@ impl EditorTab {
         );
         let mut d = d.begin_mode2D(self.camera());
         let zoom_exp = self.zoom_exp().ceil() as i32;
+        let scale_and_width =
+            NodeIconSheetSetId::from_zoom_exp(zoom_exp).map(|scale| (scale, scale.icon_width()));
         if let Some(graph) = self.graph.upgrade() {
             let graph = graph.try_read().unwrap();
 
@@ -265,22 +267,33 @@ impl EditorTab {
                                 theme.special,
                             );
                         }
-                        let node = graph.node(id).expect("node being dragged should be valid");
-                        node_icon_sheets.draw(
-                            &mut d,
-                            zoom_exp,
-                            NodeIconSheetId::Basic,
-                            Rectangle {
-                                x: temp_pos.x,
-                                y: temp_pos.y,
-                                width: GRID_SIZE.into(),
-                                height: GRID_SIZE.into(),
-                            },
-                            node.gate_ntd().as_gate(),
-                            Vector2::zero(),
-                            0.0,
-                            theme.special,
-                        );
+                        let rec = Rectangle {
+                            x: temp_pos.x,
+                            y: temp_pos.y,
+                            width: GRID_SIZE.into(),
+                            height: GRID_SIZE.into(),
+                        };
+                        let color = theme.special;
+                        // TODO: does this belong in the wire layer?
+                        if let Some((scale, icon_width)) = scale_and_width {
+                            let node = graph.node(id).expect("node being dragged should be valid");
+                            let cell = node.gate_ntd().as_gate().id().icon_cell();
+                            d.draw_texture_pro(
+                                &node_icon_sheets[scale][NodeIconSheetId::Basic],
+                                rrect(
+                                    cell.x * icon_width,
+                                    cell.y * icon_width,
+                                    icon_width,
+                                    icon_width,
+                                ),
+                                rec,
+                                Vector2::zero(),
+                                0.0,
+                                color,
+                            );
+                        } else {
+                            d.draw_rectangle_rec(rec, color);
+                        }
                     }
                 }
 
@@ -290,30 +303,83 @@ impl EditorTab {
             // nodes
             for node in graph.nodes_iter() {
                 let node_position = node.position().as_vec2();
-                node_icon_sheets.draw(
-                    &mut d,
-                    zoom_exp,
-                    NodeIconSheetId::Basic,
-                    Rectangle {
-                        x: node_position.x,
-                        y: node_position.y,
-                        width: GRID_SIZE.into(),
-                        height: GRID_SIZE.into(),
-                    },
-                    node.gate_ntd().as_gate(),
-                    Vector2::zero(),
-                    0.0,
-                    if node.state() {
-                        theme.active
-                    } else {
-                        theme.foreground
-                    },
-                );
+                let rec = Rectangle {
+                    x: node_position.x,
+                    y: node_position.y,
+                    width: GRID_SIZE.into(),
+                    height: GRID_SIZE.into(),
+                };
+                let back_color = theme.background;
+                let front_color = if node.state() {
+                    theme.active
+                } else {
+                    theme.foreground
+                };
+                if let Some(scale) = NodeIconSheetSetId::from_zoom_exp(zoom_exp) {
+                    let gate = node.gate_ntd().as_gate().id();
+                    let cell = gate.icon_cell();
+                    let icon_width = scale.icon_width();
+                    let src_rec = rrect(
+                        cell.x * icon_width,
+                        cell.y * icon_width,
+                        icon_width,
+                        icon_width,
+                    );
+                    d.draw_texture_pro(
+                        &node_icon_sheets[scale][NodeIconSheetId::Background],
+                        src_rec,
+                        rec,
+                        Vector2::zero(),
+                        0.0,
+                        back_color,
+                    );
+                    d.draw_texture_pro(
+                        &node_icon_sheets[scale][NodeIconSheetId::Basic],
+                        src_rec,
+                        rec,
+                        Vector2::zero(),
+                        0.0,
+                        front_color,
+                    );
+                } else {
+                    d.draw_rectangle_rec(rec, front_color);
+                }
             }
 
             // tool - nodes layer
             match &toolpane.tool {
-                Tool::Create { current_node: _ } => {}
+                Tool::Create { current_node: _ } => {
+                    let placement_position = self
+                        .screen_to_world(input.cursor)
+                        .as_ivec2()
+                        .snap(GRID_SIZE.into())
+                        .as_vec2();
+                    let rec = Rectangle {
+                        x: placement_position.x,
+                        y: placement_position.y,
+                        width: GRID_SIZE.into(),
+                        height: GRID_SIZE.into(),
+                    };
+                    let color = theme.available;
+                    if let Some((scale, icon_width)) = scale_and_width {
+                        let cell = toolpane.gate.id().icon_cell();
+                        d.draw_texture_pro(
+                            &node_icon_sheets[scale][NodeIconSheetId::Basic],
+                            rrect(
+                                cell.x * icon_width,
+                                cell.y * icon_width,
+                                icon_width,
+                                icon_width,
+                            ),
+                            rec,
+                            Vector2::zero(),
+                            0.0,
+                            color,
+                        );
+                    } else {
+                        d.draw_rectangle_rec(rec, color);
+                    }
+                }
                 Tool::Erase {} => {}
                 Tool::Edit { target: _ } => {}
                 Tool::Interact {} => {}
@@ -328,21 +394,31 @@ impl EditorTab {
                     .node(id)
                     .expect("find_node_at should never return an invalid node");
                 let node_position = node.position().as_vec2();
-                node_icon_sheets.draw(
-                    &mut d,
-                    zoom_exp,
-                    NodeIconSheetId::Highlight,
-                    Rectangle {
-                        x: node_position.x,
-                        y: node_position.y,
-                        width: GRID_SIZE.into(),
-                        height: GRID_SIZE.into(),
-                    },
-                    node.gate_ntd().as_gate(),
-                    Vector2::zero(),
-                    0.0,
-                    theme.special,
-                );
+                let rec = Rectangle {
+                    x: node_position.x,
+                    y: node_position.y,
+                    width: GRID_SIZE.into(),
+                    height: GRID_SIZE.into(),
+                };
+                let color = theme.special;
+                if let Some((scale, icon_width)) = scale_and_width {
+                    let cell = node.gate_ntd().as_gate().id().icon_cell();
+                    d.draw_texture_pro(
+                        &node_icon_sheets[scale][NodeIconSheetId::Highlight],
+                        rrect(
+                            cell.x * icon_width,
+                            cell.y * icon_width,
+                            icon_width,
+                            icon_width,
+                        ),
+                        rec,
+                        Vector2::zero(),
+                        0.0,
+                        color,
+                    );
+                } else {
+                    d.draw_rectangle_rec(rec, color);
+                }
             }
         }
     }

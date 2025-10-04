@@ -23,10 +23,10 @@ impl std::str::FromStr for WireId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum Elbow {
-    #[default]
     Horizontal,
     DiagonalStart,
     Vertical,
+    #[default]
     DiagonalEnd,
 }
 
@@ -94,14 +94,17 @@ impl Wire {
         }
     }
 
+    #[inline]
     pub const fn id(&self) -> &WireId {
         &self.id
     }
 
+    #[inline]
     pub const fn src(&self) -> &NodeId {
         &self.src
     }
 
+    #[inline]
     pub const fn dst(&self) -> &NodeId {
         &self.dst
     }

@@ -241,18 +241,22 @@ impl Node {
         }
     }
 
+    #[inline]
     pub const fn id(&self) -> &NodeId {
         &self.id
     }
 
+    #[inline]
     pub const fn state(&self) -> bool {
         self.state
     }
 
+    #[inline]
     pub const fn position(&self) -> IVec2 {
         self.position
     }
 
+    #[inline]
     pub const fn gate_ntd(&self) -> &GateNtd {
         &self.gate
     }

@@ -157,6 +157,17 @@ fn draw_hyper_ref_link<D>(
 }
 
 fn main() {
+    let mut console = Console::new(
+        4096 * 80,
+        Bounds::new(Vector2::new(0.0, 570.0), Vector2::new(1280.0, 720.0)),
+        ConsoleAnchoring {
+            left: true,
+            top: false,
+            right: true,
+            bottom: true,
+        },
+    );
+
     let program_icon =
         Image::load_image_from_mem(".png", include_bytes!("../assets/program_icon32x.png")).ok();
 
@@ -179,20 +190,30 @@ fn main() {
     }
 
     // load preferences
+    const CONFIG_PATH: &str = "config.toml";
+    logln!(&mut console, LogType::Attempt, "loading {CONFIG_PATH}...");
     let Config { theme, mut binds } = {
-        const CONFIG_PATH: &str = "config.toml";
         match std::fs::read_to_string(CONFIG_PATH) {
-            Ok(s) => toml::from_str(&s).unwrap(),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                let config = Config::default();
-                std::fs::File::create(CONFIG_PATH)
-                    .unwrap()
-                    .write_all(toml::to_string_pretty(&config).unwrap().as_bytes())
-                    .unwrap();
-                config
-            }
+            Ok(s) => match toml::from_str(&s) {
+                Ok(x) => {
+                    logln!(&mut console, LogType::Success, "config loaded");
+                    x
+                }
+                Err(e) => {
+                    logln!(&mut console, LogType::Error, "failed to parse config: {e}");
+                    Config::default()
+                }
+            },
             Err(e) => {
-                panic!("{e}");
+                logln!(&mut console, LogType::Error, "failed to open config: {e}");
+                let config = Config::default();
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    std::fs::File::create(CONFIG_PATH)
+                        .unwrap()
+                        .write_all(toml::to_string_pretty(&config).unwrap().as_bytes())
+                        .unwrap();
+                }
+                config
             }
         }
     };
@@ -216,17 +237,6 @@ fn main() {
         )
         .unwrap(),
     )]);
-
-    let mut console = Console::new(
-        327_680, // 4096 rows with 80 columns
-        Bounds::new(Vector2::new(0.0, 570.0), Vector2::new(1280.0, 720.0)),
-        ConsoleAnchoring {
-            left: true,
-            top: false,
-            right: true,
-            bottom: true,
-        },
-    );
 
     let mut toolpane = ToolPane::new(
         Tool::default(),
@@ -253,8 +263,6 @@ fn main() {
 
     let mut next_eval_tick = Instant::now();
     let eval_duration = Duration::from_millis(200);
-
-    logln!(&mut console, LogType::Success, "initialized");
 
     while !rl.window_should_close() {
         // Tick
