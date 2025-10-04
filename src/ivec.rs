@@ -11,8 +11,8 @@ impl From<Bounds> for Rectangle {
         Rectangle {
             x: value.min.x,
             y: value.min.y,
-            width: value.max.x - value.min.x,
-            height: value.max.y - value.min.y,
+            width: value.width(),
+            height: value.height(),
         }
     }
 }
@@ -39,6 +39,28 @@ impl Bounds {
 
     pub const fn contains(&self, p: Vector2) -> bool {
         self.min.x <= p.x && p.x < self.max.x && self.min.y <= p.y && p.y < self.max.y
+    }
+
+    pub const fn width(&self) -> f32 {
+        self.max.x - self.min.x
+    }
+
+    pub const fn height(&self) -> f32 {
+        self.max.y - self.min.y
+    }
+
+    pub const fn split_left_right(self, x: f32) -> (Self, Self) {
+        (
+            Bounds::new(self.min, Vector2::new(x, self.max.y)),
+            Bounds::new(Vector2::new(x, self.min.y), self.max),
+        )
+    }
+
+    pub const fn split_top_bottom(self, y: f32) -> (Self, Self) {
+        (
+            Bounds::new(self.min, Vector2::new(self.max.x, y)),
+            Bounds::new(Vector2::new(self.min.x, y), self.max),
+        )
     }
 }
 
@@ -149,8 +171,8 @@ impl From<IBounds> for IRect {
         IRect {
             x: value.min.x,
             y: value.min.y,
-            w: value.max.x - value.min.x,
-            h: value.max.y - value.min.y,
+            w: value.width(),
+            h: value.height(),
         }
     }
 }
@@ -185,5 +207,13 @@ impl IBounds {
 
     pub fn contains(&self, p: IVec2) -> bool {
         self.min.x <= p.x && p.x < self.max.x && self.min.y <= p.y && p.y < self.max.y
+    }
+
+    pub const fn width(&self) -> i32 {
+        self.max.x - self.min.x
+    }
+
+    pub const fn height(&self) -> i32 {
+        self.max.y - self.min.y
     }
 }

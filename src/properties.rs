@@ -1,125 +1,137 @@
-use std::borrow::Cow;
-
-use crate::{
-    console::{GateRef, NodeRef, ToolRef, WireRef},
-    ivec::Bounds,
-    theme::Theme,
-};
+use crate::{graph::node::Gate, input::Inputs, ivec::Bounds, theme::Theme, tool::Tool, ui::Panel};
 use raylib::prelude::*;
 
-pub trait DrawPropertyGroup<D: RaylibDraw> {
-    fn draw(&self, d: &mut D, bounds: Bounds, theme: &Theme);
+pub trait DrawPropertySection<D: RaylibDraw>: PropertySection {
+    fn draw(&self, d: &mut D, container: Bounds, theme: &Theme);
 }
 
-pub trait PropertyGroup {
-    fn title(&self) -> Cow<'_, str>;
+pub trait PropertySection: std::fmt::Debug {
+    fn title(&self) -> &str;
     fn content_height(&self, theme: &Theme) -> f32;
+    fn tick(&mut self, rl: &RaylibHandle, thread: &RaylibThread, container: Bounds, theme: &Theme);
 }
 
-#[derive(Debug, Clone)]
-pub enum PropertySection {
-    Tool(ToolRef),
-    Gate(GateRef),
-    Node(NodeRef),
-    Wire(WireRef),
-}
-
-impl PropertyGroup for PropertySection {
-    fn title(&self) -> Cow<'_, str> {
-        match self {
-            Self::Tool(_) => Cow::Borrowed("Tool"),
-            Self::Gate(_) => Cow::Borrowed("Gate"),
-            Self::Node(_) => Cow::Borrowed("Node"),
-            Self::Wire(_) => Cow::Borrowed("Wire"),
-        }
+impl PropertySection for Tool {
+    fn title(&self) -> &str {
+        "Tool"
     }
 
-    fn content_height(&self, theme: &Theme) -> f32 {
-        theme.console_font.line_height()
+    fn content_height(&self, _theme: &Theme) -> f32 {
+        todo!()
+    }
+
+    fn tick(
+        &mut self,
+        _rl: &RaylibHandle,
+        _thread: &RaylibThread,
+        _container: Bounds,
+        _theme: &Theme,
+    ) {
+        todo!()
     }
 }
 
-impl<D: RaylibDraw> DrawPropertyGroup<D> for PropertySection {
-    fn draw(&self, d: &mut D, bounds: Bounds, theme: &Theme) {
-        theme
-            .general_font
-            .draw_text(d, "eee", bounds.min, theme.foreground);
+impl<D: RaylibDraw> DrawPropertySection<D> for Tool {
+    fn draw(&self, _d: &mut D, _container: Bounds, _theme: &Theme) {
+        todo!()
+    }
+}
+
+impl PropertySection for Gate {
+    fn title(&self) -> &str {
+        "Gate"
+    }
+
+    fn content_height(&self, _theme: &Theme) -> f32 {
+        todo!()
+    }
+
+    fn tick(
+        &mut self,
+        _rl: &RaylibHandle,
+        _thread: &RaylibThread,
+        _container: Bounds,
+        _theme: &Theme,
+    ) {
+        todo!()
+    }
+}
+
+impl<D: RaylibDraw> DrawPropertySection<D> for Gate {
+    fn draw(&self, _d: &mut D, _container: Bounds, _theme: &Theme) {
+        todo!()
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct PropertiesPanel {
-    pub bounds: Bounds,
-    pub sections: Vec<PropertySection>,
+    pub panel: Panel,
 }
 
 impl PropertiesPanel {
-    pub const fn new(bounds: Bounds) -> Self {
-        Self {
-            bounds,
-            sections: Vec::new(),
-        }
+    pub const fn new(panel: Panel) -> Self {
+        Self { panel }
     }
 
-    pub fn draw<D>(&self, d: &mut D, theme: &Theme)
+    pub fn tick<'a, I>(
+        &mut self,
+        rl: &'a mut RaylibHandle,
+        thread: &'a RaylibThread,
+        theme: &Theme,
+        inputs: &Inputs,
+        sections: I,
+    ) where
+        I: IntoIterator<Item = &'a mut dyn PropertySection>,
+    {
+        self.panel.tick(
+            rl,
+            thread,
+            theme,
+            inputs,
+            |rl, thread, bounds, theme, _inputs| {
+                let mut y = bounds.min.y;
+                for section in sections {
+                    y += theme.console_font.line_height() * section.title().lines().count() as f32;
+                    let height = section.content_height(theme);
+                    section.tick(
+                        rl,
+                        thread,
+                        Bounds::new(
+                            Vector2::new(bounds.max.x, y),
+                            Vector2::new(bounds.min.x, y + height),
+                        ),
+                        theme,
+                    );
+                }
+            },
+        );
+    }
+
+    pub fn draw<'a, D, I>(&self, d: &'a mut D, theme: &Theme, sections: I)
     where
         D: RaylibDraw,
+        I: IntoIterator<Item = &'a dyn DrawPropertySection<D>>,
     {
-        let Rectangle {
-            x,
-            mut y,
-            width,
-            height,
-        } = self.bounds.into();
-        d.draw_rectangle_rec(Rectangle::new(x, y, width, height), theme.background2);
-        d.draw_rectangle_rec(
-            Rectangle::new(x + 1.0, y + 1.0, width - 2.0, height - 2.0),
-            theme.background1,
-        );
-
-        // data
-        {
-            for group in &self.sections {
+        self.panel.draw(d, theme, |d, bounds, theme| {
+            let Vector2 { x, mut y } = bounds.min;
+            for section in sections {
                 theme.general_font.draw_text(
                     d,
-                    group.title().as_ref(),
-                    rvec2(x, y),
+                    section.title(),
+                    Vector2::new(x, y),
                     theme.foreground,
                 );
-                y += theme.console_font.line_height() * group.title().lines().count() as f32;
-                let height = group.content_height(theme);
-                group.draw(
+                y += theme.console_font.line_height() * section.title().lines().count() as f32;
+                let height = section.content_height(theme);
+                section.draw(
                     d,
-                    Rectangle::new(x, y, self.bounds.max.x - self.bounds.min.x, height).into(),
+                    Bounds::new(
+                        Vector2::new(bounds.max.x, y),
+                        Vector2::new(bounds.min.x, y + height),
+                    ),
                     theme,
                 );
             }
-        }
-
-        // title
-        {
-            let title = "Properties";
-            let title_text_size = theme.general_font.measure_text(title);
-            let title_width = title_text_size.x + theme.title_padding.horizontal();
-            let title_height = title_text_size.y + theme.title_padding.vertical();
-            d.draw_rectangle_rec(
-                Rectangle::new(
-                    self.bounds.max.x - title_width,
-                    self.bounds.min.y,
-                    title_width,
-                    title_height,
-                ),
-                theme.background2,
-            );
-            theme.general_font.draw_text(
-                d,
-                title,
-                Vector2::new(
-                    self.bounds.max.x - title_width + theme.title_padding.left,
-                    self.bounds.min.y + theme.title_padding.top,
-                ),
-                theme.foreground,
-            );
-        }
+        });
     }
 }

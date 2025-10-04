@@ -167,7 +167,6 @@ impl NodeIconSheetSets {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn draw<D: RaylibDraw>(
         &self,
         d: &mut D,
@@ -217,8 +216,11 @@ impl NodeIconSheetSets {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Eq, Hash, Default, Serialize, Deserialize,
+)]
 pub enum ButtonIconSheetId {
+    #[default]
     #[serde(rename = "16px")]
     X16,
     #[serde(rename = "32px")]
@@ -288,7 +290,6 @@ impl ButtonIconSheets {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn draw<D: RaylibDraw>(
         &self,
         d: &mut D,

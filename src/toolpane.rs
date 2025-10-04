@@ -11,131 +11,9 @@ use crate::{
     rich_text::ColorRef,
     theme::Theme,
     tool::{Tool, ToolId},
-    ui::{Orientation, Visibility},
+    ui::{Orientation, Panel, Visibility},
 };
 use raylib::prelude::*;
-use serde_derive::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ToolPaneAnchoring {
-    /// ```not_code
-    /// .-.---------.-.
-    /// | '---------' |
-    /// |             |
-    /// |             |
-    /// '-------------'
-    /// ```
-    Top { left: f32 },
-    /// ```not_code
-    /// .-----------.-.
-    /// |-----------' |
-    /// |             |
-    /// |             |
-    /// '-------------'
-    /// ```
-    TopLeft,
-    /// ```not_code
-    /// .-.-----------.
-    /// | '-----------|
-    /// |             |
-    /// |             |
-    /// '-------------'
-    /// ```
-    TopRight,
-    /// ```not_code
-    /// .-------------.
-    /// |-------------|
-    /// |             |
-    /// |             |
-    /// '-------------'
-    /// ```
-    TopFull,
-    /// ```not_code
-    /// .-------------.
-    /// |-.           |
-    /// | |           |
-    /// |-'           |
-    /// '-------------'
-    /// ```
-    Left { top: f32 },
-    /// ```not_code
-    /// .-.-----------.
-    /// | |           |
-    /// | |           |
-    /// |-'           |
-    /// '-------------'
-    /// ```
-    LeftTop,
-    /// ```not_code
-    /// .-------------.
-    /// |-.           |
-    /// | |           |
-    /// | |           |
-    /// '-'-----------'
-    /// ```
-    LeftBottom,
-    /// ```not_code
-    /// .-.-----------.
-    /// | |           |
-    /// | |           |
-    /// | |           |
-    /// '-'-----------'
-    /// ```
-    #[default]
-    LeftFull,
-    /// ```not_code
-    /// .-------------.
-    /// |           .-|
-    /// |           | |
-    /// |           '-|
-    /// '-------------'
-    /// ```
-    Right { top: f32 },
-    /// ```not_code
-    /// .-----------.-.
-    /// |           | |
-    /// |           | |
-    /// |           '-|
-    /// '-------------'
-    /// ```
-    RightTop,
-    /// ```not_code
-    /// .-------------.
-    /// |           .-|
-    /// |           | |
-    /// |           | |
-    /// '-----------'-'
-    /// ```
-    RightBottom,
-    /// ```not_code
-    /// .-----------.-.
-    /// |           | |
-    /// |           | |
-    /// |           | |
-    /// '-----------'-'
-    /// ```
-    RightFull,
-}
-
-impl ToolPaneAnchoring {
-    pub const fn orientation(&self) -> Orientation {
-        match self {
-            Self::Top { .. }
-            | Self::TopLeft { .. }
-            | Self::TopRight { .. }
-            | Self::TopFull { .. } => Orientation::Horizontal,
-            Self::Left { .. }
-            | Self::LeftTop { .. }
-            | Self::LeftBottom { .. }
-            | Self::LeftFull { .. }
-            | Self::Right { .. }
-            | Self::RightTop { .. }
-            | Self::RightBottom { .. }
-            | Self::RightFull { .. } => Orientation::Vertical,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Button {
@@ -228,11 +106,12 @@ pub enum ButtonAction {
 
 #[derive(Debug, Clone)]
 pub struct ToolPane {
+    pub panel: Panel,
     pub tool: Tool,
     pub gate: Gate,
     pub ntd: u8,
     pub elbow: Elbow,
-    pub anchoring: ToolPaneAnchoring,
+    pub orientation: Orientation,
     pub visibility: Visibility,
     pub scale: ButtonIconSheetId,
     pub button_groups: Vec<ButtonGroup>,
@@ -240,19 +119,21 @@ pub struct ToolPane {
 
 impl ToolPane {
     pub fn new(
+        panel: Panel,
         tool: Tool,
         gate: Gate,
         elbow: Elbow,
-        anchoring: ToolPaneAnchoring,
+        orientation: Orientation,
         visibility: Visibility,
         scale: ButtonIconSheetId,
     ) -> Self {
         Self {
+            panel,
             tool,
             gate,
             ntd: 0,
             elbow,
-            anchoring,
+            orientation,
             visibility,
             scale,
             button_groups: vec![
@@ -523,7 +404,7 @@ impl ToolPane {
         position: Vector2,
         theme: &Theme,
     ) -> impl Iterator<Item = (Rectangle, &Button)> {
-        let orientation = self.anchoring.orientation();
+        let orientation = self.orientation;
         let visibility = self.visibility;
         let scale = self.scale;
         let icon_width = scale.icon_width();
@@ -570,167 +451,92 @@ impl ToolPane {
             })
     }
 
-    fn thickness(&self, theme: &Theme) -> f32 {
-        self.scale.icon_width() as f32
+    pub fn content_size(&self, theme: &Theme) -> Vector2 {
+        let thickness = ((self.scale.icon_width() as f32 + theme.toolpane_button_gap)
             * match self.visibility {
                 Visibility::Expanded => 3.0,
                 Visibility::Collapsed => 1.0,
                 Visibility::Hidden => 0.0,
             }
-            + theme.toolpane_padding.horizontal()
-    }
-
-    fn length(&self, container_length: f32, theme: &Theme) -> f32 {
-        match self.anchoring {
-            ToolPaneAnchoring::TopFull | ToolPaneAnchoring::LeftFull => return container_length,
-            _ => {}
-        }
-        let group_gap = match self.visibility {
-            Visibility::Expanded => theme.toolpane_group_expanded_gap,
-            Visibility::Collapsed => theme.toolpane_group_collapsed_gap,
-            Visibility::Hidden => 0.0,
+            - theme.toolpane_button_gap)
+            .max(0.0);
+        let length = {
+            let group_gap = match self.visibility {
+                Visibility::Expanded => theme.toolpane_group_expanded_gap,
+                Visibility::Collapsed => theme.toolpane_group_collapsed_gap,
+                Visibility::Hidden => 0.0,
+            };
+            self.scale.icon_width() as f32
+                * self
+                    .button_groups
+                    .iter()
+                    .map(|g| g.rows(self.visibility) as f32)
+                    .sum::<f32>()
+                + group_gap * (self.button_groups.len() as f32 - 1.0)
+                + theme.toolpane_padding.vertical()
         };
-        self.scale.icon_width() as f32
-            * self
-                .button_groups
-                .iter()
-                .map(|g| g.rows(self.visibility) as f32)
-                .sum::<f32>()
-            + group_gap * (self.button_groups.len() as f32 - 1.0)
-            + theme.toolpane_padding.vertical()
-    }
-
-    pub fn bounds(&self, container_width: f32, container_height: f32, theme: &Theme) -> Bounds {
-        match self.anchoring {
-            ToolPaneAnchoring::Top { left } => Bounds::new(
-                Vector2::new(left, 0.0),
-                Vector2::new(
-                    left + self.length(container_width, theme),
-                    self.thickness(theme),
-                ),
-            ),
-            ToolPaneAnchoring::TopLeft => Bounds::new(
-                Vector2::new(0.0, 0.0),
-                Vector2::new(self.length(container_width, theme), self.thickness(theme)),
-            ),
-            ToolPaneAnchoring::TopRight => Bounds::new(
-                Vector2::new(container_width - self.length(container_width, theme), 0.0),
-                Vector2::new(container_width, self.thickness(theme)),
-            ),
-            ToolPaneAnchoring::TopFull => Bounds::new(
-                Vector2::new(0.0, 0.0),
-                Vector2::new(container_width, self.thickness(theme)),
-            ),
-            ToolPaneAnchoring::Left { top } => Bounds::new(
-                Vector2::new(0.0, top),
-                Vector2::new(
-                    self.thickness(theme),
-                    top + self.length(container_height, theme),
-                ),
-            ),
-            ToolPaneAnchoring::LeftTop => Bounds::new(
-                Vector2::new(0.0, 0.0),
-                Vector2::new(self.thickness(theme), self.length(container_height, theme)),
-            ),
-            ToolPaneAnchoring::LeftBottom => Bounds::new(
-                Vector2::new(0.0, container_height - self.length(container_height, theme)),
-                Vector2::new(self.thickness(theme), container_height),
-            ),
-            ToolPaneAnchoring::LeftFull => Bounds::new(
-                Vector2::new(0.0, 0.0),
-                Vector2::new(self.thickness(theme), container_height),
-            ),
-            ToolPaneAnchoring::Right { top } => Bounds::new(
-                Vector2::new(container_width - self.thickness(theme), top),
-                Vector2::new(container_width, top + self.length(container_height, theme)),
-            ),
-            ToolPaneAnchoring::RightTop => Bounds::new(
-                Vector2::new(container_width - self.thickness(theme), 0.0),
-                Vector2::new(container_width, self.length(container_height, theme)),
-            ),
-            ToolPaneAnchoring::RightBottom => Bounds::new(
-                Vector2::new(
-                    container_width - self.thickness(theme),
-                    container_height - self.length(container_height, theme),
-                ),
-                Vector2::new(container_width, container_height),
-            ),
-            ToolPaneAnchoring::RightFull => Bounds::new(
-                Vector2::new(container_width - self.thickness(theme), 0.0),
-                Vector2::new(container_width, container_height),
-            ),
+        match self.orientation {
+            Orientation::Horizontal => Vector2::new(length, thickness),
+            Orientation::Vertical => Vector2::new(thickness, length),
         }
     }
 
     pub fn draw<D>(
         &self,
         d: &mut D,
-        container_width: f32,
-        container_height: f32,
         input: &Inputs,
         theme: &Theme,
         button_icon_sheets: &ButtonIconSheets,
     ) where
         D: RaylibDraw,
     {
-        let Rectangle {
-            x,
-            y,
-            width,
-            height,
-        } = self.bounds(container_width, container_height, theme).into();
-
-        d.draw_rectangle_rec(Rectangle::new(x, y, width, height), theme.background2);
-        d.draw_rectangle_rec(
-            Rectangle::new(x + 1.0, y + 1.0, width - 2.0, height - 2.0),
-            theme.background1,
-        );
-
-        for (button_rec, button) in self.buttons(Vector2::new(x, y), theme) {
-            let is_hovered = Bounds::from(button_rec).contains(input.cursor);
-            let is_selected = match button.action {
-                ButtonAction::SetTool(tool_id) => tool_id == self.tool.id(),
-                ButtonAction::SetGate(gate_id) => gate_id == self.gate.id(),
-                ButtonAction::SetNtd(data) => data == self.ntd,
-                ButtonAction::Blueprints => false,
-                ButtonAction::Clipboard => false,
-                ButtonAction::Settings => false,
-            };
-            if let Some(icon) = button.icon {
-                button_icon_sheets.draw(
-                    d,
-                    self.scale,
-                    button_rec,
-                    icon,
-                    Vector2::zero(),
-                    0.0,
-                    match (is_selected, is_hovered) {
-                        (true, false) => theme.foreground,
-                        (false, true) | (true, true) => theme.foreground1,
-                        (false, false) => theme.foreground2,
-                    },
-                );
-            } else {
-                let Rectangle {
-                    x,
-                    y,
-                    width,
-                    height,
-                } = button_rec;
-                if let Some(outline) = match (is_selected, is_hovered) {
-                    (true, false) => Some(theme.foreground),
-                    (false, true) | (true, true) => Some(theme.foreground1),
-                    (false, false) => None,
-                } {
-                    d.draw_rectangle_rec(Rectangle::new(x, y, width, height), outline);
-                }
-                if let Some(color) = button.color {
-                    d.draw_rectangle_rec(
-                        Rectangle::new(x + 1.0, y + 1.0, width - 2.0, height - 2.0),
-                        color.get(theme),
+        self.panel.draw(d, theme, |d, bounds, theme| {
+            for (button_rec, button) in self.buttons(bounds.min, theme) {
+                let is_hovered = Bounds::from(button_rec).contains(input.cursor);
+                let is_selected = match button.action {
+                    ButtonAction::SetTool(tool_id) => tool_id == self.tool.id(),
+                    ButtonAction::SetGate(gate_id) => gate_id == self.gate.id(),
+                    ButtonAction::SetNtd(data) => data == self.ntd,
+                    ButtonAction::Blueprints => false,
+                    ButtonAction::Clipboard => false,
+                    ButtonAction::Settings => false,
+                };
+                if let Some(icon) = button.icon {
+                    button_icon_sheets.draw(
+                        d,
+                        self.scale,
+                        button_rec,
+                        icon,
+                        Vector2::zero(),
+                        0.0,
+                        match (is_selected, is_hovered) {
+                            (true, false) => theme.foreground,
+                            (false, true) | (true, true) => theme.foreground1,
+                            (false, false) => theme.foreground2,
+                        },
                     );
+                } else {
+                    let Rectangle {
+                        x,
+                        y,
+                        width,
+                        height,
+                    } = button_rec;
+                    if let Some(outline) = match (is_selected, is_hovered) {
+                        (true, false) => Some(theme.foreground),
+                        (false, true) | (true, true) => Some(theme.foreground1),
+                        (false, false) => None,
+                    } {
+                        d.draw_rectangle_rec(Rectangle::new(x, y, width, height), outline);
+                    }
+                    if let Some(color) = button.color {
+                        d.draw_rectangle_rec(
+                            Rectangle::new(x + 1.0, y + 1.0, width - 2.0, height - 2.0),
+                            color.get(theme),
+                        );
+                    }
                 }
             }
-        }
+        })
     }
 }

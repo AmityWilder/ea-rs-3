@@ -7,12 +7,13 @@ use crate::{
     },
     icon_sheets::ButtonIconId,
     input::Inputs,
-    ivec::{AsIVec2, Bounds, IBounds, IRect, IVec2},
+    ivec::{AsIVec2, IBounds, IRect, IVec2},
     rich_text::{ColorAct, ColorRef, RichStr, RichString},
     tab::TabList,
     theme::{ColorId, Theme},
     tool::ToolId,
     toolpane::ToolPane,
+    ui::Panel,
 };
 use raylib::prelude::*;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
@@ -481,17 +482,15 @@ pub struct ConsoleAnchoring {
 pub struct Console {
     content: RichString,
     pub bottom_offset: f64,
-    pub bounds: Bounds,
-    pub anchoring: ConsoleAnchoring,
+    pub panel: Panel,
 }
 
 impl Console {
-    pub fn new(capacity: usize, bounds: Bounds, anchoring: ConsoleAnchoring) -> Self {
+    pub fn new(panel: Panel, capacity: usize) -> Self {
         Self {
             content: RichString::with_capacity(capacity),
-            bounds,
             bottom_offset: 0.0,
-            anchoring,
+            panel,
         }
     }
 
@@ -535,8 +534,7 @@ impl Console {
     }
 
     pub fn displayable_lines(&self, theme: &Theme) -> usize {
-        (((self.bounds.max.y - theme.console_padding.bottom)
-            - (self.bounds.min.y + theme.console_padding.top)
+        ((self.panel.content_bounds(theme).height()
             + /* Off by one otherwise */ theme.console_font.line_spacing)
             / theme.console_font.line_height()) as usize
     }
@@ -581,7 +579,6 @@ impl Console {
             })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn draw<D>(
         &self,
         d: &mut D,
@@ -593,24 +590,9 @@ impl Console {
     ) where
         D: RaylibDraw,
     {
-        let Rectangle {
-            x,
-            y,
-            width,
-            height,
-        } = Rectangle::from(self.bounds);
-
-        // content
-        {
-            d.draw_rectangle_rec(Rectangle::new(x, y, width, height), theme.background2);
-            d.draw_rectangle_rec(
-                Rectangle::new(x + 1.0, y + 1.0, width - 2.0, height - 2.0),
-                theme.background1,
-            );
-
-            let mut x = x + theme.console_padding.left;
-            let mut y = self.bounds.max.y
-                - theme.console_padding.bottom
+        self.panel.draw(d, theme, move |d, bounds, theme| {
+            let mut x = bounds.min.x;
+            let mut y = bounds.max.y
                 - self.displayable_lines(theme) as f32 * theme.console_font.line_height();
             let left = x;
             for (color, text) in self.visible_content(theme) {
@@ -655,33 +637,7 @@ impl Console {
                     x += size.x;
                 }
             }
-        }
-
-        // title
-        {
-            let title = "Log";
-            let title_text_size = theme.general_font.measure_text(title);
-            let title_width = title_text_size.x + theme.title_padding.horizontal();
-            let title_height = title_text_size.y + theme.title_padding.vertical();
-            d.draw_rectangle_rec(
-                Rectangle::new(
-                    self.bounds.max.x - title_width,
-                    self.bounds.min.y,
-                    title_width,
-                    title_height,
-                ),
-                theme.background2,
-            );
-            theme.console_font.draw_text(
-                d,
-                title,
-                Vector2::new(
-                    self.bounds.max.x - title_width + theme.title_padding.right,
-                    self.bounds.min.y + theme.title_padding.top,
-                ),
-                theme.foreground,
-            );
-        }
+        });
     }
 }
 

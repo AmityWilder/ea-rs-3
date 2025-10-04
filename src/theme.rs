@@ -1,102 +1,318 @@
 use crate::{
     icon_sheets::ButtonIconSheetId,
-    toolpane::ToolPaneAnchoring,
-    ui::{Padding, Visibility},
+    ui::{Orientation, Padding, Visibility},
 };
 use raylib::prelude::*;
+use serde::{Deserialize, Serialize, de::Visitor};
 use serde_derive::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::LazyLock,
+};
 
-mod color {
-    use raylib::color::Color;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct SerdeColor {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
+}
 
-    struct ColorVisitor;
+impl SerdeColor {
+    pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self { r, g, b, a }
+    }
+}
 
-    struct HexCode;
+impl From<Color> for SerdeColor {
+    fn from(Color { r, g, b, a }: Color) -> Self {
+        Self { r, g, b, a }
+    }
+}
 
-    impl serde::de::Expected for HexCode {
-        fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("6, or 8 digits of 0-F")
-        }
+impl From<SerdeColor> for Color {
+    fn from(SerdeColor { r, g, b, a }: SerdeColor) -> Self {
+        Self { r, g, b, a }
+    }
+}
+
+macro_rules! named_colors {
+    ($($color:ident),* $(,)?) => {
+        static COLOR_NAME: LazyLock<HashMap<SerdeColor, String>> =
+            LazyLock::new(|| HashMap::from_iter([$((Color::$color.into(), stringify!($color).to_lowercase())),*]));
+
+        static NAME_COLOR: LazyLock<HashMap<String, SerdeColor>> = LazyLock::new(|| {
+            HashMap::from_iter([$((stringify!($color).to_lowercase(), Color::$color.into())),*])
+        });
+    };
+}
+
+named_colors![
+    INDIANRED,
+    LIGHTCORAL,
+    SALMON,
+    DARKSALMON,
+    LIGHTSALMON,
+    CRIMSON,
+    RED,
+    FIREBRICK,
+    DARKRED,
+    PINK,
+    LIGHTPINK,
+    HOTPINK,
+    DEEPPINK,
+    MEDIUMVIOLETRED,
+    PALEVIOLETRED,
+    CORAL,
+    TOMATO,
+    ORANGERED,
+    DARKORANGE,
+    ORANGE,
+    GOLD,
+    YELLOW,
+    LIGHTYELLOW,
+    LEMONCHIFFON,
+    LIGHTGOLDENRODYELLOW,
+    PAPAYAWHIP,
+    MOCCASIN,
+    PEACHPUFF,
+    PALEGOLDENROD,
+    KHAKI,
+    DARKKHAKI,
+    LAVENDER,
+    THISTLE,
+    PLUM,
+    VIOLET,
+    ORCHID,
+    FUCHSIA,
+    MAGENTA,
+    MEDIUMORCHID,
+    MEDIUMPURPLE,
+    REBECCAPURPLE,
+    BLUEVIOLET,
+    DARKVIOLET,
+    DARKORCHID,
+    DARKMAGENTA,
+    PURPLE,
+    DARKPURPLE,
+    INDIGO,
+    SLATEBLUE,
+    DARKSLATEBLUE,
+    MEDIUMSLATEBLUE,
+    GREENYELLOW,
+    CHARTREUSE,
+    LAWNGREEN,
+    LIME,
+    LIMEGREEN,
+    PALEGREEN,
+    LIGHTGREEN,
+    MEDIUMSPRINGGREEN,
+    SPRINGGREEN,
+    MEDIUMSEAGREEN,
+    SEAGREEN,
+    FORESTGREEN,
+    GREEN,
+    DARKGREEN,
+    YELLOWGREEN,
+    OLIVEDRAB,
+    OLIVE,
+    DARKOLIVEGREEN,
+    MEDIUMAQUAMARINE,
+    DARKSEAGREEN,
+    LIGHTSEAGREEN,
+    DARKCYAN,
+    TEAL,
+    AQUA,
+    CYAN,
+    LIGHTCYAN,
+    PALETURQUOISE,
+    AQUAMARINE,
+    TURQUOISE,
+    MEDIUMTURQUOISE,
+    DARKTURQUOISE,
+    CADETBLUE,
+    STEELBLUE,
+    LIGHTSTEELBLUE,
+    POWDERBLUE,
+    LIGHTBLUE,
+    SKYBLUE,
+    LIGHTSKYBLUE,
+    DEEPSKYBLUE,
+    DODGERBLUE,
+    CORNFLOWERBLUE,
+    ROYALBLUE,
+    BLUE,
+    MEDIUMBLUE,
+    DARKBLUE,
+    NAVY,
+    MIDNIGHTBLUE,
+    CORNSILK,
+    BLANCHEDALMOND,
+    BISQUE,
+    NAVAJOWHITE,
+    WHEAT,
+    BURLYWOOD,
+    TAN,
+    ROSYBROWN,
+    SANDYBROWN,
+    GOLDENROD,
+    DARKGOLDENROD,
+    PERU,
+    CHOCOLATE,
+    SADDLEBROWN,
+    SIENNA,
+    BROWN,
+    DARKBROWN,
+    MAROON,
+    WHITE,
+    SNOW,
+    HONEYDEW,
+    MINTCREAM,
+    AZURE,
+    ALICEBLUE,
+    GHOSTWHITE,
+    WHITESMOKE,
+    SEASHELL,
+    BEIGE,
+    OLDLACE,
+    FLORALWHITE,
+    IVORY,
+    ANTIQUEWHITE,
+    LINEN,
+    LAVENDERBLUSH,
+    MISTYROSE,
+    GAINSBORO,
+    LIGHTGRAY,
+    SILVER,
+    DARKGRAY,
+    GRAY,
+    DIMGRAY,
+    LIGHTSLATEGRAY,
+    SLATEGRAY,
+    DARKSLATEGRAY,
+    BLACK,
+    BLANK,
+    RAYWHITE,
+    SPACEGRAY,
+    LIFELESSNEBULA,
+    HAUNTINGWHITE,
+    GLEEFULDUST,
+    INTERFERENCEGRAY,
+    REDSTONE,
+    DESTRUCTIVERED,
+    DEADCABLE,
+    INPUTLAVENDER,
+    OUTPUTAPRICOT,
+    WIPBLUE,
+    CAUTIONYELLOW,
+];
+
+struct ColorVisitor;
+
+struct HexCode;
+
+impl serde::de::Expected for HexCode {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("6, or 8 digits of 0-F")
+    }
+}
+
+impl<'de> serde::de::Visitor<'de> for ColorVisitor {
+    type Value = SerdeColor;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str(
+            "a color hexcode starting with '#' or a \"rgb(...)\" containing the rgb values",
+        )
     }
 
-    impl<'de> serde::de::Visitor<'de> for ColorVisitor {
-        type Value = Color;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str(
-                "a color hexcode starting with '#' or a \"rgb(...)\" containing the rgb values",
-            )
-        }
-
-        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-        where
-            E: serde::de::Error,
-        {
-            if let Some(v) = v.strip_prefix('#') {
-                Ok(match v.len() {
-                    6 => {
-                        let [_, r, g, b] = u32::from_str_radix(v, 16)
-                            .map_err(|_| E::custom("invalid number"))?
-                            .to_be_bytes();
-                        Color::new(r, g, b, 255)
-                    }
-                    8 => {
-                        let [r, g, b, a] = u32::from_str_radix(v, 16)
-                            .map_err(|_| E::custom("invalid number"))?
-                            .to_be_bytes();
-                        Color::new(r, g, b, a)
-                    }
-                    len => Err(E::invalid_length(len, &HexCode))?,
-                })
-            } else if let Some(v) = v.strip_prefix("rgb(").and_then(|v| v.strip_suffix(')')) {
-                let mut it = v.split(',');
-                let r = it
-                    .next()
-                    .ok_or(E::custom("missing"))
-                    .and_then(|x| x.parse().map_err(E::custom))?;
-                let g = it
-                    .next()
-                    .ok_or(E::custom("missing"))
-                    .and_then(|x| x.parse().map_err(E::custom))?;
-                let b = it
-                    .next()
-                    .ok_or(E::custom("missing"))
-                    .and_then(|x| x.parse().map_err(E::custom))?;
-                Ok(Color::new(r, g, b, 255))
-            } else if let Some(v) = v.strip_prefix("rgba(").and_then(|v| v.strip_suffix(')')) {
-                let mut it = v.split(',');
-                let r = it
-                    .next()
-                    .ok_or(E::custom("missing"))
-                    .and_then(|x| x.parse().map_err(E::custom))?;
-                let g = it
-                    .next()
-                    .ok_or(E::custom("missing"))
-                    .and_then(|x| x.parse().map_err(E::custom))?;
-                let b = it
-                    .next()
-                    .ok_or(E::custom("missing"))
-                    .and_then(|x| x.parse().map_err(E::custom))?;
-                let a = it
-                    .next()
-                    .ok_or(E::custom("missing"))
-                    .and_then(|x| x.parse::<f32>().map_err(E::custom))?;
-                Ok(Color::new(r, g, b, (a * 255.0).clamp(0.0, 255.0) as u8))
-            } else {
-                Err(E::custom("unknown color format"))
-            }
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        if let Some(v) = v.strip_prefix('#') {
+            Ok(match v.len() {
+                6 => {
+                    let [_, r, g, b] = u32::from_str_radix(v, 16)
+                        .map_err(|_| E::custom("invalid number"))?
+                        .to_be_bytes();
+                    SerdeColor::new(r, g, b, 255)
+                }
+                8 => {
+                    let [r, g, b, a] = u32::from_str_radix(v, 16)
+                        .map_err(|_| E::custom("invalid number"))?
+                        .to_be_bytes();
+                    SerdeColor::new(r, g, b, a)
+                }
+                len => Err(E::invalid_length(len, &HexCode))?,
+            })
+        } else if let Some(v) = v.strip_prefix("rgb(").and_then(|v| v.strip_suffix(')')) {
+            let mut it = v.split(',');
+            let r = it
+                .next()
+                .ok_or(E::custom("missing"))
+                .and_then(|x| x.parse().map_err(E::custom))?;
+            let g = it
+                .next()
+                .ok_or(E::custom("missing"))
+                .and_then(|x| x.parse().map_err(E::custom))?;
+            let b = it
+                .next()
+                .ok_or(E::custom("missing"))
+                .and_then(|x| x.parse().map_err(E::custom))?;
+            Ok(SerdeColor::new(r, g, b, 255))
+        } else if let Some(v) = v.strip_prefix("rgba(").and_then(|v| v.strip_suffix(')')) {
+            let mut it = v.split(',');
+            let r = it
+                .next()
+                .ok_or(E::custom("missing"))
+                .and_then(|x| x.parse().map_err(E::custom))?;
+            let g = it
+                .next()
+                .ok_or(E::custom("missing"))
+                .and_then(|x| x.parse().map_err(E::custom))?;
+            let b = it
+                .next()
+                .ok_or(E::custom("missing"))
+                .and_then(|x| x.parse().map_err(E::custom))?;
+            let a = it
+                .next()
+                .ok_or(E::custom("missing"))
+                .and_then(|x| x.parse::<f32>().map_err(E::custom))?;
+            Ok(SerdeColor::new(
+                r,
+                g,
+                b,
+                (a * 255.0).clamp(0.0, 255.0) as u8,
+            ))
+        } else if let Some(color) = NAME_COLOR.get(v) {
+            Ok(*color)
+        } else {
+            Err(E::custom("unknown color format"))
         }
     }
+}
 
-    pub fn serialize<S>(value: &Color, serializer: S) -> Result<S::Ok, S::Error>
+impl Serialize for SerdeColor {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(&format!("#{:02X}{:02X}{:02X}", value.r, value.g, value.b))
+        if let Some(name) = COLOR_NAME.get(self) {
+            serializer.serialize_str(name)
+        } else {
+            serializer.serialize_str(&if self.a != u8::MAX {
+                format!("#{:02X}{:02X}{:02X}{:02X}", self.r, self.g, self.b, self.a)
+            } else {
+                format!("#{:02X}{:02X}{:02X}", self.r, self.g, self.b)
+            })
+        }
     }
+}
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Color, D::Error>
+impl<'de> Deserialize<'de> for SerdeColor {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -105,30 +321,120 @@ mod color {
 }
 
 pub trait CustomColors {
-    const SPACE_GRAY: Color = Color::new(28, 26, 41, 255);
-    const LIFELESS_NEBULA: Color = Color::new(75, 78, 94, 255);
-    const HAUNTING_WHITE: Color = Color::new(148, 150, 166, 255);
-    const GLEEFUL_DUST: Color = Color::new(116, 125, 237, 255);
-    const INTERFERENCE_GRAY: Color = Color::new(232, 234, 255, 255);
+    const SPACEGRAY: Color = Color::new(28, 26, 41, 255);
+    const LIFELESSNEBULA: Color = Color::new(75, 78, 94, 255);
+    const HAUNTINGWHITE: Color = Color::new(148, 150, 166, 255);
+    const GLEEFULDUST: Color = Color::new(116, 125, 237, 255);
+    const INTERFERENCEGRAY: Color = Color::new(232, 234, 255, 255);
     const REDSTONE: Color = Color::new(212, 25, 25, 255);
-    const DESTRUCTIVE_RED: Color = Color::new(219, 18, 18, 255);
-    const DEAD_CABLE: Color = Color::new(122, 118, 118, 255);
-    const INPUT_LAVENDER: Color = Color::new(128, 106, 217, 255);
-    const OUTPUT_APRICOT: Color = Color::new(207, 107, 35, 255);
-    const WIP_BLUE: Color = Color::new(26, 68, 161, 255);
-    const CAUTION_YELLOW: Color = Color::new(250, 222, 37, 255);
+    const DESTRUCTIVERED: Color = Color::new(219, 18, 18, 255);
+    const DEADCABLE: Color = Color::new(122, 118, 118, 255);
+    const INPUTLAVENDER: Color = Color::new(128, 106, 217, 255);
+    const OUTPUTAPRICOT: Color = Color::new(207, 107, 35, 255);
+    const WIPBLUE: Color = Color::new(26, 68, 161, 255);
+    const CAUTIONYELLOW: Color = Color::new(250, 222, 37, 255);
 }
 
 impl CustomColors for Color {}
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct ThemeFont {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<PathBuf>,
     pub font_size: f32,
     pub char_spacing: f32,
     pub line_spacing: f32,
     #[serde(skip)]
     pub font: OptionalFont,
+}
+
+impl Default for ThemeFont {
+    fn default() -> Self {
+        Self {
+            path: None,
+            font_size: 10.0,
+            char_spacing: 1.0,
+            line_spacing: 2.0,
+            font: OptionalFont::Unloaded,
+        }
+    }
+}
+
+struct ThemeFontVisitor;
+
+impl<'de> Visitor<'de> for ThemeFontVisitor {
+    type Value = ThemeFont;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("ThemeFont")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::MapAccess<'de>,
+    {
+        #[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        #[serde(rename_all = "snake_case")]
+        enum FieldIdent {
+            Path,
+            FontSize,
+            CharSpacing,
+            LineSpacing,
+            #[serde(other)]
+            Unknown,
+        }
+
+        let mut path = None;
+        let mut font_size = None;
+        let mut char_spacing = None;
+        let mut line_spacing = None;
+        while let Some(key) = map.next_key()? {
+            match key {
+                FieldIdent::Path => path = Some(map.next_value()?),
+                FieldIdent::FontSize => font_size = Some(map.next_value()?),
+                FieldIdent::CharSpacing => char_spacing = Some(map.next_value()?),
+                FieldIdent::LineSpacing => line_spacing = Some(map.next_value()?),
+                FieldIdent::Unknown => {}
+            }
+        }
+
+        let font_size = font_size.unwrap_or(10.0);
+        let char_spacing = char_spacing.unwrap_or(font_size * 0.1);
+        let line_spacing = line_spacing.unwrap_or(font_size * 0.2);
+
+        Ok(ThemeFont {
+            path,
+            font_size,
+            char_spacing,
+            line_spacing,
+            font: OptionalFont::Unloaded,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for ThemeFont {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_map(ThemeFontVisitor)
+    }
+}
+
+/// NOTE: [`ThemeFont::clone`] assigns [`OptionalFont::Unloaded`] to the [`ThemeFont::font`] field,
+/// because Raylib weak/strong fonts are not reference counted and may be used after free.
+///
+/// Remember to call [`ThemeFont::reload_font`] if the clone is going to be used.
+impl Clone for ThemeFont {
+    fn clone(&self) -> Self {
+        Self {
+            path: self.path.clone(),
+            font_size: self.font_size,
+            char_spacing: self.char_spacing,
+            line_spacing: self.line_spacing,
+            font: OptionalFont::Unloaded,
+        }
+    }
 }
 
 impl std::ops::Deref for ThemeFont {
@@ -197,76 +503,226 @@ impl ThemeFont {
     }
 }
 
-/// # Safety
-/// DO NOT CONSTRUCT UNLESS RAYLIB WAS INITIALIZED AND ON THE CURRENT THREAD!
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum BaseTheme {
+    #[default]
+    Dark,
+    Light,
+}
+
+impl BaseTheme {
+    fn theme(self) -> Theme {
+        match self {
+            Self::Dark => Theme::dark_theme(),
+            Self::Light => Theme::light_theme(),
+        }
+    }
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+struct ThemeLoader {
+    pub base: Option<BaseTheme>,
+    pub background: Option<SerdeColor>,
+    pub background1: Option<SerdeColor>,
+    pub background2: Option<SerdeColor>,
+    pub background3: Option<SerdeColor>,
+    pub foreground3: Option<SerdeColor>,
+    pub foreground2: Option<SerdeColor>,
+    pub foreground1: Option<SerdeColor>,
+    pub foreground: Option<SerdeColor>,
+    pub input: Option<SerdeColor>,
+    pub output: Option<SerdeColor>,
+    pub available: Option<SerdeColor>,
+    pub interact: Option<SerdeColor>,
+    pub active: Option<SerdeColor>,
+    pub error: Option<SerdeColor>,
+    pub destructive: Option<SerdeColor>,
+    pub special: Option<SerdeColor>,
+    pub hyperref: Option<SerdeColor>,
+    pub dead_link: Option<SerdeColor>,
+    pub caution: Option<SerdeColor>,
+    pub blueprints_background: Option<SerdeColor>,
+    pub resistance0: Option<SerdeColor>,
+    pub resistance1: Option<SerdeColor>,
+    pub resistance2: Option<SerdeColor>,
+    pub resistance3: Option<SerdeColor>,
+    pub resistance4: Option<SerdeColor>,
+    pub resistance5: Option<SerdeColor>,
+    pub resistance6: Option<SerdeColor>,
+    pub resistance7: Option<SerdeColor>,
+    pub resistance8: Option<SerdeColor>,
+    pub resistance9: Option<SerdeColor>,
+    pub general_font: Option<ThemeFont>,
+    pub title_font: Option<ThemeFont>,
+    pub console_font: Option<ThemeFont>,
+    pub console_padding: Option<Padding>,
+    pub title_padding: Option<Padding>,
+    pub button_icon_scale: Option<ButtonIconSheetId>,
+    pub toolpane_orientation: Option<Orientation>,
+    pub toolpane_visibility: Option<Visibility>,
+    pub toolpane_padding: Option<Padding>,
+    pub toolpane_group_expanded_gap: Option<f32>,
+    pub toolpane_group_collapsed_gap: Option<f32>,
+    pub toolpane_button_gap: Option<f32>,
+    pub properties_padding: Option<Padding>,
+}
+
+impl From<ThemeLoader> for Theme {
+    fn from(value: ThemeLoader) -> Self {
+        let base = value.base.unwrap_or_default().theme();
+        Self {
+            background: value.background.map_or(base.background, Into::into),
+            background1: value.background1.map_or(base.background1, Into::into),
+            background2: value.background2.map_or(base.background2, Into::into),
+            background3: value.background3.map_or(base.background3, Into::into),
+            foreground3: value.foreground3.map_or(base.foreground3, Into::into),
+            foreground2: value.foreground2.map_or(base.foreground2, Into::into),
+            foreground1: value.foreground1.map_or(base.foreground1, Into::into),
+            foreground: value.foreground.map_or(base.foreground, Into::into),
+            input: value.input.map_or(base.input, Into::into),
+            output: value.output.map_or(base.output, Into::into),
+            available: value.available.map_or(base.available, Into::into),
+            interact: value.interact.map_or(base.interact, Into::into),
+            active: value.active.map_or(base.active, Into::into),
+            error: value.error.map_or(base.error, Into::into),
+            destructive: value.destructive.map_or(base.destructive, Into::into),
+            special: value.special.map_or(base.special, Into::into),
+            hyperref: value.hyperref.map_or(base.hyperref, Into::into),
+            dead_link: value.dead_link.map_or(base.dead_link, Into::into),
+            caution: value.caution.map_or(base.caution, Into::into),
+            blueprints_background: value
+                .blueprints_background
+                .map_or(base.blueprints_background, Into::into),
+            resistance0: value.resistance0.map_or(base.resistance0, Into::into),
+            resistance1: value.resistance1.map_or(base.resistance1, Into::into),
+            resistance2: value.resistance2.map_or(base.resistance2, Into::into),
+            resistance3: value.resistance3.map_or(base.resistance3, Into::into),
+            resistance4: value.resistance4.map_or(base.resistance4, Into::into),
+            resistance5: value.resistance5.map_or(base.resistance5, Into::into),
+            resistance6: value.resistance6.map_or(base.resistance6, Into::into),
+            resistance7: value.resistance7.map_or(base.resistance7, Into::into),
+            resistance8: value.resistance8.map_or(base.resistance8, Into::into),
+            resistance9: value.resistance9.map_or(base.resistance9, Into::into),
+            general_font: value.general_font.unwrap_or(base.general_font),
+            title_font: value.title_font.unwrap_or(base.title_font),
+            console_font: value.console_font.unwrap_or(base.console_font),
+            console_padding: value.console_padding.unwrap_or(base.console_padding),
+            title_padding: value.title_padding.unwrap_or(base.title_padding),
+            button_icon_scale: value.button_icon_scale.unwrap_or(base.button_icon_scale),
+            toolpane_orientation: value
+                .toolpane_orientation
+                .unwrap_or(base.toolpane_orientation),
+            toolpane_visibility: value
+                .toolpane_visibility
+                .unwrap_or(base.toolpane_visibility),
+            toolpane_padding: value.toolpane_padding.unwrap_or(base.toolpane_padding),
+            toolpane_group_expanded_gap: value
+                .toolpane_group_expanded_gap
+                .unwrap_or(base.toolpane_group_expanded_gap),
+            toolpane_group_collapsed_gap: value
+                .toolpane_group_collapsed_gap
+                .unwrap_or(base.toolpane_group_collapsed_gap),
+            toolpane_button_gap: value
+                .toolpane_button_gap
+                .unwrap_or(base.toolpane_button_gap),
+            properties_padding: value.properties_padding.unwrap_or(base.properties_padding),
+        }
+    }
+}
+
+impl From<Theme> for ThemeLoader {
+    fn from(value: Theme) -> Self {
+        Self {
+            base: None,
+            background: Some(value.background.into()),
+            background1: Some(value.background1.into()),
+            background2: Some(value.background2.into()),
+            background3: Some(value.background3.into()),
+            foreground3: Some(value.foreground3.into()),
+            foreground2: Some(value.foreground2.into()),
+            foreground1: Some(value.foreground1.into()),
+            foreground: Some(value.foreground.into()),
+            input: Some(value.input.into()),
+            output: Some(value.output.into()),
+            available: Some(value.available.into()),
+            interact: Some(value.interact.into()),
+            active: Some(value.active.into()),
+            error: Some(value.error.into()),
+            destructive: Some(value.destructive.into()),
+            special: Some(value.special.into()),
+            hyperref: Some(value.hyperref.into()),
+            dead_link: Some(value.dead_link.into()),
+            caution: Some(value.caution.into()),
+            blueprints_background: Some(value.blueprints_background.into()),
+            resistance0: Some(value.resistance0.into()),
+            resistance1: Some(value.resistance1.into()),
+            resistance2: Some(value.resistance2.into()),
+            resistance3: Some(value.resistance3.into()),
+            resistance4: Some(value.resistance4.into()),
+            resistance5: Some(value.resistance5.into()),
+            resistance6: Some(value.resistance6.into()),
+            resistance7: Some(value.resistance7.into()),
+            resistance8: Some(value.resistance8.into()),
+            resistance9: Some(value.resistance9.into()),
+            general_font: Some(value.general_font),
+            title_font: Some(value.title_font),
+            console_font: Some(value.console_font),
+            console_padding: Some(value.console_padding),
+            title_padding: Some(value.title_padding),
+            button_icon_scale: Some(value.button_icon_scale),
+            toolpane_orientation: Some(value.toolpane_orientation),
+            toolpane_visibility: Some(value.toolpane_visibility),
+            toolpane_padding: Some(value.toolpane_padding),
+            toolpane_group_expanded_gap: Some(value.toolpane_group_expanded_gap),
+            toolpane_group_collapsed_gap: Some(value.toolpane_group_collapsed_gap),
+            toolpane_button_gap: Some(value.toolpane_button_gap),
+            properties_padding: Some(value.properties_padding),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(from = "ThemeLoader", into = "ThemeLoader")]
 pub struct Theme {
-    #[serde(with = "color")]
     pub background: Color,
-    #[serde(with = "color")]
     pub background1: Color,
-    #[serde(with = "color")]
     pub background2: Color,
-    #[serde(with = "color")]
     pub background3: Color,
-    #[serde(with = "color")]
     pub foreground3: Color,
-    #[serde(with = "color")]
     pub foreground2: Color,
-    #[serde(with = "color")]
     pub foreground1: Color,
-    #[serde(with = "color")]
     pub foreground: Color,
-    #[serde(with = "color")]
     pub input: Color,
-    #[serde(with = "color")]
     pub output: Color,
-    #[serde(with = "color")]
     pub available: Color,
-    #[serde(with = "color")]
     pub interact: Color,
-    #[serde(with = "color")]
     pub active: Color,
-    #[serde(with = "color")]
     pub error: Color,
-    #[serde(with = "color")]
     pub destructive: Color,
-    #[serde(with = "color")]
     pub special: Color,
-    #[serde(with = "color")]
     pub hyperref: Color,
-    #[serde(with = "color")]
     pub dead_link: Color,
-    #[serde(with = "color")]
     pub caution: Color,
-    #[serde(with = "color")]
     pub blueprints_background: Color,
-    #[serde(with = "color")]
     pub resistance0: Color,
-    #[serde(with = "color")]
     pub resistance1: Color,
-    #[serde(with = "color")]
     pub resistance2: Color,
-    #[serde(with = "color")]
     pub resistance3: Color,
-    #[serde(with = "color")]
     pub resistance4: Color,
-    #[serde(with = "color")]
     pub resistance5: Color,
-    #[serde(with = "color")]
     pub resistance6: Color,
-    #[serde(with = "color")]
     pub resistance7: Color,
-    #[serde(with = "color")]
     pub resistance8: Color,
-    #[serde(with = "color")]
     pub resistance9: Color,
     pub general_font: ThemeFont,
+    pub title_font: ThemeFont,
     pub console_font: ThemeFont,
     pub console_padding: Padding,
     pub title_padding: Padding,
     pub button_icon_scale: ButtonIconSheetId,
-    pub toolpane_anchoring: ToolPaneAnchoring,
+    pub toolpane_orientation: Orientation,
     pub toolpane_visibility: Visibility,
     /// Relative to toolpane orientation
     pub toolpane_padding: Padding,
@@ -284,31 +740,36 @@ impl Default for Theme {
 
 impl Theme {
     pub fn reload_fonts(&mut self, rl: &mut RaylibHandle, thread: &RaylibThread) {
-        self.general_font.reload_font(rl, thread);
-        self.console_font.reload_font(rl, thread);
+        for font_item in [
+            &mut self.general_font,
+            &mut self.title_font,
+            &mut self.console_font,
+        ] {
+            font_item.reload_font(rl, thread);
+        }
     }
 
     pub fn dark_theme() -> Self {
         Self {
             background: Color::BLACK,
-            background1: Color::SPACE_GRAY,
-            background2: Color::LIFELESS_NEBULA,
-            background3: Color::GLEEFUL_DUST,
-            foreground3: Color::DEAD_CABLE,
-            foreground2: Color::HAUNTING_WHITE,
-            foreground1: Color::INTERFERENCE_GRAY,
+            background1: Color::SPACEGRAY,
+            background2: Color::LIFELESSNEBULA,
+            background3: Color::GLEEFULDUST,
+            foreground3: Color::DEADCABLE,
+            foreground2: Color::HAUNTINGWHITE,
+            foreground1: Color::INTERFERENCEGRAY,
             foreground: Color::WHITE,
-            input: Color::INPUT_LAVENDER,
-            output: Color::OUTPUT_APRICOT,
-            available: Color::WIP_BLUE,
+            input: Color::INPUTLAVENDER,
+            output: Color::OUTPUTAPRICOT,
+            available: Color::WIPBLUE,
             interact: Color::YELLOW,
             active: Color::REDSTONE,
             error: Color::MAGENTA,
-            destructive: Color::DESTRUCTIVE_RED,
+            destructive: Color::DESTRUCTIVERED,
             special: Color::VIOLET,
-            hyperref: Color::GLEEFUL_DUST,
-            dead_link: Color::HAUNTING_WHITE,
-            caution: Color::CAUTION_YELLOW,
+            hyperref: Color::GLEEFULDUST,
+            dead_link: Color::HAUNTINGWHITE,
+            caution: Color::CAUTIONYELLOW,
             blueprints_background: Color::new(10, 15, 30, 255),
             resistance0: Color::BLACK,
             resistance1: Color::BROWN,
@@ -320,20 +781,9 @@ impl Theme {
             resistance7: Color::PURPLE,
             resistance8: Color::GRAY,
             resistance9: Color::WHITE,
-            general_font: ThemeFont {
-                path: None,
-                font_size: 10.0,
-                char_spacing: 1.0,
-                line_spacing: 2.0,
-                font: OptionalFont::Unloaded,
-            },
-            console_font: ThemeFont {
-                path: None,
-                font_size: 10.0,
-                char_spacing: 1.0,
-                line_spacing: 2.0,
-                font: OptionalFont::Unloaded,
-            },
+            general_font: ThemeFont::default(),
+            title_font: ThemeFont::default(),
+            console_font: ThemeFont::default(),
             console_padding: Padding {
                 left: 15.0,
                 top: 5.0,
@@ -342,7 +792,7 @@ impl Theme {
             },
             title_padding: Padding::block(6.0, 3.0),
             button_icon_scale: ButtonIconSheetId::X16,
-            toolpane_anchoring: ToolPaneAnchoring::LeftTop,
+            toolpane_orientation: Orientation::Vertical,
             toolpane_visibility: Visibility::Expanded,
             toolpane_padding: Padding::block(3.0, 5.0),
             toolpane_group_expanded_gap: 16.0,
@@ -363,32 +813,22 @@ impl Theme {
             background1: Color::new(226, 227, 227, 255),
             background2: Color::new(188, 188, 188, 255),
             background3: Color::GRAY,
-            foreground3: Color::DEAD_CABLE,
+            foreground3: Color::DEADCABLE,
             foreground2: Color::new(100, 100, 100, 255),
             foreground1: Color::new(75, 75, 75, 255),
             foreground: Color::new(40, 40, 40, 255),
-            input: Color::INPUT_LAVENDER,
-            output: Color::OUTPUT_APRICOT,
+            input: Color::INPUTLAVENDER,
+            output: Color::OUTPUTAPRICOT,
             available: Color::new(26, 115, 232, 255),
             interact: Color::new(231, 240, 253, 255),
             active: Color::BLUE,
             error: Color::MAGENTA,
-            destructive: Color::DESTRUCTIVE_RED,
+            destructive: Color::DESTRUCTIVERED,
             special: Color::new(135, 60, 190, 255),
             hyperref: Color::BLUE,
             dead_link: Color::BISQUE,
-            caution: Color::CAUTION_YELLOW,
+            caution: Color::CAUTIONYELLOW,
             blueprints_background: Color::new(250, 250, 255, 255),
-            resistance0: Color::BLACK,
-            resistance1: Color::BROWN,
-            resistance2: Color::RED,
-            resistance3: Color::ORANGE,
-            resistance4: Color::YELLOW,
-            resistance5: Color::GREEN,
-            resistance6: Color::BLUE,
-            resistance7: Color::PURPLE,
-            resistance8: Color::GRAY,
-            resistance9: Color::WHITE,
             ..Default::default()
         }
     }

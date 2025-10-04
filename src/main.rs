@@ -1,9 +1,10 @@
 #![deny(clippy::missing_safety_doc, clippy::undocumented_unsafe_blocks)]
 #![allow(dead_code, reason = "for future use")]
+#![allow(clippy::too_many_arguments, reason = "disputed")]
 
 use crate::{
     config::Config,
-    console::{Console, ConsoleAnchoring, HyperRef, LogType},
+    console::{Console, HyperRef, LogType},
     graph::{GraphList, node::Gate, wire::Elbow},
     icon_sheets::{ButtonIconSheets, NodeIconSheetSets},
     ivec::{AsIVec2, IVec2},
@@ -13,7 +14,7 @@ use crate::{
     toolpane::ToolPane,
 };
 use ivec::Bounds;
-use properties::PropertiesPanel;
+use properties::{DrawPropertySection, PropertiesPanel};
 use raylib::prelude::*;
 use rl_input::Event;
 use std::{
@@ -22,6 +23,7 @@ use std::{
     time::{Duration, Instant},
 };
 use toolpane::ButtonAction;
+use ui::{Anchoring, ExactSizing, Panel, Sizing};
 
 mod config;
 mod console;
@@ -41,14 +43,18 @@ pub const GRID_SIZE: u8 = 8;
 
 fn main() {
     let mut console = Console::new(
+        Panel::new(
+            "Log",
+            Anchoring::Bottom {
+                h: Sizing::Exact(ExactSizing {
+                    val: 150.0,
+                    min: Some(|_, _, _| todo!()),
+                    max: Some(|_theme, container_size, _content_size| Some(container_size)),
+                }),
+            },
+            |theme| theme.console_padding,
+        ),
         327_680, // 4096 rows with 80 columns
-        Bounds::new(Vector2::new(0.0, 570.0), Vector2::new(1280.0, 720.0)),
-        ConsoleAnchoring {
-            left: true,
-            top: false,
-            right: true,
-            bottom: true,
-        },
     );
 
     let program_icon =
@@ -141,17 +147,32 @@ fn main() {
     )]);
 
     let mut toolpane = ToolPane::new(
+        Panel::new(
+            "",
+            Anchoring::TopLeft {
+                w: Sizing::FitContent,
+                h: Sizing::FitContent,
+            },
+            |theme| theme.toolpane_padding,
+        ),
         Tool::default(),
         Gate::default(),
         Elbow::default(),
-        theme.toolpane_anchoring,
+        theme.toolpane_orientation,
         theme.toolpane_visibility,
         theme.button_icon_scale,
     );
 
-    let properties = PropertiesPanel::new(Bounds::new(
-        Vector2::new(rl.get_screen_width() as f32 - 300.0, 0.0),
-        Vector2::new(rl.get_screen_width() as f32, rl.get_screen_height() as f32),
+    let mut properties = PropertiesPanel::new(Panel::new(
+        "Properties",
+        Anchoring::Right {
+            w: Sizing::Exact(ExactSizing {
+                val: 200.0,
+                min: None,
+                max: None,
+            }),
+        },
+        |theme| theme.properties_padding,
     ));
 
     let mut hovering_console_top = Event::Inactive;
@@ -159,6 +180,35 @@ fn main() {
 
     let mut next_eval_tick = Instant::now();
     let eval_duration = Duration::from_millis(200);
+
+    {
+        let mut container = Bounds::new(
+            Vector2::zero(),
+            rvec2(rl.get_screen_width(), rl.get_screen_height()),
+        );
+        if let Some(new_container) =
+            properties
+                .panel
+                .update_bounds(&theme, &container, Vector2::zero(/* TODO */))
+        {
+            container = new_container;
+        }
+        if let Some(new_container) =
+            toolpane
+                .panel
+                .update_bounds(&theme, &container, toolpane.content_size(&theme))
+        {
+            container = new_container;
+        }
+        if let Some(new_container) =
+            console
+                .panel
+                .update_bounds(&theme, &container, Vector2::zero(/* TODO */))
+        {
+            container = new_container;
+        }
+        _ = container;
+    }
 
     logln!(&mut console, LogType::Success, "initialized");
 
@@ -171,42 +221,14 @@ fn main() {
         let input = binds.get_all(&rl);
 
         if rl.is_window_resized() {
-            let window_width = rl.get_screen_width();
-            let window_height = rl.get_screen_height();
-            if console.anchoring.right {
-                if console.anchoring.left {
-                    console.bounds.max.x = window_width as f32;
-                } else {
-                    let width = console.bounds.max.x - console.bounds.min.x;
-                    console.bounds.min.x = window_width as f32 - width;
-                    console.bounds.max.x = window_width as f32;
-                }
-            }
-            if console.anchoring.bottom {
-                if console.anchoring.top {
-                    console.bounds.max.y = window_width as f32;
-                } else {
-                    let height = console.bounds.max.y - console.bounds.min.y;
-                    console.bounds.min.y = window_height as f32 - height;
-                    console.bounds.max.y = window_height as f32;
-                }
-            }
+            let _window_width = rl.get_screen_width();
+            let _window_height = rl.get_screen_height();
+            todo!("refresh panels")
         }
 
-        if toolpane
-            .bounds(
-                rl.get_screen_width() as f32,
-                (rl.get_screen_height() as f32).min(console.bounds.min.y),
-                &theme,
-            )
-            .contains(input.cursor)
-        {
+        if toolpane.panel.bounds().contains(input.cursor) {
             if input.primary.is_starting() {
-                let bounds = toolpane.bounds(
-                    rl.get_screen_width() as f32,
-                    rl.get_screen_height() as f32,
-                    &theme,
-                );
+                let bounds = toolpane.panel.bounds();
                 let action = toolpane
                     .buttons(Vector2::new(bounds.min.x, bounds.min.y), &theme)
                     .find_map(|(button_rec, button)| {
@@ -237,7 +259,8 @@ fn main() {
                     }
                 }
             }
-        } else if console.bounds.contains(input.cursor) || dragging_console_top.is_active() {
+        } else if console.panel.bounds().contains(input.cursor) || dragging_console_top.is_active()
+        {
             console.bottom_offset = (console.bottom_offset + input.scroll_console as f64).clamp(
                 0.0,
                 console
@@ -247,8 +270,7 @@ fn main() {
                     .saturating_sub(console.displayable_lines(&theme)) as f64,
             );
 
-            let mut x = console.bounds.min.x + theme.console_padding.left;
-            let mut y = console.bounds.min.y + theme.console_padding.top;
+            let Vector2 { mut x, mut y } = console.panel.content_bounds(&theme).min;
             let left = x;
             for (_, text) in console.visible_content(&theme) {
                 let text_size = theme.console_font.measure_text(text);
@@ -410,27 +432,27 @@ fn main() {
             }
         }
 
-        // TODO: does it make more sense to have dedicated inputs for this?
-        if (console.bounds.min.y..console.bounds.min.y + 3.0).contains(&(input.cursor.y)) {
-            hovering_console_top.activate();
-            if input.primary.is_starting() {
-                dragging_console_top.activate();
-            }
-        } else if dragging_console_top.is_inactive() {
-            hovering_console_top.deactivate();
-        }
-        if dragging_console_top.is_active() && input.primary.is_ending() {
-            dragging_console_top.deactivate();
-        }
-        if dragging_console_top.is_active() {
-            console.bounds.min.y = input.cursor.y.clamp(
-                theme.console_padding.top, // arbitrary
-                console.bounds.max.y
-                    - theme.console_padding.vertical()
-                    - theme.console_font.font_size
-                    - 2.0 * theme.console_font.line_spacing,
-            );
-        }
+        // // TODO: does it make more sense to have dedicated inputs for this?
+        // if (console.bounds.min.y..console.bounds.min.y + 3.0).contains(&(input.cursor.y)) {
+        //     hovering_console_top.activate();
+        //     if input.primary.is_starting() {
+        //         dragging_console_top.activate();
+        //     }
+        // } else if dragging_console_top.is_inactive() {
+        //     hovering_console_top.deactivate();
+        // }
+        // if dragging_console_top.is_active() && input.primary.is_ending() {
+        //     dragging_console_top.deactivate();
+        // }
+        // if dragging_console_top.is_active() {
+        //     console.bounds.min.y = input.cursor.y.clamp(
+        //         theme.console_padding.top, // arbitrary
+        //         console.bounds.max.y
+        //             - theme.console_padding.vertical()
+        //             - theme.console_font.font_size
+        //             - 2.0 * theme.console_font.line_spacing,
+        //     );
+        // }
 
         if hovering_console_top == Event::Starting {
             rl.set_mouse_cursor(MouseCursor::MOUSE_CURSOR_RESIZE_NS);
@@ -445,6 +467,13 @@ fn main() {
                 next_eval_tick = now + eval_duration;
             }
         }
+
+        // properties.tick(
+        //     &mut rl,
+        //     &thread,
+        //     &theme,
+        //     [/*&mut toolpane.tool, &mut toolpane.gate*/] as [&mut dyn PropertySection; _],
+        // );
 
         // Draw
 
@@ -461,21 +490,16 @@ fn main() {
 
         // toolpane
         {
-            let container_width = d.get_screen_width() as f32;
-            let container_height = d.get_screen_height() as f32;
-            toolpane.draw(
-                &mut d,
-                container_width,
-                container_height,
-                &input,
-                &theme,
-                &button_icon_sheets,
-            );
+            toolpane.draw(&mut d, &input, &theme, &button_icon_sheets);
         }
 
         // properties
         {
-            properties.draw(&mut d, &theme);
+            properties.draw(
+                &mut d,
+                &theme,
+                [/*&toolpane.tool, &toolpane.gate*/] as [&dyn DrawPropertySection<_>; _],
+            );
         }
 
         // console
