@@ -23,10 +23,10 @@ impl std::str::FromStr for WireId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum Elbow {
-    #[default]
     Horizontal,
     DiagonalStart,
     Vertical,
+    #[default]
     DiagonalEnd,
 }
 

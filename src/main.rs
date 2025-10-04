@@ -1,6 +1,5 @@
 #![deny(clippy::missing_safety_doc, clippy::undocumented_unsafe_blocks)]
 #![allow(dead_code, reason = "for future use")]
-#![allow(clippy::too_many_arguments, reason = "disputed")]
 
 use crate::{
     config::Config,
@@ -54,7 +53,7 @@ fn main() {
             },
             |theme| theme.console_padding,
         ),
-        327_680, // 4096 rows with 80 columns
+        4096 * 80,
     );
 
     let program_icon =

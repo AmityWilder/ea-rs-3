@@ -502,11 +502,10 @@ impl ToolPane {
                     ButtonAction::Settings => false,
                 };
                 if let Some(icon) = button.icon {
-                    button_icon_sheets.draw(
-                        d,
-                        self.scale,
+                    d.draw_texture_pro(
+                        &button_icon_sheets[self.scale],
+                        icon.icon_cell_irec(self.scale.icon_width()).as_rec(),
                         button_rec,
-                        icon,
                         Vector2::zero(),
                         0.0,
                         match (is_selected, is_hovered) {

@@ -150,7 +150,7 @@ impl IRect {
         Self { x, y, w, h }
     }
 
-    pub const fn as_rect(&self) -> Rectangle {
+    pub const fn as_rec(&self) -> Rectangle {
         Rectangle {
             x: self.x as f32,
             y: self.y as f32,
