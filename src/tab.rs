@@ -2,6 +2,7 @@ use crate::{
     GRID_SIZE, IVec2, Theme,
     graph::{
         Graph,
+        node::GateNtd,
         wire::{Flow, Wire},
     },
     icon_sheets::{NodeIconSheetId, NodeIconSheetSetId, NodeIconSheetSets},
@@ -312,18 +313,55 @@ impl EditorTab {
                     theme.foreground
                 };
                 if let Some((scale, icon_width)) = scale_and_width {
+                    let src_rec = node
+                        .gate_ntd()
+                        .as_gate()
+                        .id()
+                        .icon_cell_irec(icon_width)
+                        .as_rec();
+                    d.draw_texture_pro(
+                        &node_icon_sheets[scale][NodeIconSheetId::Background],
+                        src_rec,
+                        rec,
+                        Vector2::zero(),
+                        0.0,
+                        theme.background,
+                    );
                     d.draw_texture_pro(
                         &node_icon_sheets[scale][NodeIconSheetId::Basic],
-                        node.gate_ntd()
-                            .as_gate()
-                            .id()
-                            .icon_cell_irec(icon_width)
-                            .as_rec(),
+                        src_rec,
                         rec,
                         Vector2::zero(),
                         0.0,
                         color,
                     );
+                    if let Some(color) = match *node.gate_ntd() {
+                        GateNtd::Or
+                        | GateNtd::And
+                        | GateNtd::Nor
+                        | GateNtd::Xor
+                        | GateNtd::Battery
+                        | GateNtd::Delay { .. } => None,
+                        GateNtd::Resistor { resistance: n } | GateNtd::Led { color: n } => Some(
+                            theme
+                                .resistance
+                                .get(n as usize)
+                                .copied()
+                                .expect("gate should never contain invalid NT data"),
+                        ),
+                        GateNtd::Capacitor { capacity, stored } => {
+                            Some(theme.active.alpha(stored as f32 / capacity as f32))
+                        }
+                    } {
+                        d.draw_texture_pro(
+                            &node_icon_sheets[scale][NodeIconSheetId::Ntd],
+                            src_rec,
+                            rec,
+                            Vector2::zero(),
+                            0.0,
+                            color,
+                        );
+                    }
                 } else {
                     d.draw_rectangle_rec(rec, color);
                 }
