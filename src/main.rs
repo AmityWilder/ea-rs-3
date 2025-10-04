@@ -227,7 +227,7 @@ fn main() {
 
         if toolpane.panel.bounds().contains(input.cursor) {
             if input.primary.is_starting() {
-                let bounds = toolpane.panel.bounds();
+                let bounds = toolpane.panel.content_bounds(&theme);
                 let action = toolpane
                     .buttons(Vector2::new(bounds.min.x, bounds.min.y), &theme)
                     .find_map(|(button_rec, button)| {

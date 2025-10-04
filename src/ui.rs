@@ -360,25 +360,8 @@ impl Panel {
         self.bounds.pad(&(self.padding)(theme))
     }
 
-    pub fn tick<T, F>(
-        &mut self,
-        rl: &mut RaylibHandle,
-        thread: &RaylibThread,
-        theme: &Theme,
-        input: &Inputs,
-        content: F,
-    ) -> T
-    where
-        F: FnOnce(&mut RaylibHandle, &RaylibThread, Bounds, &Theme, &Inputs) -> T,
-    {
-        // todo: handle resizing unanchored bounds
-        content(
-            rl,
-            thread,
-            self.bounds.pad(&(self.padding)(theme)),
-            theme,
-            input,
-        )
+    pub fn tick_resize(&mut self, _rl: &mut RaylibHandle, _theme: &Theme, _input: &Inputs) {
+        // TODO
     }
 
     pub fn draw<T, D, F>(&self, d: &mut D, theme: &Theme, content: F) -> T

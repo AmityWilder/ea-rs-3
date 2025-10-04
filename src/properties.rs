@@ -78,33 +78,27 @@ impl PropertiesPanel {
         rl: &'a mut RaylibHandle,
         thread: &'a RaylibThread,
         theme: &Theme,
-        inputs: &Inputs,
+        input: &Inputs,
         sections: I,
     ) where
         I: IntoIterator<Item = &'a mut dyn PropertySection>,
     {
-        self.panel.tick(
-            rl,
-            thread,
-            theme,
-            inputs,
-            |rl, thread, bounds, theme, _inputs| {
-                let mut y = bounds.min.y;
-                for section in sections {
-                    y += theme.console_font.line_height() * section.title().lines().count() as f32;
-                    let height = section.content_height(theme);
-                    section.tick(
-                        rl,
-                        thread,
-                        Bounds::new(
-                            Vector2::new(bounds.max.x, y),
-                            Vector2::new(bounds.min.x, y + height),
-                        ),
-                        theme,
-                    );
-                }
-            },
-        );
+        self.panel.tick_resize(rl, theme, input);
+        let bounds = self.panel.content_bounds(theme);
+        let mut y = bounds.min.y;
+        for section in sections {
+            y += theme.console_font.line_height() * section.title().lines().count() as f32;
+            let height = section.content_height(theme);
+            section.tick(
+                rl,
+                thread,
+                Bounds::new(
+                    Vector2::new(bounds.max.x, y),
+                    Vector2::new(bounds.min.x, y + height),
+                ),
+                theme,
+            );
+        }
     }
 
     pub fn draw<'a, D, I>(&self, d: &'a mut D, theme: &Theme, sections: I)
