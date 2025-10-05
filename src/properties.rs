@@ -78,7 +78,7 @@ impl PropertiesPanel {
         rl: &'a mut RaylibHandle,
         thread: &'a RaylibThread,
         theme: &Theme,
-        input: &Inputs,
+        _input: &Inputs,
         sections: I,
     ) where
         I: IntoIterator<Item = &'a mut dyn PropertySection>,

@@ -10,6 +10,7 @@ use crate::{
     ivec::{AsIVec2, Bounds},
     tool::{EditDragging, Tool},
     toolpane::ToolPane,
+    ui::Panel,
 };
 use raylib::prelude::*;
 use std::sync::{RwLock, Weak};
@@ -18,7 +19,6 @@ use std::sync::{RwLock, Weak};
 pub struct EditorTab {
     camera_target: Vector2,
     zoom_exp: f32,
-    bounds: Bounds,
     grid: RenderTexture2D,
     dirty: bool,
     pub graph: Weak<RwLock<Graph>>,
@@ -28,18 +28,14 @@ impl EditorTab {
     pub fn new(
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
-        bounds: Bounds,
+        width: u32,
+        height: u32,
         graph: Weak<RwLock<Graph>>,
     ) -> Result<Self, raylib::error::Error> {
-        let grid = rl.load_render_texture(
-            thread,
-            u32::try_from((bounds.max.x - bounds.min.x).ceil() as i32).unwrap(),
-            u32::try_from((bounds.max.y - bounds.min.y).ceil() as i32).unwrap(),
-        )?;
+        let grid = rl.load_render_texture(thread, width, height)?;
         Ok(Self {
             camera_target: Vector2::zero(),
             zoom_exp: 0.0,
-            bounds,
             grid,
             dirty: true,
             graph,
@@ -90,36 +86,38 @@ impl EditorTab {
         }
     }
 
-    pub const fn bounds(&self) -> &Bounds {
-        &self.bounds
-    }
-
-    pub fn update_bounds(
+    pub fn resize(
         &mut self,
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
-        value: Bounds,
+        new_width: i32,
+        new_height: i32,
     ) -> Result<(), raylib::error::Error> {
-        if self.bounds != value {
-            self.bounds = value;
+        if new_width != self.grid.width() || new_height != self.grid.height() {
             self.grid = rl.load_render_texture(
                 thread,
-                u32::try_from((value.max.x - value.min.x).ceil() as i32).unwrap(),
-                u32::try_from((value.max.y - value.min.y).ceil() as i32).unwrap(),
+                new_width.try_into().unwrap(),
+                new_height.try_into().unwrap(),
             )?;
             self.dirty = true;
         }
         Ok(())
     }
 
-    pub fn refresh_grid(&mut self, rl: &mut RaylibHandle, thread: &RaylibThread, theme: &Theme) {
+    pub fn refresh_grid(
+        &mut self,
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
+        theme: &Theme,
+        viewport: &Bounds,
+    ) {
         if self.dirty {
             self.dirty = false;
 
             let camera = self.camera();
 
-            let mut start = IVec2::from_vec2(rl.get_screen_to_world2D(self.bounds.min, camera));
-            let mut end = IVec2::from_vec2(rl.get_screen_to_world2D(self.bounds.max, camera));
+            let mut start = IVec2::from_vec2(rl.get_screen_to_world2D(viewport.min, camera));
+            let mut end = IVec2::from_vec2(rl.get_screen_to_world2D(viewport.max, camera));
 
             start = start.snap(GRID_SIZE.into());
             start.x -= i32::from(GRID_SIZE);
@@ -167,6 +165,7 @@ impl EditorTab {
     pub fn draw<D: RaylibDraw>(
         &self,
         d: &mut D,
+        bounds: &Bounds,
         theme: &Theme,
         input: &Inputs,
         toolpane: &ToolPane,
@@ -177,7 +176,7 @@ impl EditorTab {
             y,
             width,
             height,
-        } = Rectangle::from(*self.bounds());
+        } = Rectangle::from(*bounds);
         let mut d = d.begin_scissor_mode(x as i32, y as i32, width as i32, height as i32);
         d.draw_texture_pro(
             self.grid_tex(),
@@ -417,29 +416,12 @@ pub enum Tab {
     Editor(EditorTab),
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct TabList {
+    panel: Panel,
     tabs: Vec<Tab>,
     /// ignore if `tabs` is empty
     focused: usize,
-}
-
-impl<T: Into<Vec<Tab>>> From<T> for TabList {
-    fn from(value: T) -> Self {
-        Self {
-            tabs: value.into(),
-            focused: 0,
-        }
-    }
-}
-
-impl FromIterator<Tab> for TabList {
-    fn from_iter<T: IntoIterator<Item = Tab>>(iter: T) -> Self {
-        Self {
-            tabs: Vec::from_iter(iter),
-            focused: 0,
-        }
-    }
 }
 
 impl Extend<Tab> for TabList {
@@ -484,11 +466,47 @@ impl<'a> IntoIterator for &'a mut TabList {
 }
 
 impl TabList {
-    pub const fn new() -> Self {
+    pub const fn new(panel: Panel) -> Self {
         Self {
+            panel,
             tabs: Vec::new(),
             focused: 0,
         }
+    }
+
+    pub fn with_tabs<I>(panel: Panel, tabs: I) -> Self
+    where
+        I: IntoIterator<Item = Tab>,
+    {
+        Self {
+            panel,
+            tabs: Vec::from_iter(tabs),
+            focused: 0,
+        }
+    }
+
+    pub const fn panel(&self) -> &Panel {
+        &self.panel
+    }
+
+    pub fn update_bounds(
+        &mut self,
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
+        theme: &Theme,
+        container: &Bounds,
+    ) -> Result<Option<Bounds>, raylib::error::Error> {
+        let res = self
+            .panel
+            .update_bounds(theme, container, Vector2::zero(/* todo */));
+        let new_width = self.panel.bounds().width().ceil() as i32;
+        let new_height = self.panel.bounds().height().ceil() as i32;
+        for tab in &mut self.tabs {
+            match tab {
+                Tab::Editor(tab) => tab.resize(rl, thread, new_width, new_height)?,
+            }
+        }
+        Ok(res)
     }
 
     pub const fn len(&self) -> usize {

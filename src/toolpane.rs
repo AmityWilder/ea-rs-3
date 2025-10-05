@@ -6,7 +6,7 @@ use crate::{
     },
     icon_sheets::{ButtonIconId, ButtonIconSheetId, ButtonIconSheets},
     input::Inputs,
-    ivec::{Bounds, IVec2},
+    ivec::Bounds,
     logln,
     rich_text::ColorRef,
     theme::Theme,
@@ -46,51 +46,6 @@ impl ButtonGroup {
             Visibility::Collapsed => self.buttons.len(),
             Visibility::Hidden => 0,
         }
-    }
-
-    pub fn positions(
-        &self,
-        icon_width: i32,
-        gap: i32,
-        visibility: Visibility,
-        orientation: Orientation,
-    ) -> impl Iterator<Item = (IVec2, &Button)> {
-        let chunk_size = match visibility {
-            Visibility::Expanded => 3,
-            Visibility::Collapsed => 1,
-            Visibility::Hidden => 1,
-        };
-        match visibility {
-            Visibility::Expanded | Visibility::Collapsed => self.buttons.as_slice(),
-            Visibility::Hidden => [].as_slice(),
-        }
-        .chunks(chunk_size)
-        .enumerate()
-        .flat_map(move |(row, seg)| {
-            seg.iter().enumerate().map(move |(col, button)| {
-                let col = i32::try_from(if self.rev_rows {
-                    seg.len() - 1 - col
-                } else {
-                    col
-                })
-                .unwrap();
-                let row = i32::try_from(row).unwrap();
-                let chunk_size = i32::try_from(chunk_size).unwrap();
-                let n = i32::try_from(seg.len()).unwrap();
-                let across = col + (chunk_size - n) / 2;
-                let (x, y) = match orientation {
-                    Orientation::Horizontal => (row, across),
-                    Orientation::Vertical => (across, row),
-                };
-                (
-                    IVec2::new(
-                        x * icon_width * (1 + gap) - gap,
-                        y * icon_width * (1 + gap) - gap,
-                    ),
-                    button,
-                )
-            })
-        })
     }
 }
 
@@ -413,68 +368,86 @@ impl ToolPane {
             Visibility::Collapsed => theme.toolpane_group_collapsed_gap,
             Visibility::Hidden => 0.0,
         };
-        let (mut along, padding) = match orientation {
-            Orientation::Horizontal => (
-                position.x,
-                Vector2::new(theme.toolpane_padding.top, theme.toolpane_padding.right),
-            ),
-            Orientation::Vertical => (
-                position.y,
-                Vector2::new(theme.toolpane_padding.left, theme.toolpane_padding.top),
-            ),
-        };
-        self.button_groups
-            .iter()
-            .flat_map(move |group| {
-                let it = std::iter::repeat(match orientation {
-                    Orientation::Horizontal => {
-                        (position.x + padding.x + along, position.y + padding.y)
-                    }
-                    Orientation::Vertical => {
-                        (position.x + padding.x, position.y + padding.y + along)
-                    }
+        let button_gap = theme.toolpane_button_gap;
+        let mut along = 0.0;
+        self.button_groups.iter().flat_map(move |group| {
+            let offset = match orientation {
+                Orientation::Horizontal => Vector2::new(along, 0.0),
+                Orientation::Vertical => Vector2::new(0.0, along),
+            };
+            let it = {
+                let chunk_size = match visibility {
+                    Visibility::Expanded => 3,
+                    Visibility::Collapsed => 1,
+                    Visibility::Hidden => 1,
+                };
+                match visibility {
+                    Visibility::Expanded | Visibility::Collapsed => group.buttons.as_slice(),
+                    Visibility::Hidden => [].as_slice(),
+                }
+                .chunks(chunk_size)
+                .enumerate()
+                .flat_map(move |(row, seg)| {
+                    seg.iter().enumerate().map(move |(col, button)| {
+                        let col = if group.rev_rows {
+                            seg.len() - 1 - col // iterator would not run if seg was empty
+                        } else {
+                            col
+                        };
+                        let along = row as f32;
+                        let across = col as f32 + 0.5 * (chunk_size - seg.len()) as f32;
+                        let (x, y) = match orientation {
+                            Orientation::Horizontal => (along, across),
+                            Orientation::Vertical => (across, along),
+                        };
+                        (
+                            Rectangle::new(
+                                position.x
+                                    + offset.x
+                                    + x * icon_width as f32
+                                    + (x - 1.0).max(0.0) * button_gap,
+                                position.y
+                                    + offset.y
+                                    + y * icon_width as f32
+                                    + (y - 1.0).max(0.0) * button_gap,
+                                icon_width as f32,
+                                icon_width as f32,
+                            ),
+                            button,
+                        )
+                    })
                 })
-                .zip(group.positions(icon_width, 0, visibility, orientation));
-                along += group.rows(visibility) as f32 * icon_width as f32 + group_gap;
-                it
-            })
-            .map(move |((x, y), (v, btn))| {
-                (
-                    Rectangle::new(
-                        v.x as f32 + x,
-                        v.y as f32 + y,
-                        icon_width as f32,
-                        icon_width as f32,
-                    ),
-                    btn,
-                )
-            })
+            };
+            along += group.rows(visibility) as f32 * icon_width as f32 + group_gap;
+            it
+        })
     }
 
     pub fn content_size(&self, theme: &Theme) -> Vector2 {
-        let thickness = ((self.scale.icon_width() as f32 + theme.toolpane_button_gap)
-            * match self.visibility {
-                Visibility::Expanded => 3.0,
-                Visibility::Collapsed => 1.0,
-                Visibility::Hidden => 0.0,
-            }
-            - theme.toolpane_button_gap)
-            .max(0.0);
-        let length = {
-            let group_gap = match self.visibility {
-                Visibility::Expanded => theme.toolpane_group_expanded_gap,
-                Visibility::Collapsed => theme.toolpane_group_collapsed_gap,
-                Visibility::Hidden => 0.0,
-            };
-            self.scale.icon_width() as f32
-                * self
-                    .button_groups
-                    .iter()
-                    .map(|g| g.rows(self.visibility) as f32)
-                    .sum::<f32>()
-                + group_gap * (self.button_groups.len() as f32 - 1.0)
-                + theme.toolpane_padding.vertical()
+        let cols = match self.visibility {
+            Visibility::Expanded => 3,
+            Visibility::Collapsed => 1,
+            Visibility::Hidden => 0,
         };
+        let rows = self
+            .button_groups
+            .iter()
+            .map(|g| g.rows(self.visibility))
+            .sum::<usize>();
+        let groups = self.button_groups.len();
+        let button_width = usize::try_from(self.scale.icon_width()).unwrap();
+        let group_gap = match self.visibility {
+            Visibility::Expanded => theme.toolpane_group_expanded_gap,
+            Visibility::Collapsed => theme.toolpane_group_collapsed_gap,
+            Visibility::Hidden => 0.0,
+        };
+        let button_gap = theme.toolpane_button_gap;
+
+        let thickness = (cols * button_width) as f32 + cols.saturating_sub(1) as f32 * button_gap;
+        let length = (rows * button_width) as f32
+            + rows.saturating_sub(1) as f32 * button_gap
+            + groups.saturating_sub(1) as f32 * group_gap;
+
         match self.orientation {
             Orientation::Horizontal => Vector2::new(length, thickness),
             Orientation::Vertical => Vector2::new(thickness, length),

@@ -11,11 +11,11 @@ use crate::{
     theme::Theme,
     tool::{EditDragging, Tool},
     toolpane::ToolPane,
+    ui::{NcSizing, Padding},
 };
 use ivec::Bounds;
 use properties::{DrawPropertySection, PropertiesPanel};
 use raylib::prelude::*;
-use rl_input::Event;
 use std::{
     io::Write,
     sync::Arc,
@@ -141,22 +141,28 @@ fn main() {
 
     let mut graphs = GraphList::new();
 
-    let mut tabs = TabList::from([Tab::Editor(
-        EditorTab::new(
-            &mut rl,
-            &thread,
-            Bounds::new(Vector2::zero(), Vector2::new(1280.0, 720.0)),
-            Arc::downgrade(graphs.create_graph()),
-        )
-        .unwrap(),
-    )]);
+    let mut tabs = TabList::with_tabs(
+        Panel::new("Editor", Anchoring::Fill, |_| Padding::amount(0.0)),
+        [Tab::Editor(
+            EditorTab::new(
+                &mut rl,
+                &thread,
+                1280,
+                720,
+                Arc::downgrade(graphs.create_graph()),
+            )
+            .unwrap(),
+        )],
+    );
 
     let mut toolpane = ToolPane::new(
         Panel::new(
             "",
-            Anchoring::TopLeft {
-                w: Sizing::FitContent,
-                h: Sizing::FitContent,
+            Anchoring::Floating {
+                x: 3.0,
+                y: 3.0,
+                w: NcSizing::FitContent,
+                h: NcSizing::FitContent,
             },
             |theme| theme.toolpane_padding,
         ),
@@ -180,17 +186,19 @@ fn main() {
         |theme| theme.properties_padding,
     ));
 
-    let mut hovering_console_top = Event::Inactive;
-    let mut dragging_console_top = Event::Inactive;
-
     let mut next_eval_tick = Instant::now();
     let eval_duration = Duration::from_millis(200);
 
+    // initialize bounds
     {
         let mut container = Bounds::new(
             Vector2::zero(),
             rvec2(rl.get_screen_width(), rl.get_screen_height()),
         );
+
+        tabs.update_bounds(&mut rl, &thread, &theme, &container)
+            .unwrap();
+
         if let Some(new_container) =
             properties
                 .panel
@@ -198,6 +206,7 @@ fn main() {
         {
             container = new_container;
         }
+
         if let Some(new_container) =
             toolpane
                 .panel
@@ -205,6 +214,7 @@ fn main() {
         {
             container = new_container;
         }
+
         if let Some(new_container) =
             console
                 .panel
@@ -212,256 +222,301 @@ fn main() {
         {
             container = new_container;
         }
+
         _ = container;
     }
+
+    let mut focused_panel;
 
     logln!(&mut console, LogType::Success, "initialized");
 
     while !rl.window_should_close() {
         // Tick
 
-        hovering_console_top.step();
-        dragging_console_top.step();
-
         let input = binds.get_all(&rl);
 
         if rl.is_window_resized() {
-            let _window_width = rl.get_screen_width();
-            let _window_height = rl.get_screen_height();
-            todo!("refresh panels")
+            let window_width = rl.get_screen_width();
+            let window_height = rl.get_screen_height();
+            tabs.update_bounds(
+                &mut rl,
+                &thread,
+                &theme,
+                &Bounds::new(Vector2::zero(), rvec2(window_width, window_height)),
+            )
+            .unwrap();
+            // TODO: refresh bounds on other panels
         }
 
-        if toolpane.panel.bounds().contains(input.cursor) {
-            if input.primary.is_starting() {
-                let bounds = toolpane.panel.content_bounds(&theme);
-                let action = toolpane
-                    .buttons(Vector2::new(bounds.min.x, bounds.min.y), &theme)
-                    .find_map(|(button_rec, button)| {
-                        Bounds::from(button_rec)
-                            .contains(input.cursor)
-                            .then_some(button.action)
-                    });
-                if let Some(action) = action {
-                    match action {
-                        ButtonAction::SetTool(tool_id) => {
-                            toolpane.set_tool(tool_id, &mut console);
-                        }
-                        ButtonAction::SetGate(gate_id) => {
-                            toolpane.set_gate(gate_id, &mut console);
-                        }
-                        ButtonAction::SetNtd(data) => {
-                            toolpane.set_ntd(data, &mut console);
-                        }
-                        ButtonAction::Blueprints => {
-                            // TODO
-                        }
-                        ButtonAction::Clipboard => {
-                            // TODO
-                        }
-                        ButtonAction::Settings => {
-                            // TODO
-                        }
-                    }
-                }
-            }
-        } else if console.panel.bounds().contains(input.cursor) || dragging_console_top.is_active()
         {
-            console.bottom_offset = (console.bottom_offset + input.scroll_console as f64).clamp(
-                0.0,
-                console
-                    .content_str()
-                    .lines()
-                    .count()
-                    .saturating_sub(console.displayable_lines(&theme)) as f64,
+            // tabs only changes when window does, for now
+
+            let toolpane_content_size = toolpane.content_size(&theme);
+            let panels = [
+                (&mut properties.panel, Vector2::zero(/* TODO */)),
+                (&mut console.panel, Vector2::zero(/* TODO */)),
+                (&mut toolpane.panel, toolpane_content_size),
+            ];
+            let mut container = Bounds::new(
+                Vector2::zero(),
+                rvec2(rl.get_screen_width(), rl.get_screen_height()),
             );
+            for (panel, content_size) in panels {
+                panel.tick_resize(&theme, &input, &container, content_size);
 
-            let Vector2 { mut x, mut y } = console.panel.content_bounds(&theme).min;
-            let left = x;
-            for (_, text) in console.visible_content(&theme) {
-                let text_size = theme.console_font.measure_text(text);
-                if Rectangle::new(x, y, text_size.x, text_size.y)
-                    .check_collision_point_rec(input.cursor)
-                    && let Ok(hyper_ref) = text.parse::<HyperRef>()
-                {
-                    match hyper_ref {
-                        HyperRef::Gate(_gate_ref) => {
-                            // TODO
-                        }
-
-                        HyperRef::Tool(_tool_ref) => {
-                            // TODO
-                        }
-
-                        HyperRef::Position(_position_ref) => {
-                            // TODO
-                        }
-
-                        HyperRef::Graph(graph_ref) => {
-                            graph_ref.deref_with(&graphs, |_g, _borrow| {
-                                // TODO
-                            });
-                        }
-
-                        HyperRef::Node(node_ref) => {
-                            node_ref.deref_with(&graphs, |_g, _borrow, _node| {
-                                // TODO
-                            });
-                        }
-
-                        HyperRef::Wire(wire_ref) => {
-                            wire_ref.deref_with(&graphs, |_g, _borrow, _wire| {
-                                // TODO
-                            });
-                        }
-                    }
-                }
-                if text.ends_with('\n') {
-                    y += theme.console_font.line_height();
-                    x = left;
-                } else {
-                    x += theme.console_font.measure_text(text).x;
+                // bounds must update regardless of if *this panel* has been resized
+                if let Some(new_container) = panel.update_bounds(&theme, &container, content_size) {
+                    container = new_container;
                 }
             }
-        } else if let Some(tab) = tabs.focused_tab_mut() {
-            match tab {
-                Tab::Editor(tab) => {
-                    if let Some(gate) = input.gate() {
-                        toolpane.set_gate(gate, &mut console);
-                    }
-                    if let Some(tool) = input.tool() {
-                        toolpane.set_tool(tool, &mut console);
-                    }
+        }
 
-                    if rl.is_window_resized() {
-                        let bounds = Bounds::new(
-                            Vector2::zero(),
-                            rvec2(rl.get_screen_width(), rl.get_screen_height()),
+        focused_panel = [
+            (&toolpane.panel, ("toolpane", 0)),
+            (&properties.panel, ("properties", 0)),
+            (&console.panel, ("console", 0)),
+            (tabs.panel(), ("tabs", 0)),
+        ]
+        .into_iter()
+        .find(|(panel, _)| {
+            panel
+                .bounds()
+                .pad(&Padding::amount(-1.5))
+                .contains(input.cursor)
+        })
+        .map(|(_, id)| id);
+
+        if let Some(id) = focused_panel {
+            match id {
+                ("toolpane", _) => {
+                    if input.primary.is_starting() {
+                        let bounds = toolpane.panel.content_bounds(&theme);
+                        let action = toolpane.buttons(bounds.min, &theme).find_map(
+                            |(button_rec, button)| {
+                                Bounds::from(button_rec)
+                                    .contains(input.cursor)
+                                    .then_some(button.action)
+                            },
                         );
-                        tab.update_bounds(&mut rl, &thread, bounds).unwrap();
+                        if let Some(action) = action {
+                            match action {
+                                ButtonAction::SetTool(tool_id) => {
+                                    toolpane.set_tool(tool_id, &mut console);
+                                }
+                                ButtonAction::SetGate(gate_id) => {
+                                    toolpane.set_gate(gate_id, &mut console);
+                                }
+                                ButtonAction::SetNtd(data) => {
+                                    toolpane.set_ntd(data, &mut console);
+                                }
+                                ButtonAction::Blueprints => {
+                                    // TODO
+                                }
+                                ButtonAction::Clipboard => {
+                                    // TODO
+                                }
+                                ButtonAction::Settings => {
+                                    // TODO
+                                }
+                            }
+                        }
                     }
+                }
 
-                    tab.zoom_and_pan(input.cursor, input.pan, input.zoom, 5.0);
+                ("properties", _) => {
+                    // TODO
+                }
 
-                    if let Some(graph) = tab.graph.upgrade()
-                        // if graph is being borrowed, don't edit it! it might be saving!
-                        && let Ok(mut graph) = graph.try_write()
-                    {
-                        let pos = tab
-                            .screen_to_world(input.cursor)
-                            .as_ivec2()
-                            .snap(GRID_SIZE.into());
+                ("console", _) => {
+                    console.bottom_offset = (console.bottom_offset + input.scroll_console as f64)
+                        .clamp(
+                            0.0,
+                            console
+                                .content_str()
+                                .lines()
+                                .count()
+                                .saturating_sub(console.displayable_lines(&theme))
+                                as f64,
+                        );
 
-                        match &mut toolpane.tool {
-                            Tool::Create { current_node } => {
-                                if input.primary.is_starting() {
-                                    if let Some(&id) = graph.find_node_at(pos) {
-                                        // existing node
-                                        if let Some(current_node) = *current_node {
-                                            graph.create_wire(
-                                                toolpane.elbow,
-                                                current_node,
-                                                id,
-                                                &mut console,
-                                            );
-                                        }
-                                        *current_node = Some(id);
-                                    } else {
-                                        // new node
-                                        let gate = toolpane.gate;
-                                        let new_node =
-                                            graph.create_node(gate, pos, &mut console).expect(
-                                                "this branch implies the position is available",
-                                            );
-                                        let new_node_id = *new_node.id();
-                                        if let Some(current_node) = current_node.as_ref() {
-                                            graph.create_wire(
-                                                toolpane.elbow,
-                                                *current_node,
-                                                new_node_id,
-                                                &mut console,
-                                            );
-                                        }
-                                        *current_node = Some(new_node_id);
-                                    }
+                    let Vector2 { mut x, mut y } = console.panel.content_bounds(&theme).min;
+                    let left = x;
+                    for (_, text) in console.visible_content(&theme) {
+                        let text_size = theme.console_font.measure_text(text);
+                        if Rectangle::new(x, y, text_size.x, text_size.y)
+                            .check_collision_point_rec(input.cursor)
+                            && let Ok(hyper_ref) = text.parse::<HyperRef>()
+                        {
+                            match hyper_ref {
+                                HyperRef::Gate(_gate_ref) => {
+                                    // TODO
                                 }
-                                if input.secondary.is_starting() {
-                                    *current_node = None;
-                                }
-                            }
 
-                            Tool::Erase {} => {
-                                if input.primary.is_starting()
-                                    && let Some(&id) = graph.find_node_at(pos)
-                                {
-                                    graph.destroy_node(&id, false, &mut console).expect("cannot reach this branch if graph did not contain the node");
+                                HyperRef::Tool(_tool_ref) => {
+                                    // TODO
                                 }
-                            }
 
-                            Tool::Edit { target } => {
-                                if input.primary.is_starting()
-                                    && let Some(&id) = graph.find_node_at(pos)
-                                {
-                                    *target = Some(EditDragging {
-                                        temp_pos: Vector2::default(),
-                                        id,
+                                HyperRef::Position(_position_ref) => {
+                                    // TODO
+                                }
+
+                                HyperRef::Graph(graph_ref) => {
+                                    graph_ref.deref_with(&graphs, |_g, _borrow| {
+                                        // TODO
                                     });
                                 }
-                                if input.primary.is_ending()
-                                    && let Some(EditDragging { temp_pos: _, id }) = target.take()
+
+                                HyperRef::Node(node_ref) => {
+                                    node_ref.deref_with(&graphs, |_g, _borrow, _node| {
+                                        // TODO
+                                    });
+                                }
+
+                                HyperRef::Wire(wire_ref) => {
+                                    wire_ref.deref_with(&graphs, |_g, _borrow, _wire| {
+                                        // TODO
+                                    });
+                                }
+                            }
+                        }
+                        if text.ends_with('\n') {
+                            y += theme.console_font.line_height();
+                            x = left;
+                        } else {
+                            x += theme.console_font.measure_text(text).x;
+                        }
+                    }
+                }
+
+                ("tabs", _) => {
+                    if let Some(tab) = tabs.focused_tab_mut() {
+                        match tab {
+                            Tab::Editor(tab) => {
+                                if let Some(gate) = input.gate() {
+                                    toolpane.set_gate(gate, &mut console);
+                                }
+                                if let Some(tool) = input.tool() {
+                                    toolpane.set_tool(tool, &mut console);
+                                }
+
+                                tab.zoom_and_pan(input.cursor, input.pan, input.zoom, 5.0);
+
+                                if let Some(graph) = tab.graph.upgrade()
+                        // if graph is being borrowed, don't edit it! it might be saving!
+                        && let Ok(mut graph) = graph.try_write()
                                 {
-                                    let new_position = tab
+                                    let pos = tab
                                         .screen_to_world(input.cursor)
                                         .as_ivec2()
                                         .snap(GRID_SIZE.into());
-                                    graph
-                                        .translate_node(&id, new_position, &mut console)
-                                        .expect("edit mode target node should be valid");
-                                }
 
-                                if let Some(EditDragging { temp_pos, id: _ }) = target.as_mut() {
-                                    *temp_pos = tab.screen_to_world(input.cursor)
-                                        - rvec2(GRID_SIZE / 2, GRID_SIZE / 2);
+                                    match &mut toolpane.tool {
+                                        Tool::Create { current_node } => {
+                                            if input.primary.is_starting() {
+                                                if let Some(&id) = graph.find_node_at(pos) {
+                                                    // existing node
+                                                    if let Some(current_node) = *current_node {
+                                                        graph.create_wire(
+                                                            toolpane.elbow,
+                                                            current_node,
+                                                            id,
+                                                            &mut console,
+                                                        );
+                                                    }
+                                                    *current_node = Some(id);
+                                                } else {
+                                                    // new node
+                                                    let gate = toolpane.gate;
+                                                    let new_node =
+                                            graph.create_node(gate, pos, &mut console).expect(
+                                                "this branch implies the position is available",
+                                            );
+                                                    let new_node_id = *new_node.id();
+                                                    if let Some(current_node) =
+                                                        current_node.as_ref()
+                                                    {
+                                                        graph.create_wire(
+                                                            toolpane.elbow,
+                                                            *current_node,
+                                                            new_node_id,
+                                                            &mut console,
+                                                        );
+                                                    }
+                                                    *current_node = Some(new_node_id);
+                                                }
+                                            }
+                                            if input.secondary.is_starting() {
+                                                *current_node = None;
+                                            }
+                                        }
+
+                                        Tool::Erase {} => {
+                                            if input.primary.is_starting()
+                                                && let Some(&id) = graph.find_node_at(pos)
+                                            {
+                                                graph.destroy_node(&id, false, &mut console).expect("cannot reach this branch if graph did not contain the node");
+                                            }
+                                        }
+
+                                        Tool::Edit { target } => {
+                                            if input.primary.is_starting()
+                                                && let Some(&id) = graph.find_node_at(pos)
+                                            {
+                                                *target = Some(EditDragging {
+                                                    temp_pos: Vector2::default(),
+                                                    id,
+                                                });
+                                            }
+                                            if input.primary.is_ending()
+                                                && let Some(EditDragging { temp_pos: _, id }) =
+                                                    target.take()
+                                            {
+                                                let new_position = tab
+                                                    .screen_to_world(input.cursor)
+                                                    .as_ivec2()
+                                                    .snap(GRID_SIZE.into());
+                                                graph
+                                                    .translate_node(&id, new_position, &mut console)
+                                                    .expect(
+                                                        "edit mode target node should be valid",
+                                                    );
+                                            }
+
+                                            if let Some(EditDragging { temp_pos, id: _ }) =
+                                                target.as_mut()
+                                            {
+                                                *temp_pos = tab.screen_to_world(input.cursor)
+                                                    - rvec2(GRID_SIZE / 2, GRID_SIZE / 2);
+                                            }
+                                        }
+
+                                        Tool::Interact {} => {}
+                                    }
                                 }
                             }
-
-                            Tool::Interact {} => {}
                         }
                     }
                 }
+
+                _ => unreachable!(),
             }
         }
 
-        for tab in &mut tabs {
-            match tab {
-                Tab::Editor(tab) => tab.refresh_grid(&mut rl, &thread, &theme),
+        {
+            let viewport = *tabs.panel().bounds();
+            if let Some(focused_tab) = tabs.focused_tab_mut() {
+                match focused_tab {
+                    Tab::Editor(tab) => tab.refresh_grid(&mut rl, &thread, &theme, &viewport),
+                }
             }
         }
-
-        properties.panel.tick_resize(
-            &theme,
-            &input,
-            &Bounds::new(
-                Vector2::zero(),
-                rvec2(rl.get_screen_width(), rl.get_screen_height()),
-            ),
-            Vector2::zero(),
-        );
-
-        console.panel.tick_resize(
-            &theme,
-            &input,
-            &Bounds::new(
-                Vector2::zero(),
-                rvec2(rl.get_screen_width(), rl.get_screen_height()),
-            ),
-            Vector2::zero(),
-        );
 
         rl.set_mouse_cursor(
             [
                 console.panel.hover.as_ref(),
                 properties.panel.hover.as_ref(),
                 toolpane.panel.hover.as_ref(),
+                tabs.panel().hover.as_ref(),
             ]
             .into_iter()
             .flatten()
@@ -497,10 +552,20 @@ fn main() {
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(theme.background);
 
-        for tab in &tabs {
-            match tab {
-                Tab::Editor(tab) => {
-                    tab.draw(&mut d, &theme, &input, &toolpane, &node_icon_sheets);
+        // tabs
+        {
+            if let Some(focused_tab) = tabs.focused_tab() {
+                match focused_tab {
+                    Tab::Editor(tab) => {
+                        tab.draw(
+                            &mut d,
+                            tabs.panel().bounds(),
+                            &theme,
+                            &input,
+                            &toolpane,
+                            &node_icon_sheets,
+                        );
+                    }
                 }
             }
         }
@@ -510,6 +575,11 @@ fn main() {
             toolpane.draw(&mut d, &input, &theme, &button_icon_sheets);
         }
 
+        // console
+        {
+            console.draw(&mut d, &theme, &input, &graphs, &tabs, &toolpane);
+        }
+
         // properties
         {
             properties.draw(
@@ -517,11 +587,6 @@ fn main() {
                 &theme,
                 [/*&toolpane.tool, &toolpane.gate*/] as [&dyn DrawPropertySection<_>; _],
             );
-        }
-
-        // console
-        {
-            console.draw(&mut d, &theme, &input, &graphs, &tabs, &toolpane);
         }
     }
 }

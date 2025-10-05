@@ -83,6 +83,7 @@ impl Sizing {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Anchoring {
+    Fill,
     Left {
         w: Sizing,
     },
@@ -211,6 +212,11 @@ impl Anchoring {
                 ),
                 None,
             ),
+
+            Self::Fill => (
+                *container,
+                Some(Bounds::new(Vector2::zero(), Vector2::zero())),
+            ),
         }
     }
 }
@@ -276,6 +282,10 @@ impl Padding {
 
     pub const fn vertical(&self) -> f32 {
         self.top + self.bottom
+    }
+
+    pub const fn size(&self) -> Vector2 {
+        Vector2::new(self.horizontal(), self.vertical())
     }
 
     #[inline]
@@ -365,15 +375,14 @@ impl Panel {
         content_size: Vector2,
     ) -> Option<Bounds> {
         let padding = (self.padding)(theme);
-        let (bounds, new_container) = self.anchoring.bounds(
-            container,
-            content_size + Vector2::new(padding.horizontal(), padding.vertical()),
-        );
+        let (bounds, new_container) = self
+            .anchoring
+            .bounds(container, content_size + padding.size());
         self.bounds = bounds;
         new_container
     }
 
-    pub fn bounds(&self) -> &Bounds {
+    pub const fn bounds(&self) -> &Bounds {
         &self.bounds
     }
 
@@ -388,7 +397,7 @@ impl Panel {
         input: &Inputs,
         container: &Bounds,
         content_size: Vector2,
-    ) -> Option<Bounds> {
+    ) {
         // TODO: does it make more sense to have dedicated inputs for this?
         if !self.hover.is_some_and(|hover| hover.is_dragging) {
             self.hover = if self
@@ -470,7 +479,11 @@ impl Panel {
                         h: Sizing::Exact(_),
                     } if hovering_top => Some(RectHoverRegion::Top),
 
-                    Anchoring::Floating { .. } => todo!(),
+                    Anchoring::Floating {
+                        w: NcSizing::Exact(_w),
+                        h: NcSizing::Exact(_h),
+                        ..
+                    } => todo!(),
 
                     _ => None,
                 }
@@ -634,9 +647,6 @@ impl Panel {
                     "must be one of these combinations to have begun dragging, and should not be able to mutate either while dragging"
                 ),
             }
-            self.update_bounds(theme, container, content_size)
-        } else {
-            None
         }
     }
 
