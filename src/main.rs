@@ -5,7 +5,6 @@ use crate::{
     config::Config,
     console::{Console, HyperRef, LogType},
     graph::{GraphList, node::Gate, wire::Elbow},
-    icon_sheets::{ButtonIconSheets, NodeIconSheetSets},
     ivec::{AsIVec2, IVec2},
     tab::{EditorTab, Tab, TabList},
     theme::Theme,
@@ -134,10 +133,7 @@ fn main() {
             }
         }
     };
-    theme.reload_fonts(&mut rl, &thread);
-
-    let button_icon_sheets = ButtonIconSheets::load(&mut rl, &thread).unwrap();
-    let node_icon_sheets = NodeIconSheetSets::load(&mut rl, &thread).unwrap();
+    theme.reload_assets(&mut rl, &thread).unwrap();
 
     let mut graphs = GraphList::new();
 
@@ -557,14 +553,7 @@ fn main() {
             if let Some(focused_tab) = tabs.focused_tab() {
                 match focused_tab {
                     Tab::Editor(tab) => {
-                        tab.draw(
-                            &mut d,
-                            tabs.panel().bounds(),
-                            &theme,
-                            &input,
-                            &toolpane,
-                            &node_icon_sheets,
-                        );
+                        tab.draw(&mut d, tabs.panel().bounds(), &theme, &input, &toolpane);
                     }
                 }
             }
@@ -572,7 +561,7 @@ fn main() {
 
         // toolpane
         {
-            toolpane.draw(&mut d, &input, &theme, &button_icon_sheets);
+            toolpane.draw(&mut d, &input, &theme);
         }
 
         // console
@@ -585,7 +574,7 @@ fn main() {
             properties.draw(
                 &mut d,
                 &theme,
-                [/*&toolpane.tool, &toolpane.gate*/] as [&dyn DrawPropertySection<_>; _],
+                [&toolpane.tool, &toolpane.gate] as [&dyn DrawPropertySection<_>; _],
             );
         }
     }

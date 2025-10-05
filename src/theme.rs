@@ -1,5 +1,5 @@
 use crate::{
-    icon_sheets::ButtonIconSheetId,
+    icon_sheets::{ButtonIconSheetId, ButtonIconSheets, NodeIconSheetSet, NodeIconSheetSets},
     ui::{Orientation, Padding, Visibility},
 };
 use raylib::prelude::*;
@@ -339,7 +339,6 @@ impl CustomColors for Color {}
 
 #[derive(Debug, Serialize)]
 pub struct ThemeFont {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<PathBuf>,
     pub font_size: f32,
     pub char_spacing: f32,
@@ -478,7 +477,7 @@ impl AsMut<ffi::Font> for ThemeFont {
 impl RaylibFont for ThemeFont {}
 
 impl ThemeFont {
-    pub fn reload_font(&mut self, rl: &mut RaylibHandle, thread: &RaylibThread) {
+    pub fn reload(&mut self, rl: &mut RaylibHandle, thread: &RaylibThread) {
         self.font = OptionalFont::load(rl, thread, self.path.as_ref());
     }
 
@@ -500,6 +499,255 @@ impl ThemeFont {
             self.char_spacing,
             tint,
         );
+    }
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ThemeButtonIcons {
+    #[serde(rename = "x16")]
+    pub x16_path: Option<PathBuf>,
+    #[serde(rename = "x32")]
+    pub x32_path: Option<PathBuf>,
+    #[serde(skip)]
+    pub sheets: Option<ButtonIconSheets>,
+}
+
+impl std::ops::Deref for ThemeButtonIcons {
+    type Target = ButtonIconSheets;
+
+    fn deref(&self) -> &Self::Target {
+        self.sheets
+            .as_ref()
+            .expect("icons must be reloaded before accessing")
+    }
+}
+
+impl std::ops::DerefMut for ThemeButtonIcons {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.sheets
+            .as_mut()
+            .expect("icons must be reloaded before accessing")
+    }
+}
+
+impl AsRef<ButtonIconSheets> for ThemeButtonIcons {
+    fn as_ref(&self) -> &ButtonIconSheets {
+        self
+    }
+}
+
+impl AsMut<ButtonIconSheets> for ThemeButtonIcons {
+    fn as_mut(&mut self) -> &mut ButtonIconSheets {
+        self
+    }
+}
+
+/// NOTE: [`ThemeButtonIcons::clone`] assigns [`None`] to the [`ThemeButtonIcons::sheets`] field.
+///
+/// Remember to call [`ThemeButtonIcons::reload`] if the clone is going to be used.
+impl Clone for ThemeButtonIcons {
+    fn clone(&self) -> Self {
+        Self {
+            x16_path: self.x16_path.clone(),
+            x32_path: self.x32_path.clone(),
+            sheets: None,
+        }
+    }
+}
+
+impl ThemeButtonIcons {
+    pub fn reload(
+        &mut self,
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
+    ) -> Result<(), raylib::error::Error> {
+        let mut load = |path: Option<&PathBuf>,
+                        default: &[u8]|
+         -> Result<Texture2D, raylib::error::Error> {
+            match path {
+                // SAFETY: ffi::LoadTexture uses the raw OS string anyway, load_texture using a &str just gets in our way
+                Some(path) => rl.load_texture(thread, unsafe {
+                    str::from_utf8_unchecked(path.as_os_str().as_encoded_bytes())
+                }),
+                None => rl
+                    .load_texture_from_image(thread, &Image::load_image_from_mem(".png", default)?),
+            }
+        };
+        self.sheets = Some(ButtonIconSheets {
+            x16: load(
+                self.x16_path.as_ref(),
+                include_bytes!("../assets/icons16x.png"),
+            )?,
+            x32: load(
+                self.x16_path.as_ref(),
+                include_bytes!("../assets/icons32x.png"),
+            )?,
+        });
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ThemeNodeIcons {
+    #[serde(rename = "basic8x")]
+    pub basic8x_path: Option<PathBuf>,
+    #[serde(rename = "background8x")]
+    pub background8x_path: Option<PathBuf>,
+    #[serde(rename = "highlight8x")]
+    pub highlight8x_path: Option<PathBuf>,
+    #[serde(rename = "ntd8x")]
+    pub ntd8x_path: Option<PathBuf>,
+    #[serde(rename = "basic16x")]
+    pub basic16x_path: Option<PathBuf>,
+    #[serde(rename = "background16x")]
+    pub background16x_path: Option<PathBuf>,
+    #[serde(rename = "highlight16x")]
+    pub highlight16x_path: Option<PathBuf>,
+    #[serde(rename = "ntd16x")]
+    pub ntd16x_path: Option<PathBuf>,
+    #[serde(rename = "basic32x")]
+    pub basic32x_path: Option<PathBuf>,
+    #[serde(rename = "background32x")]
+    pub background32x_path: Option<PathBuf>,
+    #[serde(rename = "highlight32x")]
+    pub highlight32x_path: Option<PathBuf>,
+    #[serde(rename = "ntd32x")]
+    pub ntd32x_path: Option<PathBuf>,
+    #[serde(skip)]
+    pub sheetsets: Option<NodeIconSheetSets>,
+}
+
+impl std::ops::Deref for ThemeNodeIcons {
+    type Target = NodeIconSheetSets;
+
+    fn deref(&self) -> &Self::Target {
+        self.sheetsets
+            .as_ref()
+            .expect("icons must be reloaded before accessing")
+    }
+}
+
+impl std::ops::DerefMut for ThemeNodeIcons {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.sheetsets
+            .as_mut()
+            .expect("icons must be reloaded before accessing")
+    }
+}
+
+impl AsRef<NodeIconSheetSets> for ThemeNodeIcons {
+    fn as_ref(&self) -> &NodeIconSheetSets {
+        self
+    }
+}
+
+impl AsMut<NodeIconSheetSets> for ThemeNodeIcons {
+    fn as_mut(&mut self) -> &mut NodeIconSheetSets {
+        self
+    }
+}
+
+/// NOTE: [`ThemeNodeIcons::clone`] assigns [`None`] to the [`ThemeNodeIcons::sheetsets`] field.
+///
+/// Remember to call [`ThemeNodeIcons::reload`] if the clone is going to be used.
+impl Clone for ThemeNodeIcons {
+    fn clone(&self) -> Self {
+        Self {
+            basic8x_path: self.basic8x_path.clone(),
+            background8x_path: self.background8x_path.clone(),
+            highlight8x_path: self.highlight8x_path.clone(),
+            ntd8x_path: self.ntd8x_path.clone(),
+            basic16x_path: self.basic16x_path.clone(),
+            background16x_path: self.background16x_path.clone(),
+            highlight16x_path: self.highlight16x_path.clone(),
+            ntd16x_path: self.ntd16x_path.clone(),
+            basic32x_path: self.basic32x_path.clone(),
+            background32x_path: self.background32x_path.clone(),
+            highlight32x_path: self.highlight32x_path.clone(),
+            ntd32x_path: self.ntd32x_path.clone(),
+            sheetsets: None,
+        }
+    }
+}
+
+impl ThemeNodeIcons {
+    pub fn reload(
+        &mut self,
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
+    ) -> Result<(), raylib::error::Error> {
+        let mut load = |path: &Option<PathBuf>,
+                        default: &[u8]|
+         -> Result<Texture2D, raylib::error::Error> {
+            match path.as_ref() {
+                // SAFETY: ffi::LoadTexture uses the raw OS string anyway, load_texture using a &str just gets in our way
+                Some(path) => rl.load_texture(thread, unsafe {
+                    str::from_utf8_unchecked(path.as_os_str().as_encoded_bytes())
+                }),
+                None => rl
+                    .load_texture_from_image(thread, &Image::load_image_from_mem(".png", default)?),
+            }
+        };
+
+        self.sheetsets = Some(NodeIconSheetSets {
+            x8: NodeIconSheetSet {
+                basic: load(
+                    &self.basic8x_path,
+                    include_bytes!("../assets/nodeicons/nodeIconsBasic8x.png"),
+                )?,
+                background: load(
+                    &self.background8x_path,
+                    include_bytes!("../assets/nodeicons/nodeIconsBackground8x.png"),
+                )?,
+                highlight: load(
+                    &self.highlight8x_path,
+                    include_bytes!("../assets/nodeicons/nodeIconsHighlight8x.png"),
+                )?,
+                ntd: load(
+                    &self.ntd8x_path,
+                    include_bytes!("../assets/nodeicons/nodeIconsNTD8x.png"),
+                )?,
+            },
+            x16: NodeIconSheetSet {
+                basic: load(
+                    &self.basic16x_path,
+                    include_bytes!("../assets/nodeicons/nodeIconsBasic16x.png"),
+                )?,
+                background: load(
+                    &self.background16x_path,
+                    include_bytes!("../assets/nodeicons/nodeIconsBackground16x.png"),
+                )?,
+                highlight: load(
+                    &self.highlight16x_path,
+                    include_bytes!("../assets/nodeicons/nodeIconsHighlight16x.png"),
+                )?,
+                ntd: load(
+                    &self.ntd16x_path,
+                    include_bytes!("../assets/nodeicons/nodeIconsNTD16x.png"),
+                )?,
+            },
+            x32: NodeIconSheetSet {
+                basic: load(
+                    &self.basic32x_path,
+                    include_bytes!("../assets/nodeicons/nodeIconsBasic32x.png"),
+                )?,
+                background: load(
+                    &self.background32x_path,
+                    include_bytes!("../assets/nodeicons/nodeIconsBackground32x.png"),
+                )?,
+                highlight: load(
+                    &self.highlight32x_path,
+                    include_bytes!("../assets/nodeicons/nodeIconsHighlight32x.png"),
+                )?,
+                ntd: load(
+                    &self.ntd32x_path,
+                    include_bytes!("../assets/nodeicons/nodeIconsNTD32x.png"),
+                )?,
+            },
+        });
+        Ok(())
     }
 }
 
@@ -556,6 +804,7 @@ struct ThemeLoader {
     pub resistance9: Option<SerdeColor>,
     pub general_font: Option<ThemeFont>,
     pub title_font: Option<ThemeFont>,
+    pub properties_header_font: Option<ThemeFont>,
     pub console_font: Option<ThemeFont>,
     pub console_padding: Option<Padding>,
     pub title_padding: Option<Padding>,
@@ -567,6 +816,9 @@ struct ThemeLoader {
     pub toolpane_group_collapsed_gap: Option<f32>,
     pub toolpane_button_gap: Option<f32>,
     pub properties_padding: Option<Padding>,
+    pub properties_section_gap: Option<f32>,
+    pub button_icons: Option<ThemeButtonIcons>,
+    pub node_icons: Option<ThemeNodeIcons>,
 }
 
 impl From<ThemeLoader> for Theme {
@@ -609,6 +861,9 @@ impl From<ThemeLoader> for Theme {
             ],
             general_font: value.general_font.unwrap_or(base.general_font),
             title_font: value.title_font.unwrap_or(base.title_font),
+            properties_header_font: value
+                .properties_header_font
+                .unwrap_or(base.properties_header_font),
             console_font: value.console_font.unwrap_or(base.console_font),
             console_padding: value.console_padding.unwrap_or(base.console_padding),
             title_padding: value.title_padding.unwrap_or(base.title_padding),
@@ -630,6 +885,11 @@ impl From<ThemeLoader> for Theme {
                 .toolpane_button_gap
                 .unwrap_or(base.toolpane_button_gap),
             properties_padding: value.properties_padding.unwrap_or(base.properties_padding),
+            properties_section_gap: value
+                .properties_section_gap
+                .unwrap_or(base.properties_section_gap),
+            node_icons: value.node_icons.unwrap_or(base.node_icons),
+            button_icons: value.button_icons.unwrap_or(base.button_icons),
         }
     }
 }
@@ -670,6 +930,7 @@ impl From<Theme> for ThemeLoader {
             resistance9: Some(value.resistance[9].into()),
             general_font: Some(value.general_font),
             title_font: Some(value.title_font),
+            properties_header_font: Some(value.properties_header_font),
             console_font: Some(value.console_font),
             console_padding: Some(value.console_padding),
             title_padding: Some(value.title_padding),
@@ -681,6 +942,9 @@ impl From<Theme> for ThemeLoader {
             toolpane_group_collapsed_gap: Some(value.toolpane_group_collapsed_gap),
             toolpane_button_gap: Some(value.toolpane_button_gap),
             properties_padding: Some(value.properties_padding),
+            properties_section_gap: Some(value.properties_section_gap),
+            node_icons: Some(value.node_icons),
+            button_icons: Some(value.button_icons),
         }
     }
 }
@@ -711,6 +975,7 @@ pub struct Theme {
     pub resistance: [Color; 10],
     pub general_font: ThemeFont,
     pub title_font: ThemeFont,
+    pub properties_header_font: ThemeFont,
     pub console_font: ThemeFont,
     pub console_padding: Padding,
     pub title_padding: Padding,
@@ -723,6 +988,9 @@ pub struct Theme {
     pub toolpane_group_collapsed_gap: f32,
     pub toolpane_button_gap: f32,
     pub properties_padding: Padding,
+    pub properties_section_gap: f32,
+    pub button_icons: ThemeButtonIcons,
+    pub node_icons: ThemeNodeIcons,
 }
 
 impl Default for Theme {
@@ -732,14 +1000,22 @@ impl Default for Theme {
 }
 
 impl Theme {
-    pub fn reload_fonts(&mut self, rl: &mut RaylibHandle, thread: &RaylibThread) {
+    pub fn reload_assets(
+        &mut self,
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
+    ) -> Result<(), raylib::error::Error> {
         for font_item in [
             &mut self.general_font,
             &mut self.title_font,
+            &mut self.properties_header_font,
             &mut self.console_font,
         ] {
-            font_item.reload_font(rl, thread);
+            font_item.reload(rl, thread);
         }
+        self.node_icons.reload(rl, thread)?;
+        self.button_icons.reload(rl, thread)?;
+        Ok(())
     }
 
     pub fn dark_theme() -> Self {
@@ -778,6 +1054,12 @@ impl Theme {
             ],
             general_font: ThemeFont::default(),
             title_font: ThemeFont::default(),
+            properties_header_font: ThemeFont {
+                font_size: 20.0,
+                char_spacing: 2.0,
+                line_spacing: 2.0,
+                ..Default::default()
+            },
             console_font: ThemeFont::default(),
             console_padding: Padding {
                 left: 15.0,
@@ -799,6 +1081,9 @@ impl Theme {
                 right: 5.0,
                 bottom: 5.0,
             },
+            properties_section_gap: 20.0,
+            button_icons: ThemeButtonIcons::default(),
+            node_icons: ThemeNodeIcons::default(),
         }
     }
 
@@ -1048,6 +1333,7 @@ pub enum OptionalFont {
 }
 
 impl OptionalFont {
+    /// Uses default if error occurs
     pub fn load<P>(rl: &mut RaylibHandle, _: &RaylibThread, path: Option<P>) -> Self
     where
         P: AsRef<Path>,

@@ -4,7 +4,7 @@ use crate::{
         node::{Gate, GateId},
         wire::Elbow,
     },
-    icon_sheets::{ButtonIconId, ButtonIconSheetId, ButtonIconSheets},
+    icon_sheets::{ButtonIconId, ButtonIconSheetId},
     input::Inputs,
     ivec::Bounds,
     logln,
@@ -454,13 +454,8 @@ impl ToolPane {
         }
     }
 
-    pub fn draw<D>(
-        &self,
-        d: &mut D,
-        input: &Inputs,
-        theme: &Theme,
-        button_icon_sheets: &ButtonIconSheets,
-    ) where
+    pub fn draw<D>(&self, d: &mut D, input: &Inputs, theme: &Theme)
+    where
         D: RaylibDraw,
     {
         self.panel.draw(d, theme, |d, bounds, theme| {
@@ -476,7 +471,7 @@ impl ToolPane {
                 };
                 if let Some(icon) = button.icon {
                     d.draw_texture_pro(
-                        &button_icon_sheets[self.scale],
+                        &theme.button_icons[self.scale],
                         icon.icon_cell_irec(self.scale.icon_width()).as_rec(),
                         button_rec,
                         Vector2::zero(),

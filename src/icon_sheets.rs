@@ -108,105 +108,26 @@ impl std::ops::Index<NodeIconSheetSetId> for NodeIconSheetSets {
     }
 }
 
-impl NodeIconSheetSets {
-    pub fn load(
-        rl: &mut RaylibHandle,
-        thread: &RaylibThread,
-    ) -> Result<Self, raylib::error::Error> {
-        Ok(Self {
-            x8: NodeIconSheetSet {
-                basic: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsBasic8x.png"),
-                    )?,
-                )?,
-                background: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsBackground8x.png"),
-                    )?,
-                )?,
-                highlight: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsHighlight8x.png"),
-                    )?,
-                )?,
-                ntd: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsNTD8x.png"),
-                    )?,
-                )?,
-            },
-            x16: NodeIconSheetSet {
-                basic: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsBasic16x.png"),
-                    )?,
-                )?,
-                background: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsBackground16x.png"),
-                    )?,
-                )?,
-                highlight: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsHighlight16x.png"),
-                    )?,
-                )?,
-                ntd: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsNTD16x.png"),
-                    )?,
-                )?,
-            },
-            x32: NodeIconSheetSet {
-                basic: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsBasic32x.png"),
-                    )?,
-                )?,
-                background: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsBackground32x.png"),
-                    )?,
-                )?,
-                highlight: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsHighlight32x.png"),
-                    )?,
-                )?,
-                ntd: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsNTD32x.png"),
-                    )?,
-                )?,
-            },
-        })
-    }
-}
+static DEFAULT_NODE_ICON_SHEETSETS_DATA: [[&[u8]; 4]; 3] = [
+    [
+        include_bytes!("../assets/nodeicons/nodeIconsBasic8x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsBackground8x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsHighlight8x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsNTD8x.png"),
+    ],
+    [
+        include_bytes!("../assets/nodeicons/nodeIconsBasic16x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsBackground16x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsHighlight16x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsNTD16x.png"),
+    ],
+    [
+        include_bytes!("../assets/nodeicons/nodeIconsBasic32x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsBackground32x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsHighlight32x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsNTD32x.png"),
+    ],
+];
 
 #[derive(
     Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Eq, Hash, Default, Serialize, Deserialize,

@@ -5,7 +5,7 @@ use crate::{
         node::GateNtd,
         wire::{Flow, Wire},
     },
-    icon_sheets::{NodeIconSheetId, NodeIconSheetSetId, NodeIconSheetSets},
+    icon_sheets::{NodeIconSheetId, NodeIconSheetSetId},
     input::Inputs,
     ivec::{AsIVec2, Bounds},
     tool::{EditDragging, Tool},
@@ -169,7 +169,6 @@ impl EditorTab {
         theme: &Theme,
         input: &Inputs,
         toolpane: &ToolPane,
-        node_icon_sheets: &NodeIconSheetSets,
     ) {
         let Rectangle {
             x,
@@ -277,7 +276,7 @@ impl EditorTab {
                         let color = theme.special;
                         if let Some((scale, icon_width)) = scale_and_width {
                             d.draw_texture_pro(
-                                &node_icon_sheets[scale][NodeIconSheetId::Basic],
+                                &theme.node_icons[scale][NodeIconSheetId::Basic],
                                 node.gate_ntd()
                                     .as_gate()
                                     .id()
@@ -319,7 +318,7 @@ impl EditorTab {
                         .icon_cell_irec(icon_width)
                         .as_rec();
                     d.draw_texture_pro(
-                        &node_icon_sheets[scale][NodeIconSheetId::Background],
+                        &theme.node_icons[scale][NodeIconSheetId::Background],
                         src_rec,
                         rec,
                         Vector2::zero(),
@@ -327,7 +326,7 @@ impl EditorTab {
                         theme.background,
                     );
                     d.draw_texture_pro(
-                        &node_icon_sheets[scale][NodeIconSheetId::Basic],
+                        &theme.node_icons[scale][NodeIconSheetId::Basic],
                         src_rec,
                         rec,
                         Vector2::zero(),
@@ -353,7 +352,7 @@ impl EditorTab {
                         }
                     } {
                         d.draw_texture_pro(
-                            &node_icon_sheets[scale][NodeIconSheetId::Ntd],
+                            &theme.node_icons[scale][NodeIconSheetId::Ntd],
                             src_rec,
                             rec,
                             Vector2::zero(),
@@ -392,7 +391,7 @@ impl EditorTab {
                 let color = theme.special;
                 if let Some((scale, icon_width)) = scale_and_width {
                     d.draw_texture_pro(
-                        &node_icon_sheets[scale][NodeIconSheetId::Highlight],
+                        &theme.node_icons[scale][NodeIconSheetId::Highlight],
                         node.gate_ntd()
                             .as_gate()
                             .id()
