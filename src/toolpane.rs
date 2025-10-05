@@ -454,6 +454,41 @@ impl ToolPane {
         }
     }
 
+    pub fn tick(&mut self, console: &mut Console, theme: &Theme, input: &Inputs) {
+        if input.primary.is_starting() {
+            let bounds = self.panel.content_bounds(theme);
+            let action = self
+                .buttons(bounds.min, theme)
+                .find_map(|(button_rec, button)| {
+                    Bounds::from(button_rec)
+                        .contains(input.cursor)
+                        .then_some(button.action)
+                });
+            if let Some(action) = action {
+                match action {
+                    ButtonAction::SetTool(tool_id) => {
+                        self.set_tool(tool_id, console);
+                    }
+                    ButtonAction::SetGate(gate_id) => {
+                        self.set_gate(gate_id, console);
+                    }
+                    ButtonAction::SetNtd(data) => {
+                        self.set_ntd(data, console);
+                    }
+                    ButtonAction::Blueprints => {
+                        // TODO
+                    }
+                    ButtonAction::Clipboard => {
+                        // TODO
+                    }
+                    ButtonAction::Settings => {
+                        // TODO
+                    }
+                }
+            }
+        }
+    }
+
     pub fn draw<D>(&self, d: &mut D, input: &Inputs, theme: &Theme)
     where
         D: RaylibDraw,

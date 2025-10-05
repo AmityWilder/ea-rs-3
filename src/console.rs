@@ -579,6 +579,64 @@ impl Console {
             })
     }
 
+    pub fn tick(&mut self, theme: &Theme, input: &Inputs, graphs: &GraphList) {
+        self.bottom_offset = (self.bottom_offset + input.scroll_console as f64).clamp(
+            0.0,
+            self.content_str()
+                .lines()
+                .count()
+                .saturating_sub(self.displayable_lines(theme)) as f64,
+        );
+
+        let Vector2 { mut x, mut y } = self.panel.content_bounds(theme).min;
+        let left = x;
+        for (_, text) in self.visible_content(theme) {
+            let text_size = theme.console_font.measure_text(text);
+            if Rectangle::new(x, y, text_size.x, text_size.y)
+                .check_collision_point_rec(input.cursor)
+                && let Ok(hyper_ref) = text.parse::<HyperRef>()
+            {
+                match hyper_ref {
+                    HyperRef::Gate(_gate_ref) => {
+                        // TODO
+                    }
+
+                    HyperRef::Tool(_tool_ref) => {
+                        // TODO
+                    }
+
+                    HyperRef::Position(_position_ref) => {
+                        // TODO
+                    }
+
+                    HyperRef::Graph(graph_ref) => {
+                        graph_ref.deref_with(graphs, |_g, _borrow| {
+                            // TODO
+                        });
+                    }
+
+                    HyperRef::Node(node_ref) => {
+                        node_ref.deref_with(graphs, |_g, _borrow, _node| {
+                            // TODO
+                        });
+                    }
+
+                    HyperRef::Wire(wire_ref) => {
+                        wire_ref.deref_with(graphs, |_g, _borrow, _wire| {
+                            // TODO
+                        });
+                    }
+                }
+            }
+            if text.ends_with('\n') {
+                y += theme.console_font.line_height();
+                x = left;
+            } else {
+                x += theme.console_font.measure_text(text).x;
+            }
+        }
+    }
+
     pub fn draw<D>(
         &self,
         d: &mut D,

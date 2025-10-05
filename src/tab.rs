@@ -1,5 +1,6 @@
 use crate::{
     GRID_SIZE, IVec2, Theme,
+    console::Console,
     graph::{
         Graph,
         node::GateNtd,
@@ -160,6 +161,105 @@ impl EditorTab {
     pub fn world_to_screen(&self, world_pos: Vector2) -> Vector2 {
         // SAFETY: GetWorldToScreen2D is a pure function with no preconditions
         unsafe { ffi::GetWorldToScreen2D(world_pos.into(), self.camera().into()) }.into()
+    }
+
+    pub fn tick(
+        &mut self,
+        console: &mut Console,
+        toolpane: &mut ToolPane,
+        _theme: &Theme,
+        input: &Inputs,
+    ) {
+        if let Some(gate) = input.gate() {
+            toolpane.set_gate(gate, console);
+        }
+        if let Some(tool) = input.tool() {
+            toolpane.set_tool(tool, console);
+        }
+
+        self.zoom_and_pan(input.cursor, input.pan, input.zoom, 5.0);
+
+        if let Some(graph) = self.graph.upgrade()
+                                    // if graph is being borrowed, don't edit it! it might be saving!
+                                    && let Ok(mut graph) = graph.try_write()
+        {
+            let pos = self
+                .screen_to_world(input.cursor)
+                .as_ivec2()
+                .snap(GRID_SIZE.into());
+
+            match &mut toolpane.tool {
+                Tool::Create { current_node } => {
+                    if input.primary.is_starting() {
+                        if let Some(&id) = graph.find_node_at(pos) {
+                            // existing node
+                            if let Some(current_node) = *current_node {
+                                graph.create_wire(toolpane.elbow, current_node, id, console);
+                            }
+                            *current_node = Some(id);
+                        } else {
+                            // new node
+                            let gate = toolpane.gate;
+                            let new_node = graph
+                                .create_node(gate, pos, console)
+                                .expect("this branch implies the position is available");
+                            let new_node_id = *new_node.id();
+                            if let Some(current_node) = current_node.as_ref() {
+                                graph.create_wire(
+                                    toolpane.elbow,
+                                    *current_node,
+                                    new_node_id,
+                                    console,
+                                );
+                            }
+                            *current_node = Some(new_node_id);
+                        }
+                    }
+                    if input.secondary.is_starting() {
+                        *current_node = None;
+                    }
+                }
+
+                Tool::Erase {} => {
+                    if input.primary.is_starting()
+                        && let Some(&id) = graph.find_node_at(pos)
+                    {
+                        graph
+                            .destroy_node(&id, false, console)
+                            .expect("cannot reach this branch if graph did not contain the node");
+                    }
+                }
+
+                Tool::Edit { target } => {
+                    if input.primary.is_starting()
+                        && let Some(&id) = graph.find_node_at(pos)
+                    {
+                        *target = Some(EditDragging {
+                            temp_pos: Vector2::default(),
+                            id,
+                        });
+                    }
+                    if input.primary.is_ending()
+                        && let Some(EditDragging { temp_pos: _, id }) = target.take()
+                    {
+                        let new_position = self
+                            .screen_to_world(input.cursor)
+                            .as_ivec2()
+                            .snap(GRID_SIZE.into());
+                        graph
+                            .translate_node(&id, new_position, console)
+                            .expect("edit mode target node should be valid");
+                    }
+
+                    if let Some(EditDragging { temp_pos, id: _ }) = target.as_mut() {
+                        *temp_pos = self.screen_to_world(input.cursor)
+                            - rvec2(GRID_SIZE / 2, GRID_SIZE / 2);
+                    }
+                }
+
+                Tool::Interact {} => {}
+            }
+        }
     }
 
     pub fn draw<D: RaylibDraw>(

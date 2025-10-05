@@ -386,6 +386,22 @@ impl Panel {
         &self.bounds
     }
 
+    pub const fn is_dragging(&self) -> bool {
+        matches!(
+            self.hover,
+            Some(RectHover {
+                is_dragging: true,
+                ..
+            })
+        )
+    }
+
+    pub const fn interactable(&self, overlapping: Vector2) -> bool {
+        self.bounds
+            .pad(&Padding::amount(-1.5))
+            .contains(overlapping)
+    }
+
     pub fn content_bounds(&self, theme: &Theme) -> Bounds {
         self.bounds.pad(&(self.padding)(theme))
     }
