@@ -47,7 +47,13 @@ fn main() {
             Anchoring::Bottom {
                 h: Sizing::Exact(ExactSizing {
                     val: 150.0,
-                    min: Some(|_, _, _| todo!()),
+                    min: Some(|theme, _, _| {
+                        Some(
+                            theme.console_font.line_height()
+                                + theme.console_font.line_spacing
+                                + theme.console_padding.vertical(),
+                        )
+                    }),
                     max: Some(|_theme, container_size, _content_size| Some(container_size)),
                 }),
             },
@@ -167,8 +173,8 @@ fn main() {
         Anchoring::Right {
             w: Sizing::Exact(ExactSizing {
                 val: 200.0,
-                min: None,
-                max: None,
+                min: Some(|_, _, _| Some(0.0)),
+                max: Some(|_, container_size, _content_size| Some(container_size)),
             }),
         },
         |theme| theme.properties_padding,
@@ -431,33 +437,45 @@ fn main() {
             }
         }
 
-        // // TODO: does it make more sense to have dedicated inputs for this?
-        // if (console.bounds.min.y..console.bounds.min.y + 3.0).contains(&(input.cursor.y)) {
-        //     hovering_console_top.activate();
-        //     if input.primary.is_starting() {
-        //         dragging_console_top.activate();
-        //     }
-        // } else if dragging_console_top.is_inactive() {
-        //     hovering_console_top.deactivate();
-        // }
-        // if dragging_console_top.is_active() && input.primary.is_ending() {
-        //     dragging_console_top.deactivate();
-        // }
-        // if dragging_console_top.is_active() {
-        //     console.bounds.min.y = input.cursor.y.clamp(
-        //         theme.console_padding.top, // arbitrary
-        //         console.bounds.max.y
-        //             - theme.console_padding.vertical()
-        //             - theme.console_font.font_size
-        //             - 2.0 * theme.console_font.line_spacing,
-        //     );
-        // }
+        properties.panel.tick_resize(
+            &theme,
+            &input,
+            &Bounds::new(
+                Vector2::zero(),
+                rvec2(rl.get_screen_width(), rl.get_screen_height()),
+            ),
+            Vector2::zero(),
+        );
 
-        if hovering_console_top == Event::Starting {
-            rl.set_mouse_cursor(MouseCursor::MOUSE_CURSOR_RESIZE_NS);
-        } else if hovering_console_top == Event::Ending {
-            rl.set_mouse_cursor(MouseCursor::MOUSE_CURSOR_DEFAULT);
-        }
+        console.panel.tick_resize(
+            &theme,
+            &input,
+            &Bounds::new(
+                Vector2::zero(),
+                rvec2(rl.get_screen_width(), rl.get_screen_height()),
+            ),
+            Vector2::zero(),
+        );
+
+        rl.set_mouse_cursor(
+            [
+                console.panel.hover.as_ref(),
+                properties.panel.hover.as_ref(),
+                toolpane.panel.hover.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            .next()
+            .map_or(MouseCursor::MOUSE_CURSOR_DEFAULT, |hover| {
+                use ui::RectHoverRegion::*;
+                match hover.region {
+                    Left | Right => MouseCursor::MOUSE_CURSOR_RESIZE_EW,
+                    Top | Bottom => MouseCursor::MOUSE_CURSOR_RESIZE_NS,
+                    TopLeft | BottomRight => MouseCursor::MOUSE_CURSOR_RESIZE_NWSE,
+                    TopRight | BottomLeft => MouseCursor::MOUSE_CURSOR_RESIZE_NESW,
+                }
+            }),
+        );
 
         for mut graph in graphs.iter_mut().filter_map(|g| g.try_write().ok()) {
             let now = Instant::now();

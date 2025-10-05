@@ -16,13 +16,13 @@ pub struct ExactSizing {
 }
 
 impl ExactSizing {
-    pub fn set_clamped(
-        &mut self,
+    pub fn clamp(
+        &self,
         theme: &Theme,
         container_size: f32,
         content_size: f32,
         mut value: f32,
-    ) {
+    ) -> f32 {
         if let Some(lower) = self
             .min
             .and_then(|f| f(theme, container_size, content_size))
@@ -32,14 +32,14 @@ impl ExactSizing {
         }
 
         if let Some(upper) = self
-            .min
+            .max
             .and_then(|f| f(theme, container_size, content_size))
             && value > upper
         {
             value = upper;
         }
 
-        self.val = value;
+        value
     }
 }
 
@@ -318,12 +318,32 @@ impl Bounds {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum RectHoverRegion {
+    Left = 1,
+    TopLeft,
+    Top,
+    TopRight,
+    Right,
+    #[default]
+    BottomRight,
+    Bottom,
+    BottomLeft,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RectHover {
+    pub region: RectHoverRegion,
+    pub is_dragging: bool,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Panel {
     pub title: &'static str,
     pub anchoring: Anchoring,
     pub padding: fn(&Theme) -> Padding,
     bounds: Bounds,
+    pub hover: Option<RectHover>,
 }
 
 impl Panel {
@@ -333,6 +353,7 @@ impl Panel {
             anchoring,
             padding,
             bounds: Bounds::default(),
+            hover: None,
         }
     }
 
@@ -360,8 +381,263 @@ impl Panel {
         self.bounds.pad(&(self.padding)(theme))
     }
 
-    pub fn tick_resize(&mut self, _rl: &mut RaylibHandle, _theme: &Theme, _input: &Inputs) {
-        // TODO
+    /// returns new container bounds, if split
+    pub fn tick_resize(
+        &mut self,
+        theme: &Theme,
+        input: &Inputs,
+        container: &Bounds,
+        content_size: Vector2,
+    ) -> Option<Bounds> {
+        // TODO: does it make more sense to have dedicated inputs for this?
+        if !self.hover.is_some_and(|hover| hover.is_dragging) {
+            self.hover = if self
+                .bounds
+                .pad(&Padding::amount(-1.5))
+                .contains(input.cursor)
+            {
+                let [hovering_left, hovering_top, hovering_right, hovering_bottom] = [
+                    input.cursor.x - self.bounds.min.x,
+                    input.cursor.y - self.bounds.min.y,
+                    input.cursor.x - self.bounds.max.x,
+                    input.cursor.y - self.bounds.max.y,
+                ]
+                .map(|p| (-1.5..=1.5).contains(&p));
+                match &self.anchoring {
+                    // combos first
+                    Anchoring::TopLeft {
+                        w: Sizing::Exact(_),
+                        h: Sizing::Exact(_),
+                    } if hovering_bottom && hovering_right => Some(RectHoverRegion::BottomRight),
+                    Anchoring::TopRight {
+                        w: Sizing::Exact(_),
+                        h: Sizing::Exact(_),
+                    } if hovering_bottom && hovering_left => Some(RectHoverRegion::BottomLeft),
+                    Anchoring::BottomLeft {
+                        w: Sizing::Exact(_),
+                        h: Sizing::Exact(_),
+                    } if hovering_top && hovering_right => Some(RectHoverRegion::TopRight),
+                    Anchoring::BottomRight {
+                        w: Sizing::Exact(_),
+                        h: Sizing::Exact(_),
+                    } if hovering_top && hovering_left => Some(RectHoverRegion::TopLeft),
+
+                    Anchoring::TopLeft {
+                        w: Sizing::Exact(_),
+                        h: _,
+                    }
+                    | Anchoring::Left {
+                        w: Sizing::Exact(_),
+                    }
+                    | Anchoring::BottomLeft {
+                        w: Sizing::Exact(_),
+                        h: _,
+                    } if hovering_right => Some(RectHoverRegion::Right),
+
+                    Anchoring::TopLeft {
+                        w: _,
+                        h: Sizing::Exact(_),
+                    }
+                    | Anchoring::Top {
+                        h: Sizing::Exact(_),
+                    }
+                    | Anchoring::TopRight {
+                        w: _,
+                        h: Sizing::Exact(_),
+                    } if hovering_bottom => Some(RectHoverRegion::Bottom),
+
+                    Anchoring::TopRight {
+                        w: Sizing::Exact(_),
+                        h: _,
+                    }
+                    | Anchoring::Right {
+                        w: Sizing::Exact(_),
+                    }
+                    | Anchoring::BottomRight {
+                        w: Sizing::Exact(_),
+                        h: _,
+                    } if hovering_left => Some(RectHoverRegion::Left),
+
+                    Anchoring::BottomLeft {
+                        w: _,
+                        h: Sizing::Exact(_),
+                    }
+                    | Anchoring::Bottom {
+                        h: Sizing::Exact(_),
+                    }
+                    | Anchoring::BottomRight {
+                        w: _,
+                        h: Sizing::Exact(_),
+                    } if hovering_top => Some(RectHoverRegion::Top),
+
+                    Anchoring::Floating { .. } => todo!(),
+
+                    _ => None,
+                }
+                .map(|region| RectHover {
+                    region,
+                    is_dragging: input.primary.is_starting(),
+                })
+            } else {
+                None
+            };
+        }
+
+        if let Some(hover) = &mut self.hover
+            && input.primary.is_ending()
+        {
+            hover.is_dragging = false;
+        }
+
+        if let Some(hover) = &self.hover
+            && hover.is_dragging
+        {
+            let clamp_left = |w: &mut ExactSizing| {
+                w.val = w.clamp(
+                    theme,
+                    container.width(),
+                    content_size.x,
+                    self.bounds.max.x - input.cursor.x,
+                );
+            };
+            let clamp_top = |h: &mut ExactSizing| {
+                h.val = h.clamp(
+                    theme,
+                    container.height(),
+                    content_size.y,
+                    self.bounds.max.y - input.cursor.y,
+                );
+            };
+            let clamp_right = |w: &mut ExactSizing| {
+                w.val = w.clamp(
+                    theme,
+                    container.width(),
+                    content_size.x,
+                    input.cursor.x - self.bounds.max.x,
+                );
+            };
+            let clamp_bottom = |h: &mut ExactSizing| {
+                h.val = h.clamp(
+                    theme,
+                    container.height(),
+                    content_size.y,
+                    input.cursor.y - self.bounds.max.y,
+                );
+            };
+
+            match (hover.region, &mut self.anchoring) {
+                (
+                    RectHoverRegion::TopLeft,
+                    Anchoring::BottomRight {
+                        w: Sizing::Exact(w),
+                        h: Sizing::Exact(h),
+                    },
+                ) => {
+                    clamp_top(h);
+                    clamp_left(w);
+                }
+
+                (
+                    RectHoverRegion::TopRight,
+                    Anchoring::BottomLeft {
+                        w: Sizing::Exact(w),
+                        h: Sizing::Exact(h),
+                    },
+                ) => {
+                    clamp_top(h);
+                    clamp_right(w);
+                }
+
+                (
+                    RectHoverRegion::BottomLeft,
+                    Anchoring::TopRight {
+                        w: Sizing::Exact(w),
+                        h: Sizing::Exact(h),
+                    },
+                ) => {
+                    clamp_bottom(h);
+                    clamp_left(w);
+                }
+
+                (
+                    RectHoverRegion::BottomRight,
+                    Anchoring::TopLeft {
+                        w: Sizing::Exact(w),
+                        h: Sizing::Exact(h),
+                    },
+                ) => {
+                    clamp_bottom(h);
+                    clamp_right(w);
+                }
+
+                (
+                    RectHoverRegion::Left,
+                    Anchoring::BottomRight {
+                        w: Sizing::Exact(w),
+                        h: _,
+                    }
+                    | Anchoring::TopRight {
+                        w: Sizing::Exact(w),
+                        h: _,
+                    }
+                    | Anchoring::Right {
+                        w: Sizing::Exact(w),
+                    },
+                ) => clamp_left(w),
+
+                (
+                    RectHoverRegion::Top,
+                    Anchoring::BottomLeft {
+                        w: _,
+                        h: Sizing::Exact(h),
+                    }
+                    | Anchoring::BottomRight {
+                        w: _,
+                        h: Sizing::Exact(h),
+                    }
+                    | Anchoring::Bottom {
+                        h: Sizing::Exact(h),
+                    },
+                ) => clamp_top(h),
+
+                (
+                    RectHoverRegion::Right,
+                    Anchoring::BottomLeft {
+                        w: Sizing::Exact(w),
+                        h: _,
+                    }
+                    | Anchoring::TopLeft {
+                        w: Sizing::Exact(w),
+                        h: _,
+                    }
+                    | Anchoring::Left {
+                        w: Sizing::Exact(w),
+                    },
+                ) => clamp_right(w),
+
+                (
+                    RectHoverRegion::Bottom,
+                    Anchoring::TopLeft {
+                        w: _,
+                        h: Sizing::Exact(h),
+                    }
+                    | Anchoring::TopRight {
+                        w: _,
+                        h: Sizing::Exact(h),
+                    }
+                    | Anchoring::Top {
+                        h: Sizing::Exact(h),
+                    },
+                ) => clamp_bottom(h),
+
+                _ => unreachable!(
+                    "must be one of these combinations to have begun dragging, and should not be able to mutate either while dragging"
+                ),
+            }
+            self.update_bounds(theme, container, content_size)
+        } else {
+            None
+        }
     }
 
     pub fn draw<T, D, F>(&self, d: &mut D, theme: &Theme, content: F) -> T

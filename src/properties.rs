@@ -83,7 +83,7 @@ impl PropertiesPanel {
     ) where
         I: IntoIterator<Item = &'a mut dyn PropertySection>,
     {
-        self.panel.tick_resize(rl, theme, input);
+        // self.panel.tick_resize(rl, theme, input);
         let bounds = self.panel.content_bounds(theme);
         let mut y = bounds.min.y;
         for section in sections {
