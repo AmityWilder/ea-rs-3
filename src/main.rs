@@ -195,7 +195,7 @@ fn main() {
     ));
 
     let mut next_eval_tick = Instant::now();
-    let eval_duration = Duration::from_millis(1000);
+    let eval_duration = Duration::from_millis(200);
 
     // initialize bounds
     {
