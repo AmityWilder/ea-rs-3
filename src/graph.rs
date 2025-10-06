@@ -186,24 +186,43 @@ impl Graph {
         dst: NodeId,
         console: &mut Console,
     ) -> &mut Wire {
-        let graph_ref = GraphRef(*self.id());
-        let id = self.next_wire_id;
-        self.next_wire_id.0 += 1;
-        let wire = self
+        assert_ne!(src, dst, "cannot wire a node directly to itself");
+        if let Some(existing) = self
             .wires
-            .entry(id)
-            .insert_entry(Wire::new(id, elbow, src, dst))
-            .into_mut();
+            .iter()
+            .find(|(_, wire)| wire.src == src && wire.dst == dst)
+            .map(|(id, _)| *id)
+        {
+            let graph_ref = GraphRef(self.id);
+            logln!(
+                console,
+                LogType::Info,
+                "wire {} from {} to {} already exists",
+                graph_ref.wire(existing),
+                graph_ref.node(src),
+                graph_ref.node(dst),
+            );
+            self.wire_mut(&existing).expect("just found")
+        } else {
+            let graph_ref = GraphRef(self.id);
+            let id = self.next_wire_id;
+            self.next_wire_id.0 += 1;
+            let wire = self
+                .wires
+                .entry(id)
+                .insert_entry(Wire::new(id, elbow, src, dst))
+                .into_mut();
 
-        logln!(
-            console,
-            LogType::Info,
-            "create wire {} from {} to {}",
-            graph_ref.wire(*wire.id()),
-            graph_ref.node(src),
-            graph_ref.node(dst),
-        );
-        wire
+            logln!(
+                console,
+                LogType::Info,
+                "create wire {} from {} to {}",
+                graph_ref.wire(*wire.id()),
+                graph_ref.node(src),
+                graph_ref.node(dst),
+            );
+            wire
+        }
     }
 
     #[inline]
