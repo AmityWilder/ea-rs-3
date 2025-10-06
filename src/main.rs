@@ -352,10 +352,13 @@ fn main() {
         );
 
         for mut graph in graphs.iter_mut().filter_map(|g| g.try_write().ok()) {
+            if graph.is_eval_order_dirty() {
+                graph.refresh_eval_order();
+            }
             let now = Instant::now();
-            if now >= next_eval_tick {
+            while now >= next_eval_tick {
                 graph.evaluate();
-                next_eval_tick = now + eval_duration;
+                next_eval_tick += eval_duration;
             }
         }
 

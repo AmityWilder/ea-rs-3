@@ -240,7 +240,7 @@ impl EditorTab {
                             if let Some(current_node) = *current_node
                                 && current_node != id
                             {
-                                graph.create_wire(toolpane.elbow, current_node, id, console);
+                                _ = graph.create_wire(toolpane.elbow, current_node, id, console);
                             }
                             *current_node = Some(id);
                         } else {
@@ -251,7 +251,7 @@ impl EditorTab {
                                 .expect("this branch implies the position is available");
                             let new_node_id = *new_node.id();
                             if let Some(current_node) = current_node.as_ref() {
-                                graph.create_wire(
+                                _ = graph.create_wire(
                                     toolpane.elbow,
                                     *current_node,
                                     new_node_id,

@@ -46,7 +46,15 @@ pub struct Graph {
     nodes: FxHashMap<NodeId, Node>,
     wires: FxHashMap<WireId, Wire>,
     node_grid: FxHashMap<IVec2, NodeId>,
+    eval_order: Vec<NodeId>,
+    is_eval_order_dirty: bool,
 }
+
+type EvalOrder = std::iter::Rev<std::vec::IntoIter<NodeId>>;
+type IOLessNodeIter<'a> =
+    std::collections::hash_set::Difference<'a, NodeId, rustc_hash::FxBuildHasher>;
+type NodesIter<'a> = std::collections::hash_map::Values<'a, NodeId, Node>;
+type WiresIter<'a> = std::collections::hash_map::Values<'a, WireId, Wire>;
 
 impl Graph {
     pub fn new(id: GraphId) -> Self {
@@ -57,6 +65,8 @@ impl Graph {
             nodes: FxHashMap::default(),
             wires: FxHashMap::default(),
             node_grid: FxHashMap::default(),
+            eval_order: Vec::new(),
+            is_eval_order_dirty: false,
         }
     }
 
@@ -98,24 +108,34 @@ impl Graph {
         self.wires.get_mut(id)
     }
 
-    /// Returns [`None`] if the position is already occupied
-    #[must_use]
+    /// Returns [`Err`] containing the existing node's ID if the position is already occupied.
     pub fn create_node(
         &mut self,
         gate: Gate,
         position: IVec2,
         console: &mut Console,
-    ) -> Option<&mut Node> {
+    ) -> Result<&mut Node, NodeId> {
         let id = self.next_node_id;
         self.next_node_id.0 += 1;
         let grid_pos = Self::world_to_grid(position);
-        (!self.node_grid.contains_key(&grid_pos)).then(|| {
+        if let Some(&existing) = self.node_grid.get(&grid_pos) {
+            logln!(
+                console,
+                LogType::Info,
+                "node at {} already exists: {}",
+                PositionRef(position),
+                NodeRef(self.id, existing),
+            );
+            Err(existing)
+        } else {
             self.node_grid.insert(grid_pos, id);
             let node = self
                 .nodes
                 .entry(id)
                 .insert_entry(Node::new(id, gate, position))
                 .into_mut();
+            self.is_eval_order_dirty = true;
+
             logln!(
                 console,
                 LogType::Info,
@@ -124,40 +144,45 @@ impl Graph {
                 NodeRef(self.id, *node.id()),
                 PositionRef(position),
             );
-            node
-        })
+            Ok(node)
+        }
     }
 
+    /// Returns [`None`] if `id` is not a node in this graph.
     pub fn translate_node(
         &mut self,
         id: &NodeId,
         new_position: IVec2,
         console: &mut Console,
     ) -> Option<()> {
-        let node = self.nodes.get_mut(id)?;
-        let old_grid_position = Self::world_to_grid(node.position);
-        let new_grid_position = Self::world_to_grid(new_position);
-        if old_grid_position != new_grid_position {
-            let id = self
-                .node_grid
-                .remove(&old_grid_position)
-                .filter(|x| x == id)
-                .expect("nodes should not be moved without updating their position in node_grid");
-            self.node_grid.insert(new_grid_position, id);
+        self.nodes.get_mut(id).map(|node| {
+            let old_grid_position = Self::world_to_grid(node.position);
+            let new_grid_position = Self::world_to_grid(new_position);
+            if old_grid_position != new_grid_position {
+                let id = self
+                    .node_grid
+                    .remove(&old_grid_position)
+                    .filter(|x| x == id)
+                    .expect(
+                        "nodes should not be moved without updating their position in node_grid",
+                    );
+                self.node_grid.insert(new_grid_position, id);
 
-            let old_position = std::mem::replace(&mut node.position, new_position);
-            logln!(
-                console,
-                LogType::Info,
-                "move node {} from {} to {}",
-                NodeRef(self.id, id),
-                PositionRef(old_position),
-                PositionRef(new_position),
-            );
-        }
-        Some(())
+                let old_position = std::mem::replace(&mut node.position, new_position);
+                logln!(
+                    console,
+                    LogType::Info,
+                    "move node {} from {} to {}",
+                    NodeRef(self.id, id),
+                    PositionRef(old_position),
+                    PositionRef(new_position),
+                );
+            }
+        })
     }
 
+    /// Returns [`None`] if `id` is not a node in this graph.
+    #[must_use]
     pub fn destroy_node(&mut self, id: &NodeId, soft: bool, console: &mut Console) -> Option<Node> {
         self.nodes.remove(id).inspect(|node| {
             self.node_grid
@@ -170,6 +195,7 @@ impl Graph {
                 self.wires
                     .retain(|_, wire| &wire.src != id && &wire.dst != id);
             }
+            self.is_eval_order_dirty = true;
             logln!(
                 console,
                 LogType::Info,
@@ -179,13 +205,18 @@ impl Graph {
         })
     }
 
+    /// # Errors
+    /// Returns [`Err`] containing the existing wire's ID if there is already a wire from `src` to `dst`.
+    ///
+    /// # Panics
+    /// This method may panic if `src == dst`
     pub fn create_wire(
         &mut self,
         elbow: Elbow,
         src: NodeId,
         dst: NodeId,
         console: &mut Console,
-    ) -> &mut Wire {
+    ) -> Result<&mut Wire, WireId> {
         assert_ne!(src, dst, "cannot wire a node directly to itself");
         if let Some(existing) = self
             .wires
@@ -197,12 +228,12 @@ impl Graph {
             logln!(
                 console,
                 LogType::Info,
-                "wire {} from {} to {} already exists",
-                graph_ref.wire(existing),
+                "wire from {} to {} already exists: wire {}",
                 graph_ref.node(src),
                 graph_ref.node(dst),
+                graph_ref.wire(existing),
             );
-            self.wires.get_mut(&existing).expect("just found")
+            Err(existing)
         } else {
             let graph_ref = GraphRef(self.id);
             let id = self.next_wire_id;
@@ -212,7 +243,7 @@ impl Graph {
                 .entry(id)
                 .insert_entry(Wire::new(id, elbow, src, dst))
                 .into_mut();
-
+            self.is_eval_order_dirty = true;
             logln!(
                 console,
                 LogType::Info,
@@ -221,39 +252,49 @@ impl Graph {
                 graph_ref.node(src),
                 graph_ref.node(dst),
             );
-            wire
+            Ok(wire)
         }
     }
 
+    /// Returns [`None`] if `id` is not a wire in this graph.
+    #[must_use]
     #[inline]
     pub fn destroy_wire(&mut self, id: &WireId) -> Option<Wire> {
-        self.wires.remove(id)
+        self.wires.remove(id).inspect(|_| {
+            self.is_eval_order_dirty = true;
+        })
     }
 
     #[inline]
-    pub fn nodes_iter(&self) -> std::collections::hash_map::Values<'_, NodeId, Node> {
+    pub fn nodes_iter(&self) -> NodesIter<'_> {
         self.nodes.values()
     }
 
     #[inline]
-    pub fn wires_iter(&self) -> std::collections::hash_map::Values<'_, WireId, Wire> {
+    pub fn wires_iter(&self) -> WiresIter<'_> {
         self.wires.values()
     }
 
     #[inline]
-    pub fn wires_to<'a>(&'a self, node: &NodeId) -> impl Iterator<Item = (&'a WireId, &'a Wire)> {
+    pub fn wires_to<'a: 'b, 'b>(
+        &'a self,
+        node: &'b NodeId,
+    ) -> impl Iterator<Item = (&'a WireId, &'a Wire)> {
         self.wires.iter().filter(move |(_, wire)| &wire.dst == node)
     }
 
     #[inline]
-    pub fn wires_from<'a>(&'a self, node: &NodeId) -> impl Iterator<Item = (&'a WireId, &'a Wire)> {
+    pub fn wires_from<'a: 'b, 'b>(
+        &'a self,
+        node: &'b NodeId,
+    ) -> impl Iterator<Item = (&'a WireId, &'a Wire)> {
         self.wires.iter().filter(move |(_, wire)| &wire.src == node)
     }
 
     #[inline]
-    pub fn wires_of<'a>(
+    pub fn wires_of<'a: 'b, 'b>(
         &'a self,
-        node: &NodeId,
+        node: &'b NodeId,
     ) -> impl Iterator<Item = (&'a WireId, &'a Wire, Flow)> {
         self.wires.iter().filter_map(move |(id, wire)| {
             match (&wire.src == node, &wire.dst == node) {
@@ -284,9 +325,7 @@ impl Graph {
     #[inline]
     pub fn inputless_nodes<T, F>(&self, f: F) -> T
     where
-        F: FnOnce(
-            std::collections::hash_set::Difference<'_, NodeId, rustc_hash::FxBuildHasher>,
-        ) -> T,
+        F: FnOnce(IOLessNodeIter<'_>) -> T,
     {
         let a = FxHashSet::from_iter(self.nodes.keys().copied());
         let b = FxHashSet::from_iter(self.wires.values().map(|wire| wire.dst));
@@ -296,9 +335,7 @@ impl Graph {
     #[inline]
     pub fn outputless_nodes<T, F>(&self, f: F) -> T
     where
-        F: FnOnce(
-            std::collections::hash_set::Difference<'_, NodeId, rustc_hash::FxBuildHasher>,
-        ) -> T,
+        F: FnOnce(IOLessNodeIter<'_>) -> T,
     {
         let a = FxHashSet::from_iter(self.nodes.keys().copied());
         let b = FxHashSet::from_iter(self.wires.values().map(|wire| wire.src));
@@ -323,36 +360,49 @@ impl Graph {
         inputs
     }
 
-    fn eval_order(&self) -> impl Iterator<Item = NodeId> {
-        let mut order = Vec::with_capacity(self.nodes.len());
+    #[inline]
+    pub const fn is_eval_order_dirty(&self) -> bool {
+        self.is_eval_order_dirty
+    }
+
+    pub fn refresh_eval_order(&mut self) {
+        self.eval_order.clear();
+        self.eval_order.resize(self.nodes.len(), NodeId(0));
         let mut visited = FxHashSet::default();
         let adj = self.adjacent_in();
         let mut queue = self.outputless_nodes(|it| VecDeque::from_iter(it.copied()));
         visited.extend(queue.iter().copied());
-        // println!("adj: {adj:?}");
-        // println!("visited: {visited:?}");
-        // println!("queue: {queue:?}");
-        while let Some(node) = queue.pop_front()
-        // .inspect(|x| println!("queue.pop -> {x:?}\nqueue: {queue:?}"))
-        {
-            order.push(node);
-            // println!(" order.push({:?})", node);
-            queue.extend(adj.get(&node).into_iter().flatten().filter_map(|&id| {
-                visited.insert(id).then_some(id)
-                // .inspect(|x| println!("  queue.push({x:?})"))
-            }));
+        let mut i = self.nodes.len();
+        while let Some(node) = queue.pop_front() {
+            i -= 1;
+            self.eval_order[i] = node;
+            queue.extend(
+                adj.get(&node)
+                    .into_iter()
+                    .flatten()
+                    .copied()
+                    .filter(|&id| visited.insert(id)),
+            );
         }
-        // println!("order: {order:?}");
-        order.into_iter().rev()
+        assert_eq!(i, 0, "eval order should include every node once");
+        self.is_eval_order_dirty = false;
     }
 
     pub fn evaluate(&mut self) {
-        // println!("tick");
+        assert!(
+            !self.is_eval_order_dirty,
+            "should not evaluate while evel order is dirty, remember to call refresh_eval_order"
+        );
+        assert_eq!(
+            self.eval_order.len(),
+            self.nodes.len(),
+            "every node must be visited during eval; refresh_eval_order may need to be called"
+        );
         let adj = self.adjacent_in();
         let mut input_buf = Vec::new();
-        for id in self.eval_order().collect::<Vec<_>>() {
+        for id in &self.eval_order {
             input_buf.clear();
-            input_buf.extend(adj.get(&id).into_iter().flatten().map(|id| {
+            input_buf.extend(adj.get(id).into_iter().flatten().map(|id| {
                 self.nodes
                     .get(id)
                     .expect("all nodes in adj should be valid")
@@ -360,9 +410,8 @@ impl Graph {
             }));
             let node = self
                 .nodes
-                .get_mut(&id)
+                .get_mut(id)
                 .expect("all nodes in eval_order should be valid");
-            // println!("  node {id} ({:?}) inputs: {input_buf:?}", &node.gate);
             node.state = node.gate.evaluate(input_buf.iter().copied());
         }
     }
@@ -471,6 +520,8 @@ mod tests {
             node_grid: FxHashMap::default(),
             next_node_id: NodeId(max_node_id + 1),
             next_wire_id: WireId(max_wire_id + 1),
+            eval_order: Vec::new(),
+            is_eval_order_dirty: true,
         }
     }
 
@@ -520,8 +571,9 @@ mod tests {
             &[NodeId(3)],
             "outputless_nodes"
         );
+        g.refresh_eval_order();
         assert_eq!(
-            g.eval_order().collect::<Vec<_>>().as_slice(),
+            &g.eval_order,
             &[NodeId(0), NodeId(1), NodeId(2), NodeId(3),],
             "eval_order"
         );
@@ -561,7 +613,7 @@ mod tests {
 
     #[test]
     fn test1() {
-        let g = gen_graph(
+        let mut g = gen_graph(
             GraphId(0),
             [
                 (NodeId(0), Gate::Nor),
@@ -611,8 +663,9 @@ mod tests {
             &[NodeId(4), NodeId(5)],
             "outputless_nodes"
         );
+        g.refresh_eval_order();
         assert_eq!(
-            g.eval_order().collect::<Vec<_>>().as_slice(),
+            &g.eval_order,
             &[
                 // ---
                 NodeId(0),
