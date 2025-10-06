@@ -9,6 +9,7 @@ use crate::{
     logln,
 };
 use node::GateNtd;
+use raylib::prelude::*;
 use rustc_hash::FxHashMap;
 use std::sync::{Arc, RwLock};
 
@@ -19,6 +20,7 @@ pub mod wire;
 pub struct GraphId(u32);
 
 impl std::fmt::Display for GraphId {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "g{:x}", self.0)
     }
@@ -57,6 +59,7 @@ impl Graph {
         }
     }
 
+    #[inline]
     fn world_to_grid(world_pos: IVec2) -> IVec2 {
         IVec2::new(
             world_pos.x / i32::from(GRID_SIZE),
@@ -64,26 +67,32 @@ impl Graph {
         )
     }
 
+    #[inline]
     pub const fn id(&self) -> &GraphId {
         &self.id
     }
 
+    #[inline]
     pub fn find_node_at(&self, pos: IVec2) -> Option<&NodeId> {
         self.node_grid.get(&Self::world_to_grid(pos))
     }
 
+    #[inline]
     pub fn node(&self, id: &NodeId) -> Option<&Node> {
         self.nodes.get(id)
     }
 
+    #[inline]
     pub fn node_mut(&mut self, id: &NodeId) -> Option<&mut Node> {
         self.nodes.get_mut(id)
     }
 
+    #[inline]
     pub fn wire(&self, id: &WireId) -> Option<&Wire> {
         self.wires.get(id)
     }
 
+    #[inline]
     pub fn wire_mut(&mut self, id: &WireId) -> Option<&mut Wire> {
         self.wires.get_mut(id)
     }
@@ -196,22 +205,27 @@ impl Graph {
         wire
     }
 
+    #[inline]
     pub fn destroy_wire(&mut self, id: &WireId) -> Option<Wire> {
         self.wires.remove(id)
     }
 
+    #[inline]
     pub fn nodes_iter(&self) -> std::collections::hash_map::Values<'_, NodeId, Node> {
         self.nodes.values()
     }
 
+    #[inline]
     pub fn wires_iter(&self) -> std::collections::hash_map::Values<'_, WireId, Wire> {
         self.wires.values()
     }
 
+    #[inline]
     pub fn wires_to<'a>(&'a self, node: &NodeId) -> impl Iterator<Item = (&'a WireId, &'a Wire)> {
         self.wires.iter().filter(move |(_, wire)| &wire.dst == node)
     }
 
+    #[inline]
     pub fn wires_from<'a>(&'a self, node: &NodeId) -> impl Iterator<Item = (&'a WireId, &'a Wire)> {
         self.wires.iter().filter(move |(_, wire)| &wire.src == node)
     }
@@ -288,12 +302,14 @@ pub struct GraphList {
 impl std::ops::Deref for GraphList {
     type Target = Vec<Arc<RwLock<Graph>>>;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.graphs
     }
 }
 
 impl std::ops::DerefMut for GraphList {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.graphs
     }

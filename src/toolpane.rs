@@ -32,6 +32,7 @@ pub struct ButtonGroup {
 }
 
 impl ButtonGroup {
+    #[inline]
     pub fn cols(&self, visibility: Visibility) -> usize {
         match visibility {
             Visibility::Expanded => 3,
@@ -40,6 +41,7 @@ impl ButtonGroup {
         }
     }
 
+    #[inline]
     pub fn rows(&self, visibility: Visibility) -> usize {
         match visibility {
             Visibility::Expanded => self.buttons.len().div_ceil(3),
@@ -322,6 +324,7 @@ impl ToolPane {
         }
     }
 
+    #[inline]
     pub fn set_tool(&mut self, tool_id: ToolId, console: &mut Console) {
         if self.tool.id() != tool_id {
             self.tool = tool_id.init();
@@ -329,6 +332,7 @@ impl ToolPane {
         }
     }
 
+    #[inline]
     pub fn set_gate(&mut self, gate_id: GateId, console: &mut Console) {
         if self.gate.id() != gate_id {
             self.gate = gate_id.to_gate(self.ntd);
@@ -341,6 +345,7 @@ impl ToolPane {
         }
     }
 
+    #[inline]
     pub fn set_ntd(&mut self, data: u8, console: &mut Console) {
         if self.ntd != data {
             self.ntd = data;

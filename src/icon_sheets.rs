@@ -25,6 +25,7 @@ pub struct NodeIconSheetSet {
 impl std::ops::Index<NodeIconSheetId> for NodeIconSheetSet {
     type Output = Texture2D;
 
+    #[inline]
     fn index(&self, index: NodeIconSheetId) -> &Self::Output {
         match index {
             NodeIconSheetId::Basic => &self.basic,
@@ -50,6 +51,7 @@ impl GateId {
         }
     }
 
+    #[inline]
     pub const fn icon_cell_irec(self, icon_width: i32) -> IRect {
         let cell = self.icon_cell();
         IRect::new(
@@ -99,6 +101,7 @@ pub struct NodeIconSheetSets {
 impl std::ops::Index<NodeIconSheetSetId> for NodeIconSheetSets {
     type Output = NodeIconSheetSet;
 
+    #[inline]
     fn index(&self, index: NodeIconSheetSetId) -> &Self::Output {
         match index {
             NodeIconSheetSetId::X8 => &self.x8,
@@ -182,6 +185,7 @@ impl ButtonIconId {
         }
     }
 
+    #[inline]
     pub const fn icon_cell_irec(self, icon_width: i32) -> IRect {
         let cell = self.icon_cell();
         IRect::new(
@@ -212,6 +216,7 @@ pub struct ButtonIconSheets {
 impl std::ops::Index<ButtonIconSheetId> for ButtonIconSheets {
     type Output = Texture2D;
 
+    #[inline]
     fn index(&self, index: ButtonIconSheetId) -> &Self::Output {
         match index {
             ButtonIconSheetId::X16 => &self.x16,

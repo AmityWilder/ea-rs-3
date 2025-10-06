@@ -30,6 +30,7 @@ pub enum LogType {
 }
 
 impl std::fmt::Display for LogType {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LogType::Info => "info",
@@ -44,12 +45,14 @@ impl std::fmt::Display for LogType {
 }
 
 impl From<LogType> for ColorRef {
+    #[inline]
     fn from(value: LogType) -> Self {
         value.color()
     }
 }
 
 impl LogType {
+    #[inline]
     pub const fn color(self) -> ColorRef {
         match self {
             LogType::Info => ColorRef::Theme(ColorId::Foreground3),
@@ -68,12 +71,14 @@ pub struct GateRef(pub GateId);
 impl std::ops::Deref for GateRef {
     type Target = GateId;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl std::ops::DerefMut for GateRef {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -109,12 +114,14 @@ pub struct ToolRef(pub ToolId);
 impl std::ops::Deref for ToolRef {
     type Target = ToolId;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl std::ops::DerefMut for ToolRef {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -150,12 +157,14 @@ pub struct PositionRef(pub IVec2);
 impl std::ops::Deref for PositionRef {
     type Target = IVec2;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl std::ops::DerefMut for PositionRef {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -204,6 +213,7 @@ impl std::fmt::Display for GraphRef {
 impl std::str::FromStr for GraphRef {
     type Err = ();
 
+    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         s.parse().map_err(|_| ()).map(Self)
     }
@@ -223,10 +233,12 @@ impl GraphRef {
         }
     }
 
+    #[inline]
     pub fn node(&self, node_id: NodeId) -> NodeRef {
         NodeRef(self.0, node_id)
     }
 
+    #[inline]
     pub fn wire(&self, wire_id: WireId) -> WireRef {
         WireRef(self.0, wire_id)
     }
@@ -327,6 +339,7 @@ pub enum HyperRef {
 }
 
 impl std::fmt::Display for HyperRef {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             HyperRef::Gate(x) => x.fmt(f),
@@ -529,10 +542,12 @@ impl Console {
         self.bottom_offset = 0.0;
     }
 
+    #[inline]
     pub const fn content_str(&self) -> &RichStr {
         self.content.as_rich_str()
     }
 
+    #[inline]
     pub fn displayable_lines(&self, theme: &Theme) -> usize {
         ((self.panel.content_bounds(theme).height()
             + /* Off by one otherwise */ theme.console_font.line_spacing)

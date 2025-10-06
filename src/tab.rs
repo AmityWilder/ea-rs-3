@@ -17,6 +17,33 @@ use raylib::prelude::*;
 use std::sync::{RwLock, Weak};
 
 #[derive(Debug)]
+pub struct EditorGrid {
+    pub shader: Shader,
+    offset_loc: i32,
+    zoom_exp_loc: i32,
+}
+
+impl EditorGrid {
+    pub fn new(shader: Shader) -> Self {
+        Self {
+            offset_loc: shader.get_shader_location("offset"),
+            zoom_exp_loc: shader.get_shader_location("zoom_exp"),
+            shader,
+        }
+    }
+
+    #[inline]
+    pub fn set_offset(&mut self, value: Vector2) {
+        self.shader.set_shader_value(self.offset_loc, value);
+    }
+
+    #[inline]
+    pub fn set_zoom_exp(&mut self, value: f32) {
+        self.shader.set_shader_value(self.zoom_exp_loc, value);
+    }
+}
+
+#[derive(Debug)]
 pub struct EditorTab {
     camera_target: Vector2,
     zoom_exp: f32,
@@ -43,10 +70,12 @@ impl EditorTab {
         })
     }
 
+    #[inline]
     pub const fn zoom_exp(&self) -> f32 {
         self.zoom_exp
     }
 
+    #[inline]
     pub fn camera(&self) -> Camera2D {
         Camera2D {
             offset: Vector2::zero(),
@@ -57,7 +86,14 @@ impl EditorTab {
     }
 
     /// `pan_speed` is scaled by zoom (zoom applied first)
-    pub fn zoom_and_pan(&mut self, origin: Vector2, pan: Vector2, zoom: f32, pan_speed: f32) {
+    pub fn zoom_and_pan(
+        &mut self,
+        origin: Vector2,
+        pan: Vector2,
+        zoom: f32,
+        pan_speed: f32,
+        editorgrid: &mut EditorGrid,
+    ) {
         if zoom != 0.0 {
             let new_zoom = (self.zoom_exp + zoom).clamp(-3.0, 2.0);
             if self.zoom_exp != new_zoom {
@@ -85,6 +121,8 @@ impl EditorTab {
                 self.dirty = true;
             }
         }
+        editorgrid.set_offset(self.camera_target);
+        editorgrid.set_zoom_exp(self.zoom_exp);
     }
 
     pub fn resize(
@@ -149,15 +187,18 @@ impl EditorTab {
         }
     }
 
+    #[inline]
     pub fn grid_tex(&self) -> &WeakTexture2D {
         self.grid.texture()
     }
 
+    #[inline]
     pub fn screen_to_world(&self, screen_pos: Vector2) -> Vector2 {
         // SAFETY: GetScreenToWorld2D is a pure function with no preconditions
         unsafe { ffi::GetScreenToWorld2D(screen_pos.into(), self.camera().into()) }.into()
     }
 
+    #[inline]
     pub fn world_to_screen(&self, world_pos: Vector2) -> Vector2 {
         // SAFETY: GetWorldToScreen2D is a pure function with no preconditions
         unsafe { ffi::GetWorldToScreen2D(world_pos.into(), self.camera().into()) }.into()
@@ -169,6 +210,7 @@ impl EditorTab {
         toolpane: &mut ToolPane,
         _theme: &Theme,
         input: &Inputs,
+        editorgrid: &mut EditorGrid,
     ) {
         if let Some(gate) = input.gate() {
             toolpane.set_gate(gate, console);
@@ -177,7 +219,7 @@ impl EditorTab {
             toolpane.set_tool(tool, console);
         }
 
-        self.zoom_and_pan(input.cursor, input.pan, input.zoom, 5.0);
+        self.zoom_and_pan(input.cursor, input.pan, input.zoom, 5.0, editorgrid);
 
         if let Some(graph) = self.graph.upgrade()
                                     // if graph is being borrowed, don't edit it! it might be saving!
@@ -269,6 +311,7 @@ impl EditorTab {
         theme: &Theme,
         input: &Inputs,
         toolpane: &ToolPane,
+        _editorgrid: &mut EditorGrid,
     ) {
         let Rectangle {
             x,
@@ -276,6 +319,26 @@ impl EditorTab {
             width,
             height,
         } = Rectangle::from(*bounds);
+        #[cfg(false)]
+        {
+            let mut _d = d.begin_shader_mode(&mut editorgrid.shader);
+            // SAFETY: exclusive access to RaylibDraw guarantees all rlgl requirements are met
+            unsafe {
+                ffi::rlBegin(ffi::RL_QUADS as i32);
+                {
+                    ffi::rlColor4ub(255, 255, 255, 255);
+                    ffi::rlTexCoord2f(0.0, 0.0);
+                    ffi::rlVertex2f(x, y);
+                    ffi::rlTexCoord2f(0.0, 1.0);
+                    ffi::rlVertex2f(x, y + height);
+                    ffi::rlTexCoord2f(1.0, 1.0);
+                    ffi::rlVertex2f(x + width, y + height);
+                    ffi::rlTexCoord2f(1.0, 0.0);
+                    ffi::rlVertex2f(x + width, y);
+                }
+                ffi::rlEnd();
+            }
+        }
         let mut d = d.begin_scissor_mode(x as i32, y as i32, width as i32, height as i32);
         d.draw_texture_pro(
             self.grid_tex(),
@@ -524,6 +587,7 @@ pub struct TabList {
 }
 
 impl Extend<Tab> for TabList {
+    #[inline]
     fn extend<T: IntoIterator<Item = Tab>>(&mut self, iter: T) {
         self.tabs.extend(iter);
     }
@@ -532,6 +596,7 @@ impl Extend<Tab> for TabList {
 impl std::ops::Deref for TabList {
     type Target = [Tab];
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         self.tabs.as_slice()
     }
@@ -541,6 +606,7 @@ impl IntoIterator for TabList {
     type Item = Tab;
     type IntoIter = std::vec::IntoIter<Tab>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.tabs.into_iter()
     }
@@ -550,6 +616,7 @@ impl<'a> IntoIterator for &'a TabList {
     type Item = &'a Tab;
     type IntoIter = std::slice::Iter<'a, Tab>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.tabs.as_slice().iter()
     }
@@ -559,6 +626,7 @@ impl<'a> IntoIterator for &'a mut TabList {
     type Item = &'a mut Tab;
     type IntoIter = std::slice::IterMut<'a, Tab>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.tabs.as_mut_slice().iter_mut()
     }
@@ -584,6 +652,7 @@ impl TabList {
         }
     }
 
+    #[inline]
     pub const fn panel(&self) -> &Panel {
         &self.panel
     }
@@ -608,14 +677,17 @@ impl TabList {
         Ok(res)
     }
 
+    #[inline]
     pub const fn len(&self) -> usize {
         self.tabs.len()
     }
 
+    #[inline]
     pub const fn is_empty(&self) -> bool {
         self.tabs.is_empty()
     }
 
+    #[inline]
     pub const fn focused_tab(&self) -> Option<&Tab> {
         if self.tabs.is_empty() {
             None
@@ -624,6 +696,7 @@ impl TabList {
         }
     }
 
+    #[inline]
     pub const fn focused_tab_mut(&mut self) -> Option<&mut Tab> {
         if self.tabs.is_empty() {
             None
@@ -633,6 +706,7 @@ impl TabList {
     }
 
     /// Returns an error if `tab` is out of range
+    #[inline]
     pub const fn focus(&mut self, tab: usize) -> Result<(), ()> {
         if tab < self.tabs.len() {
             self.focused = tab;
@@ -642,10 +716,12 @@ impl TabList {
         }
     }
 
+    #[inline]
     pub fn push(&mut self, tab: Tab) {
         self.tabs.push(tab);
     }
 
+    #[inline]
     pub fn pop(&mut self) -> Option<Tab> {
         let popped = self.tabs.pop();
         if popped.is_some() && self.focused == self.tabs.len() {
@@ -654,6 +730,7 @@ impl TabList {
         popped
     }
 
+    #[inline]
     pub fn insert(&mut self, index: usize, tab: Tab) {
         if self.focused >= index {
             self.focused += 1;
@@ -661,6 +738,7 @@ impl TabList {
         self.tabs.insert(index, tab);
     }
 
+    #[inline]
     pub fn remove(&mut self, index: usize) -> Tab {
         let removed = self.tabs.remove(index);
         if self.focused > index {
@@ -669,6 +747,7 @@ impl TabList {
         removed
     }
 
+    #[inline]
     pub fn retain<F: FnMut(&Tab) -> bool>(&mut self, mut f: F) {
         let mut i = 0;
         let mut shift = 0;
@@ -685,6 +764,7 @@ impl TabList {
         self.focused -= shift;
     }
 
+    #[inline]
     pub fn retain_mut<F: FnMut(&mut Tab) -> bool>(&mut self, mut f: F) {
         let mut i = 0;
         let mut shift = 0;
@@ -702,6 +782,7 @@ impl TabList {
     }
 
     /// Returns an error if `from_index` or `to_index` is out of range
+    #[inline]
     pub fn reorder(&mut self, from_index: usize, to_index: usize) -> Result<(), ()> {
         use std::cmp::Ordering::*;
         if from_index < self.tabs.len() && to_index < self.tabs.len() {
@@ -726,6 +807,7 @@ impl TabList {
         }
     }
 
+    #[inline]
     pub fn editors(&self) -> impl DoubleEndedIterator<Item = &EditorTab> + Clone {
         self.tabs.iter().map(|tab| match tab {
             Tab::Editor(tab) => tab,
@@ -733,6 +815,7 @@ impl TabList {
         })
     }
 
+    #[inline]
     pub fn editors_mut(&mut self) -> impl DoubleEndedIterator<Item = &mut EditorTab> {
         self.tabs.iter_mut().map(|tab| match tab {
             Tab::Editor(tab) => tab,
@@ -740,6 +823,7 @@ impl TabList {
         })
     }
 
+    #[inline]
     pub fn editors_of_graph(
         &self,
         graph: &Weak<RwLock<Graph>>,
@@ -750,6 +834,7 @@ impl TabList {
         })
     }
 
+    #[inline]
     pub fn editors_of_graph_mut(
         &mut self,
         graph: &Weak<RwLock<Graph>>,

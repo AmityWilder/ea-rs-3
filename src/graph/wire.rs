@@ -5,6 +5,7 @@ use raylib::prelude::*;
 pub struct WireId(pub(super) u128);
 
 impl std::fmt::Display for WireId {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "w{:x}", self.0)
     }
@@ -67,10 +68,12 @@ pub enum Flow {
 }
 
 impl Flow {
+    #[inline]
     pub const fn is_input(self) -> bool {
         ((self as u8) & 1) != 0
     }
 
+    #[inline]
     pub const fn is_output(self) -> bool {
         ((self as u8) & 2) != 0
     }
@@ -94,14 +97,17 @@ impl Wire {
         }
     }
 
+    #[inline]
     pub const fn id(&self) -> &WireId {
         &self.id
     }
 
+    #[inline]
     pub const fn src(&self) -> &NodeId {
         &self.src
     }
 
+    #[inline]
     pub const fn dst(&self) -> &NodeId {
         &self.dst
     }

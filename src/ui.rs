@@ -16,6 +16,7 @@ pub struct ExactSizing {
 }
 
 impl ExactSizing {
+    #[inline]
     pub fn clamp(
         &self,
         theme: &Theme,
@@ -53,6 +54,7 @@ pub enum NcSizing {
 }
 
 impl NcSizing {
+    #[inline]
     pub const fn get(self, content_size: f32) -> f32 {
         match self {
             Self::FitContent => content_size,
@@ -71,6 +73,7 @@ pub enum Sizing {
 }
 
 impl Sizing {
+    #[inline]
     pub const fn get(self, container_size: f32, content_size: f32) -> f32 {
         match self {
             Self::FitContent => content_size,
@@ -258,6 +261,7 @@ pub struct Padding {
 }
 
 impl Padding {
+    #[inline]
     pub const fn amount(padding: f32) -> Self {
         Self {
             left: padding,
@@ -267,6 +271,7 @@ impl Padding {
         }
     }
 
+    #[inline]
     pub const fn block(x: f32, y: f32) -> Self {
         Self {
             left: x,
@@ -276,14 +281,17 @@ impl Padding {
         }
     }
 
+    #[inline]
     pub const fn horizontal(&self) -> f32 {
         self.left + self.right
     }
 
+    #[inline]
     pub const fn vertical(&self) -> f32 {
         self.top + self.bottom
     }
 
+    #[inline]
     pub const fn size(&self) -> Vector2 {
         Vector2::new(self.horizontal(), self.vertical())
     }
@@ -320,6 +328,7 @@ impl Padding {
 }
 
 impl Bounds {
+    #[inline]
     pub const fn pad(&self, padding: &Padding) -> Self {
         Self {
             min: Vector2::new(self.min.x + padding.left, self.min.y + padding.top),
@@ -368,6 +377,7 @@ impl Panel {
     }
 
     /// returns new container bounds, if split
+    #[inline]
     pub fn update_bounds(
         &mut self,
         theme: &Theme,
@@ -382,10 +392,12 @@ impl Panel {
         new_container
     }
 
+    #[inline]
     pub const fn bounds(&self) -> &Bounds {
         &self.bounds
     }
 
+    #[inline]
     pub const fn is_dragging(&self) -> bool {
         matches!(
             self.hover,
@@ -396,12 +408,14 @@ impl Panel {
         )
     }
 
+    #[inline]
     pub const fn interactable(&self, overlapping: Vector2) -> bool {
         self.bounds
             .pad(&Padding::amount(-1.5))
             .contains(overlapping)
     }
 
+    #[inline]
     pub fn content_bounds(&self, theme: &Theme) -> Bounds {
         self.bounds.pad(&(self.padding)(theme))
     }

@@ -26,12 +26,14 @@ impl SerdeColor {
 }
 
 impl From<Color> for SerdeColor {
+    #[inline]
     fn from(Color { r, g, b, a }: Color) -> Self {
         Self { r, g, b, a }
     }
 }
 
 impl From<SerdeColor> for Color {
+    #[inline]
     fn from(SerdeColor { r, g, b, a }: SerdeColor) -> Self {
         Self { r, g, b, a }
     }
@@ -213,6 +215,7 @@ struct ColorVisitor;
 struct HexCode;
 
 impl serde::de::Expected for HexCode {
+    #[inline]
     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("6, or 8 digits of 0-F")
     }
@@ -221,6 +224,7 @@ impl serde::de::Expected for HexCode {
 impl<'de> serde::de::Visitor<'de> for ColorVisitor {
     type Value = SerdeColor;
 
+    #[inline]
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str(
             "a color hexcode starting with '#' or a \"rgb(...)\" containing the rgb values",
@@ -312,6 +316,7 @@ impl Serialize for SerdeColor {
 }
 
 impl<'de> Deserialize<'de> for SerdeColor {
+    #[inline]
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -364,6 +369,7 @@ struct ThemeFontVisitor;
 impl<'de> Visitor<'de> for ThemeFontVisitor {
     type Value = ThemeFont;
 
+    #[inline]
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("ThemeFont")
     }
@@ -412,6 +418,7 @@ impl<'de> Visitor<'de> for ThemeFontVisitor {
 }
 
 impl<'de> Deserialize<'de> for ThemeFont {
+    #[inline]
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -425,6 +432,7 @@ impl<'de> Deserialize<'de> for ThemeFont {
 ///
 /// Remember to call [`ThemeFont::reload_font`] if the clone is going to be used.
 impl Clone for ThemeFont {
+    #[inline]
     fn clone(&self) -> Self {
         Self {
             path: self.path.clone(),
@@ -439,12 +447,14 @@ impl Clone for ThemeFont {
 impl std::ops::Deref for ThemeFont {
     type Target = OptionalFont;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.font
     }
 }
 
 impl std::ops::DerefMut for ThemeFont {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.font
     }
@@ -457,18 +467,21 @@ impl AsRef<OptionalFont> for ThemeFont {
 }
 
 impl AsMut<OptionalFont> for ThemeFont {
+    #[inline]
     fn as_mut(&mut self) -> &mut OptionalFont {
         self
     }
 }
 
 impl AsRef<ffi::Font> for ThemeFont {
+    #[inline]
     fn as_ref(&self) -> &ffi::Font {
         self.font.as_ref()
     }
 }
 
 impl AsMut<ffi::Font> for ThemeFont {
+    #[inline]
     fn as_mut(&mut self) -> &mut ffi::Font {
         self.font.as_mut()
     }
@@ -477,19 +490,23 @@ impl AsMut<ffi::Font> for ThemeFont {
 impl RaylibFont for ThemeFont {}
 
 impl ThemeFont {
+    #[inline]
     pub fn reload(&mut self, rl: &mut RaylibHandle, thread: &RaylibThread) {
         self.font = OptionalFont::load(rl, thread, self.path.as_ref());
     }
 
+    #[inline]
     pub fn line_height(&self) -> f32 {
         self.font_size + self.line_spacing
     }
 
+    #[inline]
     pub fn measure_text(&self, text: &str) -> Vector2 {
         self.font
             .measure_text(text, self.font_size, self.char_spacing)
     }
 
+    #[inline]
     pub fn draw_text<D: RaylibDraw>(&self, d: &mut D, text: &str, position: Vector2, tint: Color) {
         d.draw_text_ex(
             self,
@@ -516,6 +533,7 @@ pub struct ThemeButtonIcons {
 impl std::ops::Deref for ThemeButtonIcons {
     type Target = ButtonIconSheets;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         self.sheets
             .as_ref()
@@ -524,6 +542,7 @@ impl std::ops::Deref for ThemeButtonIcons {
 }
 
 impl std::ops::DerefMut for ThemeButtonIcons {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.sheets
             .as_mut()
@@ -532,12 +551,14 @@ impl std::ops::DerefMut for ThemeButtonIcons {
 }
 
 impl AsRef<ButtonIconSheets> for ThemeButtonIcons {
+    #[inline]
     fn as_ref(&self) -> &ButtonIconSheets {
         self
     }
 }
 
 impl AsMut<ButtonIconSheets> for ThemeButtonIcons {
+    #[inline]
     fn as_mut(&mut self) -> &mut ButtonIconSheets {
         self
     }
@@ -547,6 +568,7 @@ impl AsMut<ButtonIconSheets> for ThemeButtonIcons {
 ///
 /// Remember to call [`ThemeButtonIcons::reload`] if the clone is going to be used.
 impl Clone for ThemeButtonIcons {
+    #[inline]
     fn clone(&self) -> Self {
         Self {
             x16_path: self.x16_path.clone(),
@@ -622,6 +644,7 @@ pub struct ThemeNodeIcons {
 impl std::ops::Deref for ThemeNodeIcons {
     type Target = NodeIconSheetSets;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         self.sheetsets
             .as_ref()
@@ -630,6 +653,7 @@ impl std::ops::Deref for ThemeNodeIcons {
 }
 
 impl std::ops::DerefMut for ThemeNodeIcons {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.sheetsets
             .as_mut()
@@ -638,12 +662,14 @@ impl std::ops::DerefMut for ThemeNodeIcons {
 }
 
 impl AsRef<NodeIconSheetSets> for ThemeNodeIcons {
+    #[inline]
     fn as_ref(&self) -> &NodeIconSheetSets {
         self
     }
 }
 
 impl AsMut<NodeIconSheetSets> for ThemeNodeIcons {
+    #[inline]
     fn as_mut(&mut self) -> &mut NodeIconSheetSets {
         self
     }
@@ -653,6 +679,7 @@ impl AsMut<NodeIconSheetSets> for ThemeNodeIcons {
 ///
 /// Remember to call [`ThemeNodeIcons::reload`] if the clone is going to be used.
 impl Clone for ThemeNodeIcons {
+    #[inline]
     fn clone(&self) -> Self {
         Self {
             basic8x_path: self.basic8x_path.clone(),
@@ -760,6 +787,7 @@ enum BaseTheme {
 }
 
 impl BaseTheme {
+    #[inline]
     fn theme(self) -> Theme {
         match self {
             Self::Dark => Theme::dark_theme(),
@@ -994,6 +1022,7 @@ pub struct Theme {
 }
 
 impl Default for Theme {
+    #[inline]
     fn default() -> Self {
         Self::dark_theme()
     }
@@ -1171,6 +1200,7 @@ pub enum ColorId {
 }
 
 impl std::fmt::Display for ColorId {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ColorId::Background => "background",
@@ -1211,6 +1241,7 @@ impl std::fmt::Display for ColorId {
 impl std::str::FromStr for ColorId {
     type Err = ();
 
+    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "background" => Ok(ColorId::Background),
@@ -1251,6 +1282,7 @@ impl std::str::FromStr for ColorId {
 impl std::ops::Index<ColorId> for Theme {
     type Output = Color;
 
+    #[inline]
     fn index(&self, index: ColorId) -> &Self::Output {
         match index {
             ColorId::Background => &self.background,
@@ -1288,6 +1320,7 @@ impl std::ops::Index<ColorId> for Theme {
 }
 
 impl std::ops::IndexMut<ColorId> for Theme {
+    #[inline]
     fn index_mut(&mut self, index: ColorId) -> &mut Self::Output {
         match index {
             ColorId::Background => &mut self.background,
@@ -1354,6 +1387,7 @@ impl OptionalFont {
 }
 
 impl AsRef<ffi::Font> for OptionalFont {
+    #[inline]
     fn as_ref(&self) -> &ffi::Font {
         match self {
             Self::Unloaded => panic!("font must be loaded before using"),
@@ -1364,6 +1398,7 @@ impl AsRef<ffi::Font> for OptionalFont {
 }
 
 impl AsMut<ffi::Font> for OptionalFont {
+    #[inline]
     fn as_mut(&mut self) -> &mut ffi::Font {
         match self {
             Self::Unloaded => panic!("font must be loaded before using"),

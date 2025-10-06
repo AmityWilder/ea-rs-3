@@ -21,6 +21,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use tab::EditorGrid;
 use ui::{Anchoring, ExactSizing, Panel, Sizing};
 
 mod config;
@@ -88,6 +89,12 @@ fn main() {
         LogType::Attempt,
         "Loading config from {CONFIG_PATH}..."
     );
+
+    let mut editorgrid = EditorGrid::new(rl.load_shader_from_memory(
+        &thread,
+        None,
+        Some(include_str!("../assets/editorgrid.fs")),
+    ));
 
     // load preferences
     let Config {
@@ -296,7 +303,7 @@ fn main() {
             if let Some(tab) = tabs.focused_tab_mut() {
                 match tab {
                     Tab::Editor(tab) => {
-                        tab.tick(&mut console, &mut toolpane, &theme, &input);
+                        tab.tick(&mut console, &mut toolpane, &theme, &input, &mut editorgrid);
                     }
                 }
             } else {
@@ -352,7 +359,14 @@ fn main() {
             if let Some(focused_tab) = tabs.focused_tab() {
                 match focused_tab {
                     Tab::Editor(tab) => {
-                        tab.draw(&mut d, tabs.panel().bounds(), &theme, &input, &toolpane);
+                        tab.draw(
+                            &mut d,
+                            tabs.panel().bounds(),
+                            &theme,
+                            &input,
+                            &toolpane,
+                            &mut editorgrid,
+                        );
                     }
                 }
             }

@@ -36,6 +36,7 @@ pub enum GateId {
 }
 
 impl std::fmt::Display for GateId {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             GateId::Or => "or",
@@ -55,6 +56,7 @@ impl std::fmt::Display for GateId {
 impl std::str::FromStr for GateId {
     type Err = ();
 
+    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "or" => Ok(GateId::Or),
@@ -72,6 +74,7 @@ impl std::str::FromStr for GateId {
 }
 
 impl GateId {
+    #[inline]
     pub const fn to_gate(self, ntd: u8) -> Gate {
         match self {
             GateId::Or => Gate::Or,
@@ -149,6 +152,7 @@ impl std::str::FromStr for Gate {
 }
 
 impl Gate {
+    #[inline]
     pub const fn id(self) -> GateId {
         match self {
             Gate::Or => GateId::Or,
@@ -188,6 +192,7 @@ pub enum GateNtd {
 }
 
 impl GateNtd {
+    #[inline]
     pub const fn from_gate(gate: Gate) -> Self {
         match gate {
             Gate::Or => Self::Or,
@@ -205,6 +210,7 @@ impl GateNtd {
         }
     }
 
+    #[inline]
     pub const fn as_gate(self) -> Gate {
         match self {
             Self::Or => Gate::Or {},
@@ -241,18 +247,22 @@ impl Node {
         }
     }
 
+    #[inline]
     pub const fn id(&self) -> &NodeId {
         &self.id
     }
 
+    #[inline]
     pub const fn state(&self) -> bool {
         self.state
     }
 
+    #[inline]
     pub const fn position(&self) -> IVec2 {
         self.position
     }
 
+    #[inline]
     pub const fn gate_ntd(&self) -> &GateNtd {
         &self.gate
     }

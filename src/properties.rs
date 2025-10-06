@@ -69,6 +69,7 @@ fn tool_data(tool: &Tool) -> (ButtonIconId, &'static str, &'static str) {
 }
 
 impl PropertySection for Tool {
+    #[inline]
     fn title(&self) -> &str {
         "Tool"
     }
@@ -190,6 +191,7 @@ fn gate_data(gate: &Gate) -> (ButtonIconId, &'static str, &'static str) {
 }
 
 impl PropertySection for Gate {
+    #[inline]
     fn title(&self) -> &str {
         "Gate"
     }

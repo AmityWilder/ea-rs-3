@@ -57,6 +57,7 @@ impl std::str::FromStr for ColorRef {
 }
 
 impl ColorRef {
+    #[inline]
     pub fn get(self, theme: &Theme) -> Color {
         match self {
             Self::Theme(id) => theme[id],
@@ -66,12 +67,14 @@ impl ColorRef {
 }
 
 impl From<ColorId> for ColorRef {
+    #[inline]
     fn from(value: ColorId) -> Self {
         Self::Theme(value)
     }
 }
 
 impl From<Color> for ColorRef {
+    #[inline]
     fn from(value: Color) -> Self {
         Self::Exact(value)
     }
@@ -160,6 +163,7 @@ impl<'a> Iterator for RichStrIter<'a> {
         }
     }
 
+    #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         let n = self.len();
         (n, Some(n))
@@ -192,6 +196,7 @@ impl<'a> DoubleEndedIterator for RichStrIter<'a> {
 }
 
 impl<'a> ExactSizeIterator for RichStrIter<'a> {
+    #[inline]
     fn len(&self) -> usize {
         self.string.split("\x1B{").count()
     }
@@ -206,24 +211,28 @@ pub struct RichStr(str);
 impl std::ops::Deref for RichStr {
     type Target = str;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl std::ops::DerefMut for RichStr {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
 impl AsRef<str> for RichStr {
+    #[inline]
     fn as_ref(&self) -> &str {
         self
     }
 }
 
 impl AsMut<str> for RichStr {
+    #[inline]
     fn as_mut(&mut self) -> &mut str {
         self
     }
@@ -240,6 +249,7 @@ impl RichStr {
         unsafe { std::mem::transmute(s) }
     }
 
+    #[inline]
     pub const fn iter(&self) -> RichStrIter<'_> {
         RichStrIter {
             color_stack: Vec::new(),
@@ -252,6 +262,7 @@ impl<'a> IntoIterator for &'a RichStr {
     type Item = <RichStrIter<'a> as Iterator>::Item;
     type IntoIter = RichStrIter<'a>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
@@ -261,6 +272,7 @@ impl<'a> IntoIterator for &'a RichStr {
 pub struct RichString(String);
 
 impl<T: Into<String>> From<T> for RichString {
+    #[inline]
     fn from(value: T) -> Self {
         Self(value.into())
     }
@@ -269,48 +281,56 @@ impl<T: Into<String>> From<T> for RichString {
 impl std::ops::Deref for RichString {
     type Target = String;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl std::ops::DerefMut for RichString {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
 impl AsRef<String> for RichString {
+    #[inline]
     fn as_ref(&self) -> &String {
         self
     }
 }
 
 impl AsMut<String> for RichString {
+    #[inline]
     fn as_mut(&mut self) -> &mut String {
         self
     }
 }
 
 impl AsRef<str> for RichString {
+    #[inline]
     fn as_ref(&self) -> &str {
         self
     }
 }
 
 impl AsMut<str> for RichString {
+    #[inline]
     fn as_mut(&mut self) -> &mut str {
         self
     }
 }
 
 impl AsRef<RichStr> for RichString {
+    #[inline]
     fn as_ref(&self) -> &RichStr {
         self.as_rich_str()
     }
 }
 
 impl AsMut<RichStr> for RichString {
+    #[inline]
     fn as_mut(&mut self) -> &mut RichStr {
         self.as_mut_rich_str()
     }
@@ -325,10 +345,12 @@ impl RichString {
         Self(String::with_capacity(capacity))
     }
 
+    #[inline]
     pub const fn as_rich_str(&self) -> &RichStr {
         RichStr::new(self.0.as_str())
     }
 
+    #[inline]
     pub const fn as_mut_rich_str(&mut self) -> &mut RichStr {
         RichStr::new_mut(self.0.as_mut_str())
     }
