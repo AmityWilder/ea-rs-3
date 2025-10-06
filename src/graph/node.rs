@@ -227,6 +227,32 @@ impl GateNtd {
             Self::Battery => Gate::Battery {},
         }
     }
+
+    pub fn evaluate<I>(&mut self, mut inputs: std::iter::Peekable<I>) -> bool
+    where
+        I: Iterator<Item = bool>,
+    {
+        match *self {
+            GateNtd::Or | GateNtd::Led { .. } => inputs.any(|x| x),
+            GateNtd::And => inputs.peek().is_some() && inputs.all(|x| x),
+            GateNtd::Nor => !inputs.any(|x| x),
+            GateNtd::Xor => inputs.filter(|&x| x).count() == 1,
+            GateNtd::Resistor { resistance } => inputs.map(|x| x as u8).sum::<u8>() > resistance,
+            GateNtd::Capacitor {
+                capacity,
+                ref mut stored,
+            } => {
+                let total = inputs.map(|x| x as u8).sum::<u8>();
+                *stored = (*stored + total).min(capacity);
+                total > 0 || {
+                    *stored = stored.saturating_sub(1);
+                    *stored > 0
+                }
+            }
+            GateNtd::Delay { ref mut prev } => std::mem::replace(prev, inputs.any(|x| x)),
+            GateNtd::Battery => true,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]

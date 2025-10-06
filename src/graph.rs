@@ -8,10 +8,11 @@ use crate::{
     ivec::IVec2,
     logln,
 };
-use node::GateNtd;
-use raylib::prelude::*;
-use rustc_hash::FxHashMap;
-use std::sync::{Arc, RwLock};
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, RwLock},
+};
 
 pub mod node;
 pub mod wire;
@@ -249,51 +250,61 @@ impl Graph {
         self.nodes.get(&wire.src).zip(self.nodes.get(&wire.dst))
     }
 
-    pub fn evaluate(&mut self) {
-        let node_states: FxHashMap<NodeId, bool> = self
-            .nodes
-            .iter()
-            .map(|(id, node)| (*id, node.state))
-            .collect();
-        for (id, node) in self.nodes.iter_mut() {
-            let mut inputs = self
-                .wires
-                .values()
-                .filter(|wire| &wire.dst == id) // surely there's a better way than O(nk)
-                .map(|wire| {
-                    node_states
-                        .get(&wire.src)
-                        .copied()
-                        .expect("all wires should be valid")
-                })
-                .peekable();
+    fn eval_order(&self) -> Vec<NodeId> {
+        let mut order = Vec::with_capacity(self.nodes.len());
+        let mut visited = FxHashSet::default();
+        let mut outputs: FxHashMap<NodeId, Vec<NodeId>> = FxHashMap::default();
+        for wire in self.wires.values() {
+            outputs.entry(wire.src).or_default().push(wire.dst);
+        }
+        let mut queue = {
+            let nodes = FxHashSet::from_iter(self.nodes.keys().copied());
+            let with_input = FxHashSet::from_iter(self.wires.values().map(|wire| wire.dst));
+            VecDeque::from_iter(
+                nodes
+                    .difference(&with_input)
+                    .copied()
+                    .inspect(|&node| _ = visited.insert(node)),
+            )
+        };
+        while let Some(node) = queue.pop_front() {
+            order.push(node);
+            for &next in outputs.values().flatten() {
+                if visited.insert(next) {
+                    queue.push_back(next);
+                }
+            }
+        }
+        order
+    }
 
-            node.state = match node.gate {
-                GateNtd::Or | GateNtd::Led { .. } => inputs.any(|x| x),
-                GateNtd::And => inputs.peek().is_some() && inputs.all(|x| x),
-                GateNtd::Nor => !inputs.any(|x| x),
-                GateNtd::Xor => inputs.filter(|&x| x).count() == 1,
-                GateNtd::Resistor { resistance } => {
-                    inputs.map(|x| x as u8).sum::<u8>() > resistance
-                }
-                GateNtd::Capacitor {
-                    capacity,
-                    ref mut stored,
-                } => {
-                    let total = inputs.map(|x| x as u8).sum::<u8>();
-                    *stored = (*stored + total).min(capacity);
-                    total > 0 || {
-                        *stored = stored.saturating_sub(1);
-                        *stored > 0
-                    }
-                }
-                GateNtd::Delay { ref mut prev } => std::mem::replace(prev, inputs.any(|x| x)),
-                GateNtd::Battery => true,
-            };
+    pub fn evaluate(&mut self) {
+        let mut inputs = FxHashMap::default();
+        for wire in self.wires.values() {
+            inputs
+                .entry(wire.dst)
+                .or_insert_with(Vec::new)
+                .push(wire.src);
+        }
+        let mut input_buf = Vec::new();
+        for id in self.eval_order() {
+            input_buf.clear();
+            input_buf.extend(inputs.get(&id).iter().flat_map(|v| v.iter()).map(|id| {
+                self.nodes
+                    .get(id)
+                    .expect("all nodes in inputs should be valid")
+                    .state
+            }));
+            let node = self
+                .nodes
+                .get_mut(&id)
+                .expect("all nodes in order should be valid");
+            node.state = node.gate.evaluate(input_buf.iter().copied().peekable());
         }
     }
 }
 
+#[derive(Debug)]
 pub struct GraphList {
     next_graph_id: GraphId,
     graphs: Vec<Arc<RwLock<Graph>>>,
