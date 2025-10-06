@@ -1,10 +1,16 @@
 use crate::ivec::IVec2;
 use serde_derive::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub(super) u128);
 
 impl std::fmt::Display for NodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "n{:x}", self.0)
+    }
+}
+
+impl std::fmt::Debug for NodeId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "n{:x}", self.0)
     }
@@ -228,10 +234,11 @@ impl GateNtd {
         }
     }
 
-    pub fn evaluate<I>(&mut self, mut inputs: std::iter::Peekable<I>) -> bool
+    pub fn evaluate<I>(&mut self, inputs: I) -> bool
     where
-        I: Iterator<Item = bool>,
+        I: IntoIterator<Item = bool>,
     {
+        let mut inputs = inputs.into_iter().peekable();
         match *self {
             GateNtd::Or | GateNtd::Led { .. } => inputs.any(|x| x),
             GateNtd::And => inputs.peek().is_some() && inputs.all(|x| x),

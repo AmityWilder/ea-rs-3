@@ -71,6 +71,11 @@ fn main() {
         .resizable()
         .build();
 
+    // SAFETY: raylib has been initialized
+    unsafe {
+        ffi::SetTraceLogLevel(ffi::TraceLogLevel::LOG_WARNING as i32);
+    }
+
     rl.set_target_fps(
         get_monitor_refresh_rate(get_current_monitor())
             .try_into()
@@ -190,7 +195,7 @@ fn main() {
     ));
 
     let mut next_eval_tick = Instant::now();
-    let eval_duration = Duration::from_millis(200);
+    let eval_duration = Duration::from_millis(1000);
 
     // initialize bounds
     {
@@ -348,7 +353,7 @@ fn main() {
 
         for mut graph in graphs.iter_mut().filter_map(|g| g.try_write().ok()) {
             let now = Instant::now();
-            while now >= next_eval_tick {
+            if now >= next_eval_tick {
                 graph.evaluate();
                 next_eval_tick = now + eval_duration;
             }
