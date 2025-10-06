@@ -237,7 +237,9 @@ impl EditorTab {
                     if input.primary.is_starting() {
                         if let Some(&id) = graph.find_node_at(pos) {
                             // existing node
-                            if let Some(current_node) = *current_node {
+                            if let Some(current_node) = *current_node
+                                && current_node != id
+                            {
                                 graph.create_wire(toolpane.elbow, current_node, id, console);
                             }
                             *current_node = Some(id);
