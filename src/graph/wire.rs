@@ -4,7 +4,15 @@ use raylib::prelude::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WireId(pub(super) u128);
 
+/// Defaults to [`Self::INVALID`]
+impl Default for WireId {
+    fn default() -> Self {
+        Self::INVALID
+    }
+}
+
 impl std::fmt::Display for WireId {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "w{:x}", self.0)
     }
@@ -21,12 +29,31 @@ impl std::str::FromStr for WireId {
     }
 }
 
+impl WireId {
+    pub const INVALID: Self = Self(!0);
+
+    /// Returns the current value and increments `self`.
+    /// Returns [`None`] if [`Self::INVALID`] would have been returned.
+    /// Does not increment if `self` is [`Self::INVALID`].
+    #[inline]
+    pub const fn step(&mut self) -> Option<Self> {
+        const INVALID: WireId = WireId::INVALID;
+        match *self {
+            INVALID => None,
+            id => {
+                self.0 += 1;
+                Some(id)
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum Elbow {
-    #[default]
     Horizontal,
     DiagonalStart,
     Vertical,
+    #[default]
     DiagonalEnd,
 }
 
@@ -67,10 +94,12 @@ pub enum Flow {
 }
 
 impl Flow {
+    #[inline]
     pub const fn is_input(self) -> bool {
         ((self as u8) & 1) != 0
     }
 
+    #[inline]
     pub const fn is_output(self) -> bool {
         ((self as u8) & 2) != 0
     }
@@ -94,14 +123,17 @@ impl Wire {
         }
     }
 
+    #[inline]
     pub const fn id(&self) -> &WireId {
         &self.id
     }
 
+    #[inline]
     pub const fn src(&self) -> &NodeId {
         &self.src
     }
 
+    #[inline]
     pub const fn dst(&self) -> &NodeId {
         &self.dst
     }

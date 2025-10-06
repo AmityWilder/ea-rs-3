@@ -1,10 +1,26 @@
 use crate::ivec::IVec2;
 use serde_derive::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub(super) u128);
 
+/// Defaults to [`Self::INVALID`].
+impl Default for NodeId {
+    #[inline]
+    fn default() -> Self {
+        Self::INVALID
+    }
+}
+
 impl std::fmt::Display for NodeId {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "n{:x}", self.0)
+    }
+}
+
+impl std::fmt::Debug for NodeId {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "n{:x}", self.0)
     }
@@ -18,6 +34,25 @@ impl std::str::FromStr for NodeId {
             .ok_or(())
             .and_then(|x| u128::from_str_radix(x, 16).map_err(|_| ()))
             .map(Self)
+    }
+}
+
+impl NodeId {
+    pub const INVALID: Self = Self(!0);
+
+    /// Returns the current value and increments `self`.
+    /// Returns [`None`] if [`Self::INVALID`] would have been returned.
+    /// Does not increment if `self` is [`Self::INVALID`].
+    #[inline]
+    pub const fn step(&mut self) -> Option<Self> {
+        const INVALID: NodeId = NodeId::INVALID;
+        match *self {
+            INVALID => None,
+            id => {
+                self.0 += 1;
+                Some(id)
+            }
+        }
     }
 }
 
@@ -36,6 +71,7 @@ pub enum GateId {
 }
 
 impl std::fmt::Display for GateId {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             GateId::Or => "or",
@@ -55,6 +91,7 @@ impl std::fmt::Display for GateId {
 impl std::str::FromStr for GateId {
     type Err = ();
 
+    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "or" => Ok(GateId::Or),
@@ -72,6 +109,7 @@ impl std::str::FromStr for GateId {
 }
 
 impl GateId {
+    #[inline]
     pub const fn to_gate(self, ntd: u8) -> Gate {
         match self {
             GateId::Or => Gate::Or,
@@ -149,6 +187,7 @@ impl std::str::FromStr for Gate {
 }
 
 impl Gate {
+    #[inline]
     pub const fn id(self) -> GateId {
         match self {
             Gate::Or => GateId::Or,
@@ -188,6 +227,7 @@ pub enum GateNtd {
 }
 
 impl GateNtd {
+    #[inline]
     pub const fn from_gate(gate: Gate) -> Self {
         match gate {
             Gate::Or => Self::Or,
@@ -205,6 +245,7 @@ impl GateNtd {
         }
     }
 
+    #[inline]
     pub const fn as_gate(self) -> Gate {
         match self {
             Self::Or => Gate::Or {},
@@ -219,6 +260,33 @@ impl GateNtd {
             Self::Led { color } => Gate::Led { color },
             Self::Delay { prev: _ } => Gate::Delay {},
             Self::Battery => Gate::Battery {},
+        }
+    }
+
+    pub fn evaluate<I>(&mut self, inputs: I) -> bool
+    where
+        I: IntoIterator<Item = bool>,
+    {
+        let mut inputs = inputs.into_iter().peekable();
+        match *self {
+            GateNtd::Or | GateNtd::Led { .. } => inputs.any(|x| x),
+            GateNtd::And => inputs.peek().is_some() && inputs.all(|x| x),
+            GateNtd::Nor => !inputs.any(|x| x),
+            GateNtd::Xor => inputs.filter(|&x| x).count() == 1,
+            GateNtd::Resistor { resistance } => inputs.map(|x| x as u8).sum::<u8>() > resistance,
+            GateNtd::Capacitor {
+                capacity,
+                ref mut stored,
+            } => {
+                let total = inputs.map(|x| x as u8).sum::<u8>();
+                *stored = (*stored + total).min(capacity);
+                total > 0 || {
+                    *stored = stored.saturating_sub(1);
+                    *stored > 0
+                }
+            }
+            GateNtd::Delay { ref mut prev } => std::mem::replace(prev, inputs.any(|x| x)),
+            GateNtd::Battery => true,
         }
     }
 }
@@ -241,19 +309,28 @@ impl Node {
         }
     }
 
+    #[inline]
     pub const fn id(&self) -> &NodeId {
         &self.id
     }
 
+    #[inline]
     pub const fn state(&self) -> bool {
         self.state
     }
 
+    #[inline]
     pub const fn position(&self) -> IVec2 {
         self.position
     }
 
+    #[inline]
     pub const fn gate_ntd(&self) -> &GateNtd {
         &self.gate
+    }
+
+    #[inline]
+    pub const fn gate_ntd_mut(&mut self) -> &mut GateNtd {
+        &mut self.gate
     }
 }

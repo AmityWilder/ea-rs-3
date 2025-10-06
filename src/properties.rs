@@ -1,192 +1,343 @@
 use crate::{
-    console::{GateRef, GraphRef, NodeRef, PositionRef, ToolRef, WireRef},
-    ivec::{IBounds, IRect, IVec2},
-    theme::{Fonts, Theme},
+    graph::node::Gate,
+    icon_sheets::{ButtonIconId, ButtonIconSheetId},
+    input::Inputs,
+    ivec::Bounds,
+    theme::{Theme, ThemeFont},
+    tool::Tool,
+    ui::Panel,
 };
 use raylib::prelude::*;
 
-#[derive(Debug, Clone)]
-pub enum Value {
-    Label,
-    Text(String),
-    Bool(bool),
-    Signed(i128),
-    Unsigned(u128),
-    Float(f64),
-    Color(Color),
-    Point(PositionRef),
-    Graph(GraphRef),
-    Node(NodeRef),
-    Wire(WireRef),
-    Gate(GateRef),
-    Tool(ToolRef),
-}
-
-macro_rules! into_value {
-    ($($value:ident: $T:ty => $f:expr),* $(,)?) => {
-        $(impl From<$T> for Value {
-            fn from($value: $T) -> Self {
-                use Value::*;
-                $f
-            }
-        })*
-    };
-}
-
-into_value! {
-    s: String => Text(s),
-    s: &str => Text(s.to_string()),
-    b: bool => Bool(b),
-    n: i128 => Signed(n),
-    n: i64 => Signed(n.into()),
-    n: i32 => Signed(n.into()),
-    n: i16 => Signed(n.into()),
-    n: i8 => Signed(n.into()),
-    n: isize => Signed(n as i128),
-    n: u128 => Unsigned(n),
-    n: u64 => Unsigned(n.into()),
-    n: u32 => Unsigned(n.into()),
-    n: u16 => Unsigned(n.into()),
-    n: u8 => Unsigned(n.into()),
-    n: usize => Unsigned(n as u128),
-    x: f64 => Float(x),
-    x: f32 => Float(x.into()),
-    c: Color => Color(c),
-    p: PositionRef => Point(p),
-    p: IVec2 => Point(PositionRef(p)),
-    id: GraphRef => Graph(id),
-    id: NodeRef => Node(id),
-    id: WireRef => Wire(id),
-    id: GateRef => Gate(id),
-    id: ToolRef => Tool(id),
-}
-
-#[derive(Debug, Clone)]
-pub struct Property {
-    pub name: String,
-    pub value: Value,
-}
-
-impl Property {
-    pub fn new<T: Into<Value>>(name: &str, value: T) -> Self {
-        Self {
-            name: name.replace('\n', "  "),
-            value: value.into(),
+fn wrap_text(s: &str, container_width: f32, font: &ThemeFont) -> String {
+    // size is not changed, some spaces are just replaced with newlines
+    let mut string = String::with_capacity(s.len());
+    let mut it = s.split(' ');
+    if let Some(word) = it.next().as_ref() {
+        let space_width = font.measure_text(" ").x + font.char_spacing * 2.0;
+        let mut line_width = font.measure_text(word).x;
+        string.push_str(word);
+        for word in it {
+            let word_width = font.measure_text(word).x;
+            let new_line_width = line_width + space_width + word_width;
+            let sep;
+            (line_width, sep) = if new_line_width < container_width {
+                (new_line_width, ' ')
+            } else {
+                (word_width, '\n')
+            };
+            string.push(sep);
+            string.push_str(word);
         }
     }
+    string
+}
 
-    pub const fn label(name: String) -> Self {
-        Self {
+pub trait DrawPropertySection<D: RaylibDraw>: PropertySection {
+    fn draw(&self, d: &mut D, container: Bounds, theme: &Theme);
+}
+
+pub trait PropertySection: std::fmt::Debug {
+    fn title(&self) -> &str;
+    fn content_height(&self, container_width: f32, theme: &Theme) -> f32;
+    fn tick(
+        &mut self,
+        rl: &RaylibHandle,
+        thread: &RaylibThread,
+        container: Bounds,
+        theme: &Theme,
+        input: &Inputs,
+    );
+}
+
+fn tool_data(tool: &Tool) -> (ButtonIconId, &'static str, &'static str) {
+    match tool {
+        Tool::Create { .. } => (
+            ButtonIconId::Pen,
+            "Create",
+            "Place nodes with primary input. Placing or clicking a node automatically begins \
+            creating a wire that will connect to the next placed or clicked node.",
+        ),
+        Tool::Erase { .. } => (
+            ButtonIconId::Erase,
+            "Erase",
+            "Click nodes to delete them. A deleted node will delete all its wires as well.",
+        ),
+        Tool::Edit { .. } => (ButtonIconId::Edit, "Edit", "Drag nodes with primary input."),
+        Tool::Interact { .. } => (ButtonIconId::Interact, "Interact", "NOT YET IMPLEMENTED"),
+    }
+}
+
+impl PropertySection for Tool {
+    #[inline]
+    fn title(&self) -> &str {
+        "Tool"
+    }
+
+    fn content_height(&self, container_width: f32, theme: &Theme) -> f32 {
+        let (_, name, desc) = tool_data(self);
+        theme
+            .general_font
+            .measure_text(name)
+            .y
+            .max(ButtonIconSheetId::X32.icon_width() as f32)
+            + theme
+                .general_font
+                .measure_text(&wrap_text(desc, container_width, &theme.general_font))
+                .y
+    }
+
+    fn tick(
+        &mut self,
+        _rl: &RaylibHandle,
+        _thread: &RaylibThread,
+        _container: Bounds,
+        _theme: &Theme,
+        _input: &Inputs,
+    ) {
+        // TODO
+    }
+}
+
+impl<D: RaylibDraw> DrawPropertySection<D> for Tool {
+    fn draw(&self, d: &mut D, container: Bounds, theme: &Theme) {
+        let icon_scale = ButtonIconSheetId::X32;
+        let icon_width = icon_scale.icon_width();
+        let (icon_id, name, desc) = tool_data(self);
+        let space_width = theme.general_font.measure_text(" ").x;
+        let text_size = theme.general_font.measure_text(name);
+        let rec = Rectangle::new(
+            container.min.x,
+            container.min.y,
+            container.width(),
+            text_size.y.max(icon_width as f32),
+        );
+        d.draw_rectangle_rec(rec, theme.background2);
+        d.draw_texture_pro(
+            &theme.button_icons[icon_scale],
+            icon_id.icon_cell_irec(icon_width).as_rec(),
+            Rectangle::new(
+                container.min.x,
+                container.min.y + 0.5 * (rec.height - icon_width as f32),
+                icon_width as f32,
+                icon_width as f32,
+            ),
+            Vector2::zero(),
+            0.0,
+            theme.foreground,
+        );
+        theme.general_font.draw_text(
+            d,
             name,
-            value: Value::Label,
-        }
+            Vector2::new(
+                container.min.x + space_width + icon_width as f32,
+                container.min.y + 0.5 * (rec.height - text_size.y),
+            ),
+            theme.foreground,
+        );
+        theme.general_font.draw_text(
+            d,
+            &wrap_text(desc, container.width(), &theme.general_font),
+            Vector2::new(
+                container.min.x,
+                container.min.y + rec.height + theme.general_font.line_spacing,
+            ),
+            theme.foreground,
+        );
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct PropertyGroup {
-    pub name: String,
-    pub items: Vec<Property>,
+fn gate_data(gate: &Gate) -> (ButtonIconId, &'static str, &'static str) {
+    match gate {
+        Gate::Or => (
+            ButtonIconId::Or,
+            "Or",
+            "True when one input or more is true.",
+        ),
+        Gate::And => (
+            ButtonIconId::And,
+            "And",
+            "True when every input is true and at least one input exists.",
+        ),
+        Gate::Nor => (ButtonIconId::Nor, "Nor", "True when every input is false."),
+        Gate::Xor => (
+            ButtonIconId::Xor,
+            "Xor",
+            "True when exactly one input is true.",
+        ),
+        Gate::Resistor { .. } => (
+            ButtonIconId::Resistor,
+            "Resistor",
+            "True when the number of true inputs exceed the NTD value.",
+        ),
+        Gate::Capacitor { .. } => (
+            ButtonIconId::Capacitor,
+            "Capacitor",
+            "Stores the quantity of true inputs up to a maximum of the NTD value, \
+            losing charge every tick that no input is true. True as long as the charge is not zero.",
+        ),
+        Gate::Led { .. } => (
+            ButtonIconId::Led,
+            "Led",
+            "Like Or, but in Inspect mode, fills its cell with the color of the NTD value when true.",
+        ),
+        Gate::Delay => (
+            ButtonIconId::Delay,
+            "Delay",
+            "Like Or, but gives the previous output that would have been given the previous tick.",
+        ),
+        Gate::Battery => (ButtonIconId::Battery, "Battery", "Always true."),
+    }
 }
 
-impl PropertyGroup {
-    pub fn new(name: &str) -> Self {
-        Self::with_data(name, Vec::new())
+impl PropertySection for Gate {
+    #[inline]
+    fn title(&self) -> &str {
+        "Gate"
     }
 
-    pub fn with_data(name: &str, items: Vec<Property>) -> Self {
-        Self {
-            name: name.replace('\n', "  "),
-            items,
-        }
+    fn content_height(&self, container_width: f32, theme: &Theme) -> f32 {
+        let (_, name, desc) = gate_data(self);
+        theme
+            .general_font
+            .measure_text(name)
+            .y
+            .max(ButtonIconSheetId::X32.icon_width() as f32)
+            + theme
+                .general_font
+                .measure_text(&wrap_text(desc, container_width, &theme.general_font))
+                .y
+    }
+
+    fn tick(
+        &mut self,
+        _rl: &RaylibHandle,
+        _thread: &RaylibThread,
+        _container: Bounds,
+        _theme: &Theme,
+        _input: &Inputs,
+    ) {
+        // TODO
+    }
+}
+
+impl<D: RaylibDraw> DrawPropertySection<D> for Gate {
+    fn draw(&self, d: &mut D, container: Bounds, theme: &Theme) {
+        let icon_scale = ButtonIconSheetId::X32;
+        let icon_width = icon_scale.icon_width();
+        let (icon_id, name, desc) = gate_data(self);
+        let space_width = theme.general_font.measure_text(" ").x;
+        let text_size = theme.general_font.measure_text(name);
+        let rec = Rectangle::new(
+            container.min.x,
+            container.min.y,
+            container.width(),
+            text_size.y.max(icon_width as f32),
+        );
+        d.draw_rectangle_rec(rec, theme.background2);
+        d.draw_texture_pro(
+            &theme.button_icons[icon_scale],
+            icon_id.icon_cell_irec(icon_width).as_rec(),
+            Rectangle::new(
+                container.min.x,
+                container.min.y + 0.5 * (rec.height - icon_width as f32),
+                icon_width as f32,
+                icon_width as f32,
+            ),
+            Vector2::zero(),
+            0.0,
+            theme.foreground,
+        );
+        theme.general_font.draw_text(
+            d,
+            name,
+            Vector2::new(
+                container.min.x + space_width + icon_width as f32,
+                container.min.y + 0.5 * (rec.height - text_size.y),
+            ),
+            theme.foreground,
+        );
+        theme.general_font.draw_text(
+            d,
+            &wrap_text(desc, container.width(), &theme.general_font),
+            Vector2::new(
+                container.min.x,
+                container.min.y + rec.height + theme.general_font.line_spacing,
+            ),
+            theme.foreground,
+        );
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct PropertiesPanel {
-    pub bounds: IBounds,
-    pub data: Vec<PropertyGroup>,
+    pub panel: Panel,
 }
 
 impl PropertiesPanel {
-    pub const fn new(bounds: IBounds) -> Self {
-        Self {
-            bounds,
-            data: Vec::new(),
+    pub const fn new(panel: Panel) -> Self {
+        Self { panel }
+    }
+
+    pub fn tick<'a, I>(
+        &mut self,
+        rl: &'a mut RaylibHandle,
+        thread: &'a RaylibThread,
+        theme: &Theme,
+        input: &Inputs,
+        sections: I,
+    ) where
+        I: IntoIterator<Item = &'a mut dyn PropertySection>,
+    {
+        // self.panel.tick_resize(rl, theme, input);
+        let bounds = self.panel.content_bounds(theme);
+        let mut y = bounds.min.y;
+        for section in sections {
+            y += theme.console_font.line_height() * section.title().lines().count() as f32;
+            let height = section.content_height(bounds.width(), theme);
+            section.tick(
+                rl,
+                thread,
+                Bounds::new(
+                    Vector2::new(bounds.max.x, y),
+                    Vector2::new(bounds.min.x, y + height),
+                ),
+                theme,
+                input,
+            );
         }
     }
 
-    pub const fn with_data(bounds: IBounds, data: Vec<PropertyGroup>) -> Self {
-        Self { bounds, data }
-    }
-
-    pub fn draw<D>(&self, d: &mut D, theme: &Theme, fonts: &Fonts)
+    pub fn draw<'a, D, I>(&self, d: &'a mut D, theme: &Theme, sections: I)
     where
         D: RaylibDraw,
+        I: IntoIterator<Item = &'a dyn DrawPropertySection<D>>,
     {
-        let IRect { x, y, w, h } = self.bounds.into();
-        d.draw_rectangle(x, y, w, h, theme.background2);
-        d.draw_rectangle(x + 1, y + 1, w - 2, h - 2, theme.background1);
-        let x = x as f32;
-        let mut y = y as f32;
-
-        // data
-        {
-            for group in &self.data {
-                d.draw_text_ex(
-                    &fonts.general,
-                    &group.name,
-                    rvec2(x, y),
-                    theme.console_font_size,
-                    theme.console_char_spacing,
+        self.panel.draw(d, theme, |d, bounds, theme| {
+            let Vector2 { x, mut y } = bounds.min;
+            for section in sections {
+                let header_size = theme.properties_header_font.measure_text(section.title());
+                theme.properties_header_font.draw_text(
+                    d,
+                    section.title(),
+                    Vector2::new(x, y),
                     theme.foreground,
                 );
-                y += theme.console_line_height() * group.name.lines().count() as f32;
-                for item in &group.items {
-                    d.draw_text_ex(
-                        &fonts.general,
-                        &item.name,
-                        rvec2(x, y),
-                        theme.console_font_size,
-                        theme.console_char_spacing,
-                        theme.foreground,
-                    );
-
-                    y += theme.console_line_height() * item.name.lines().count() as f32;
-                }
+                y += header_size.y;
+                y += theme.properties_header_font.line_spacing;
+                d.draw_rectangle_rec(Rectangle::new(x, y, bounds.width(), 1.0), theme.foreground2);
+                y += theme.properties_header_font.line_spacing + theme.general_font.line_spacing;
+                let height = section.content_height(bounds.width(), theme);
+                section.draw(
+                    d,
+                    Bounds::new(
+                        Vector2::new(bounds.min.x, y.clamp(bounds.min.y, bounds.max.y)),
+                        Vector2::new(bounds.max.x, (y + height).clamp(bounds.min.y, bounds.max.y)),
+                    ),
+                    theme,
+                );
+                y += height + theme.properties_section_gap;
             }
-        }
-
-        // title
-        {
-            let title = "Properties";
-            let title_text_size = fonts.general.measure_text(
-                title,
-                theme.console_font_size,
-                theme.console_char_spacing,
-            );
-            let title_width = title_text_size.x + 2.0 * theme.title_padding_x;
-            let title_height = title_text_size.y + 2.0 * theme.title_padding_y;
-            d.draw_rectangle_rec(
-                Rectangle::new(
-                    self.bounds.max.x as f32 - title_width,
-                    self.bounds.min.y as f32,
-                    title_width,
-                    title_height,
-                ),
-                theme.background2,
-            );
-            d.draw_text_ex(
-                &fonts.general,
-                title,
-                Vector2::new(
-                    self.bounds.max.x as f32 - title_width + theme.title_padding_x,
-                    self.bounds.min.y as f32 + theme.title_padding_y,
-                ),
-                theme.console_font_size,
-                theme.console_char_spacing,
-                theme.foreground,
-            );
-        }
+        });
     }
 }

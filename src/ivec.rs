@@ -11,8 +11,8 @@ impl From<Bounds> for Rectangle {
         Rectangle {
             x: value.min.x,
             y: value.min.y,
-            width: value.max.x - value.min.x,
-            height: value.max.y - value.min.y,
+            width: value.width(),
+            height: value.height(),
         }
     }
 }
@@ -37,8 +37,35 @@ impl Bounds {
         Self { min, max }
     }
 
+    #[inline]
     pub const fn contains(&self, p: Vector2) -> bool {
         self.min.x <= p.x && p.x < self.max.x && self.min.y <= p.y && p.y < self.max.y
+    }
+
+    #[inline]
+    pub const fn width(&self) -> f32 {
+        self.max.x - self.min.x
+    }
+
+    #[inline]
+    pub const fn height(&self) -> f32 {
+        self.max.y - self.min.y
+    }
+
+    #[inline]
+    pub const fn split_left_right(self, x: f32) -> (Self, Self) {
+        (
+            Bounds::new(self.min, Vector2::new(x, self.max.y)),
+            Bounds::new(Vector2::new(x, self.min.y), self.max),
+        )
+    }
+
+    #[inline]
+    pub const fn split_top_bottom(self, y: f32) -> (Self, Self) {
+        (
+            Bounds::new(self.min, Vector2::new(self.max.x, y)),
+            Bounds::new(Vector2::new(self.min.x, y), self.max),
+        )
     }
 }
 
@@ -49,6 +76,7 @@ pub struct IVec2 {
 }
 
 impl std::hash::Hash for IVec2 {
+    #[inline]
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         (((self.x as u64) << 32) | (self.y as u64)).hash(state);
     }
@@ -113,6 +141,7 @@ pub trait AsIRect {
 }
 
 impl AsIRect for Rectangle {
+    #[inline]
     fn as_irect(&self) -> IRect {
         IRect {
             x: self.x as i32,
@@ -128,7 +157,8 @@ impl IRect {
         Self { x, y, w, h }
     }
 
-    pub const fn as_rect(&self) -> Rectangle {
+    #[inline]
+    pub const fn as_rec(&self) -> Rectangle {
         Rectangle {
             x: self.x as f32,
             y: self.y as f32,
@@ -145,17 +175,19 @@ pub struct IBounds {
 }
 
 impl From<IBounds> for IRect {
+    #[inline]
     fn from(value: IBounds) -> Self {
         IRect {
             x: value.min.x,
             y: value.min.y,
-            w: value.max.x - value.min.x,
-            h: value.max.y - value.min.y,
+            w: value.width(),
+            h: value.height(),
         }
     }
 }
 
 impl From<IRect> for IBounds {
+    #[inline]
     fn from(value: IRect) -> Self {
         IBounds {
             min: IVec2 {
@@ -175,15 +207,28 @@ impl IBounds {
         Self { min, max }
     }
 
+    #[inline]
     pub fn y(&self) -> std::ops::RangeInclusive<i32> {
         self.min.y..=self.max.y
     }
 
+    #[inline]
     pub fn x(&self) -> std::ops::RangeInclusive<i32> {
         self.min.x..=self.max.x
     }
 
+    #[inline]
     pub fn contains(&self, p: IVec2) -> bool {
         self.min.x <= p.x && p.x < self.max.x && self.min.y <= p.y && p.y < self.max.y
+    }
+
+    #[inline]
+    pub const fn width(&self) -> i32 {
+        self.max.x - self.min.x
+    }
+
+    #[inline]
+    pub const fn height(&self) -> i32 {
+        self.max.y - self.min.y
     }
 }

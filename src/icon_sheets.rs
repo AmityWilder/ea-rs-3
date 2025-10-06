@@ -1,4 +1,7 @@
-use crate::{graph::node::Gate, ivec::IVec2};
+use crate::{
+    graph::node::GateId,
+    ivec::{IRect, IVec2},
+};
 use raylib::prelude::*;
 use serde_derive::{Deserialize, Serialize};
 
@@ -22,6 +25,7 @@ pub struct NodeIconSheetSet {
 impl std::ops::Index<NodeIconSheetId> for NodeIconSheetSet {
     type Output = Texture2D;
 
+    #[inline]
     fn index(&self, index: NodeIconSheetId) -> &Self::Output {
         match index {
             NodeIconSheetId::Basic => &self.basic,
@@ -29,6 +33,33 @@ impl std::ops::Index<NodeIconSheetId> for NodeIconSheetSet {
             NodeIconSheetId::Highlight => &self.highlight,
             NodeIconSheetId::Ntd => &self.ntd,
         }
+    }
+}
+
+impl GateId {
+    pub const fn icon_cell(self) -> IVec2 {
+        match self {
+            GateId::Or => IVec2::new(0, 0),
+            GateId::Nor => IVec2::new(1, 0),
+            GateId::And => IVec2::new(2, 0),
+            GateId::Xor => IVec2::new(3, 0),
+            GateId::Resistor => IVec2::new(0, 1),
+            GateId::Capacitor => IVec2::new(1, 1),
+            GateId::Led => IVec2::new(2, 1),
+            GateId::Delay => IVec2::new(3, 1),
+            GateId::Battery => IVec2::new(0, 2),
+        }
+    }
+
+    #[inline]
+    pub const fn icon_cell_irec(self, icon_width: i32) -> IRect {
+        let cell = self.icon_cell();
+        IRect::new(
+            cell.x * icon_width,
+            cell.y * icon_width,
+            icon_width,
+            icon_width,
+        )
     }
 }
 
@@ -40,11 +71,22 @@ pub enum NodeIconSheetSetId {
 }
 
 impl NodeIconSheetSetId {
+    #[inline]
     pub const fn icon_width(self) -> i32 {
         match self {
             Self::X8 => 8,
             Self::X16 => 16,
             Self::X32 => 32,
+        }
+    }
+
+    #[inline]
+    pub const fn from_zoom_exp(zoom_exp: i32) -> Option<Self> {
+        match zoom_exp {
+            ..0 => None,
+            0 => Some(NodeIconSheetSetId::X8),
+            1 => Some(NodeIconSheetSetId::X16),
+            2.. => Some(NodeIconSheetSetId::X32),
         }
     }
 }
@@ -59,6 +101,7 @@ pub struct NodeIconSheetSets {
 impl std::ops::Index<NodeIconSheetSetId> for NodeIconSheetSets {
     type Output = NodeIconSheetSet;
 
+    #[inline]
     fn index(&self, index: NodeIconSheetSetId) -> &Self::Output {
         match index {
             NodeIconSheetSetId::X8 => &self.x8,
@@ -68,157 +111,32 @@ impl std::ops::Index<NodeIconSheetSetId> for NodeIconSheetSets {
     }
 }
 
-impl NodeIconSheetSets {
-    pub fn load(
-        rl: &mut RaylibHandle,
-        thread: &RaylibThread,
-    ) -> Result<Self, raylib::error::Error> {
-        Ok(Self {
-            x8: NodeIconSheetSet {
-                basic: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsBasic8x.png"),
-                    )?,
-                )?,
-                background: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsBackground8x.png"),
-                    )?,
-                )?,
-                highlight: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsHighlight8x.png"),
-                    )?,
-                )?,
-                ntd: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsNTD8x.png"),
-                    )?,
-                )?,
-            },
-            x16: NodeIconSheetSet {
-                basic: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsBasic16x.png"),
-                    )?,
-                )?,
-                background: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsBackground16x.png"),
-                    )?,
-                )?,
-                highlight: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsHighlight16x.png"),
-                    )?,
-                )?,
-                ntd: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsNTD16x.png"),
-                    )?,
-                )?,
-            },
-            x32: NodeIconSheetSet {
-                basic: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsBasic32x.png"),
-                    )?,
-                )?,
-                background: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsBackground32x.png"),
-                    )?,
-                )?,
-                highlight: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsHighlight32x.png"),
-                    )?,
-                )?,
-                ntd: rl.load_texture_from_image(
-                    thread,
-                    &Image::load_image_from_mem(
-                        ".png",
-                        include_bytes!("../assets/nodeicons/nodeIconsNTD32x.png"),
-                    )?,
-                )?,
-            },
-        })
-    }
+static DEFAULT_NODE_ICON_SHEETSETS_DATA: [[&[u8]; 4]; 3] = [
+    [
+        include_bytes!("../assets/nodeicons/nodeIconsBasic8x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsBackground8x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsHighlight8x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsNTD8x.png"),
+    ],
+    [
+        include_bytes!("../assets/nodeicons/nodeIconsBasic16x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsBackground16x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsHighlight16x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsNTD16x.png"),
+    ],
+    [
+        include_bytes!("../assets/nodeicons/nodeIconsBasic32x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsBackground32x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsHighlight32x.png"),
+        include_bytes!("../assets/nodeicons/nodeIconsNTD32x.png"),
+    ],
+];
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn draw<D: RaylibDraw>(
-        &self,
-        d: &mut D,
-        zoom_exp: i32,
-        sheet: NodeIconSheetId,
-        dest_rec: Rectangle,
-        gate: Gate,
-        origin: Vector2,
-        rotation: f32,
-        tint: Color,
-    ) {
-        let scale = match zoom_exp {
-            ..0 => {
-                d.draw_rectangle_rec(dest_rec, tint);
-                return;
-            }
-            0 => NodeIconSheetSetId::X8,
-            1 => NodeIconSheetSetId::X16,
-            2.. => NodeIconSheetSetId::X32,
-        };
-        let pos = match gate {
-            Gate::Or => IVec2::new(0, 0),
-            Gate::Nor => IVec2::new(1, 0),
-            Gate::And => IVec2::new(2, 0),
-            Gate::Xor => IVec2::new(3, 0),
-            Gate::Resistor { .. } => IVec2::new(0, 1),
-            Gate::Capacitor { .. } => IVec2::new(1, 1),
-            Gate::Led { .. } => IVec2::new(2, 1),
-            Gate::Delay => IVec2::new(3, 1),
-            Gate::Battery => IVec2::new(0, 2),
-        };
-        let width = scale.icon_width();
-        let source_rec = Rectangle {
-            x: (pos.x * width) as f32,
-            y: (pos.y * width) as f32,
-            width: width as f32,
-            height: width as f32,
-        };
-        d.draw_texture_pro(
-            &self[scale][sheet],
-            source_rec,
-            dest_rec,
-            origin,
-            rotation,
-            tint,
-        );
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Eq, Hash, Default, Serialize, Deserialize,
+)]
 pub enum ButtonIconSheetId {
+    #[default]
     #[serde(rename = "16px")]
     X16,
     #[serde(rename = "32px")]
@@ -245,7 +163,42 @@ pub enum ButtonIconId {
     Settings,
 }
 
+impl ButtonIconId {
+    pub const fn icon_cell(self) -> IVec2 {
+        match self {
+            Self::Pen => IVec2::new(2, 0),
+            Self::Erase => IVec2::new(2, 1),
+            Self::Edit => IVec2::new(3, 0),
+            Self::Interact => IVec2::new(3, 1),
+            Self::Or => IVec2::new(0, 0),
+            Self::And => IVec2::new(1, 0),
+            Self::Nor => IVec2::new(0, 1),
+            Self::Xor => IVec2::new(1, 1),
+            Self::Resistor => IVec2::new(0, 2),
+            Self::Capacitor => IVec2::new(1, 2),
+            Self::Led => IVec2::new(0, 3),
+            Self::Delay => IVec2::new(1, 3),
+            Self::Battery => IVec2::new(0, 4),
+            Self::BlueprintSelect => IVec2::new(2, 2),
+            Self::Clipboard => IVec2::new(3, 2),
+            Self::Settings => IVec2::new(2, 3),
+        }
+    }
+
+    #[inline]
+    pub const fn icon_cell_irec(self, icon_width: i32) -> IRect {
+        let cell = self.icon_cell();
+        IRect::new(
+            cell.x * icon_width,
+            cell.y * icon_width,
+            icon_width,
+            icon_width,
+        )
+    }
+}
+
 impl ButtonIconSheetId {
+    #[inline]
     pub const fn icon_width(self) -> i32 {
         match self {
             Self::X16 => 16,
@@ -263,6 +216,7 @@ pub struct ButtonIconSheets {
 impl std::ops::Index<ButtonIconSheetId> for ButtonIconSheets {
     type Output = Texture2D;
 
+    #[inline]
     fn index(&self, index: ButtonIconSheetId) -> &Self::Output {
         match index {
             ButtonIconSheetId::X16 => &self.x16,
@@ -286,44 +240,5 @@ impl ButtonIconSheets {
                 &Image::load_image_from_mem(".png", include_bytes!("../assets/icons32x.png"))?,
             )?,
         })
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn draw<D: RaylibDraw>(
-        &self,
-        d: &mut D,
-        scale: ButtonIconSheetId,
-        dest_rec: Rectangle,
-        icon: ButtonIconId,
-        origin: Vector2,
-        rotation: f32,
-        tint: Color,
-    ) {
-        let pos = match icon {
-            ButtonIconId::Pen => IVec2::new(2, 0),
-            ButtonIconId::Erase => IVec2::new(2, 1),
-            ButtonIconId::Edit => IVec2::new(3, 0),
-            ButtonIconId::Interact => IVec2::new(3, 1),
-            ButtonIconId::Or => IVec2::new(0, 0),
-            ButtonIconId::And => IVec2::new(1, 0),
-            ButtonIconId::Nor => IVec2::new(0, 1),
-            ButtonIconId::Xor => IVec2::new(1, 1),
-            ButtonIconId::Resistor => IVec2::new(0, 2),
-            ButtonIconId::Capacitor => IVec2::new(1, 2),
-            ButtonIconId::Led => IVec2::new(0, 3),
-            ButtonIconId::Delay => IVec2::new(1, 3),
-            ButtonIconId::Battery => IVec2::new(0, 4),
-            ButtonIconId::BlueprintSelect => IVec2::new(2, 2),
-            ButtonIconId::Clipboard => IVec2::new(3, 2),
-            ButtonIconId::Settings => IVec2::new(2, 3),
-        };
-        let width = scale.icon_width();
-        let source_rec = Rectangle {
-            x: (pos.x * width) as f32,
-            y: (pos.y * width) as f32,
-            width: width as f32,
-            height: width as f32,
-        };
-        d.draw_texture_pro(&self[scale], source_rec, dest_rec, origin, rotation, tint);
     }
 }

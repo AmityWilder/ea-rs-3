@@ -13,6 +13,7 @@ pub enum ToolId {
 }
 
 impl std::fmt::Display for ToolId {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ToolId::Create => "create",
@@ -27,6 +28,7 @@ impl std::fmt::Display for ToolId {
 impl std::str::FromStr for ToolId {
     type Err = ();
 
+    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "create" => Ok(ToolId::Create),
@@ -39,6 +41,7 @@ impl std::str::FromStr for ToolId {
 }
 
 impl ToolId {
+    #[inline]
     pub const fn init(self) -> Tool {
         match self {
             ToolId::Create => Tool::Create { current_node: None },
@@ -64,12 +67,14 @@ pub enum Tool {
 }
 
 impl Default for Tool {
+    #[inline]
     fn default() -> Self {
         Self::Create { current_node: None }
     }
 }
 
 impl Tool {
+    #[inline]
     pub const fn id(&self) -> ToolId {
         match self {
             Tool::Create { .. } => ToolId::Create,

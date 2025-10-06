@@ -1,17 +1,19 @@
 use crate::{
-    draw_hyper_ref_link,
+    GRID_SIZE,
     graph::{
         Graph, GraphId, GraphList,
         node::{GateId, Node, NodeId},
         wire::{Wire, WireId},
     },
+    icon_sheets::ButtonIconId,
     input::Inputs,
-    ivec::{AsIVec2, Bounds, IBounds, IRect, IVec2},
+    ivec::{AsIVec2, IBounds, IRect, IVec2},
     rich_text::{ColorAct, ColorRef, RichStr, RichString},
     tab::TabList,
-    theme::{ColorId, Fonts, Theme},
+    theme::{ColorId, Theme},
     tool::ToolId,
     toolpane::ToolPane,
+    ui::Panel,
 };
 use raylib::prelude::*;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
@@ -28,6 +30,7 @@ pub enum LogType {
 }
 
 impl std::fmt::Display for LogType {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LogType::Info => "info",
@@ -42,12 +45,14 @@ impl std::fmt::Display for LogType {
 }
 
 impl From<LogType> for ColorRef {
+    #[inline]
     fn from(value: LogType) -> Self {
         value.color()
     }
 }
 
 impl LogType {
+    #[inline]
     pub const fn color(self) -> ColorRef {
         match self {
             LogType::Info => ColorRef::Theme(ColorId::Foreground3),
@@ -66,12 +71,14 @@ pub struct GateRef(pub GateId);
 impl std::ops::Deref for GateRef {
     type Target = GateId;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl std::ops::DerefMut for GateRef {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -107,12 +114,14 @@ pub struct ToolRef(pub ToolId);
 impl std::ops::Deref for ToolRef {
     type Target = ToolId;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl std::ops::DerefMut for ToolRef {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -148,12 +157,14 @@ pub struct PositionRef(pub IVec2);
 impl std::ops::Deref for PositionRef {
     type Target = IVec2;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl std::ops::DerefMut for PositionRef {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -202,6 +213,7 @@ impl std::fmt::Display for GraphRef {
 impl std::str::FromStr for GraphRef {
     type Err = ();
 
+    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         s.parse().map_err(|_| ()).map(Self)
     }
@@ -221,10 +233,12 @@ impl GraphRef {
         }
     }
 
+    #[inline]
     pub fn node(&self, node_id: NodeId) -> NodeRef {
         NodeRef(self.0, node_id)
     }
 
+    #[inline]
     pub fn wire(&self, wire_id: WireId) -> WireRef {
         WireRef(self.0, wire_id)
     }
@@ -325,6 +339,7 @@ pub enum HyperRef {
 }
 
 impl std::fmt::Display for HyperRef {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             HyperRef::Gate(x) => x.fmt(f),
@@ -351,6 +366,123 @@ impl std::str::FromStr for HyperRef {
     }
 }
 
+impl HyperRef {
+    fn draw_link<D>(
+        &self,
+        d: &mut D,
+        rec: IRect,
+        theme: &Theme,
+        graphs: &GraphList,
+        tabs: &TabList,
+        toolpane: &ToolPane,
+    ) where
+        D: RaylibDraw,
+    {
+        const GRID_CENTER_OFFSET: Vector2 =
+            Vector2::new((GRID_SIZE / 2) as f32, (GRID_SIZE / 2) as f32);
+
+        // highlight ref text
+        d.draw_rectangle(rec.x, rec.y, rec.w, rec.h, theme.hyperref.alpha(0.2));
+
+        let link_anchor = Vector2::new(
+            rec.x as f32 + rec.w as f32,
+            rec.y as f32 + rec.h as f32 * 0.5,
+        );
+
+        match self {
+            HyperRef::Gate(gate_ref) => {
+                // HACK: only matches against the icon of the button!
+                if let Some((rec, _)) =
+                    toolpane
+                        .buttons(Vector2::zero(), theme)
+                        .find(|(_, button)| {
+                            matches!(
+                                (button.icon, gate_ref.0),
+                                (Some(ButtonIconId::Or), GateId::Or)
+                                    | (Some(ButtonIconId::And), GateId::And)
+                                    | (Some(ButtonIconId::Nor), GateId::Nor)
+                                    | (Some(ButtonIconId::Xor), GateId::Xor)
+                                    | (Some(ButtonIconId::Resistor), GateId::Resistor)
+                                    | (Some(ButtonIconId::Capacitor), GateId::Capacitor)
+                                    | (Some(ButtonIconId::Led), GateId::Led)
+                                    | (Some(ButtonIconId::Delay), GateId::Delay)
+                                    | (Some(ButtonIconId::Battery), GateId::Battery)
+                            )
+                        })
+                {
+                    d.draw_line_v(
+                        link_anchor,
+                        Vector2::new(rec.x + 0.5 * rec.width, rec.y + 0.5 * rec.height),
+                        theme.hyperref,
+                    );
+                }
+            }
+
+            HyperRef::Tool(tool_ref) => {
+                // HACK: only matches against the icon of the button!
+                if let Some((rec, _)) =
+                    toolpane
+                        .buttons(Vector2::zero(), theme)
+                        .find(|(_, button)| {
+                            matches!(
+                                (button.icon, tool_ref.0),
+                                (Some(ButtonIconId::Pen), ToolId::Create)
+                                    | (Some(ButtonIconId::Erase), ToolId::Erase)
+                                    | (Some(ButtonIconId::Edit), ToolId::Edit)
+                                    | (Some(ButtonIconId::Interact), ToolId::Interact)
+                            )
+                        })
+                {
+                    d.draw_line_v(
+                        link_anchor,
+                        Vector2::new(rec.x + 0.5 * rec.width, rec.y + 0.5 * rec.height),
+                        theme.hyperref,
+                    );
+                }
+            }
+
+            HyperRef::Position(position_ref) => {
+                for tab in tabs.editors() {
+                    let pos = tab.world_to_screen(position_ref.as_vec2() + GRID_CENTER_OFFSET);
+                    d.draw_line_v(link_anchor, pos, theme.hyperref);
+                }
+            }
+
+            HyperRef::Graph(graph_ref) => {
+                graph_ref.deref_with(graphs, |g, _borrow| {
+                    for _tab in tabs.editors_of_graph(&Arc::downgrade(g)) {
+                        // TODO
+                    }
+                });
+            }
+
+            HyperRef::Node(node_ref) => {
+                node_ref.deref_with(graphs, |g, _borrow, node| {
+                    for tab in tabs.editors_of_graph(&Arc::downgrade(g)) {
+                        let pos =
+                            tab.world_to_screen(node.position().as_vec2() + GRID_CENTER_OFFSET);
+                        d.draw_line_v(link_anchor, pos, theme.hyperref);
+                    }
+                });
+            }
+
+            HyperRef::Wire(wire_ref) => {
+                wire_ref.deref_with(graphs, |g, borrow, wire| {
+                    for tab in tabs.editors_of_graph(&Arc::downgrade(g)) {
+                        let (start, end) = borrow
+                            .get_wire_nodes(wire)
+                            .expect("all wires should be valid");
+                        let start_pos = start.position().as_vec2() + GRID_CENTER_OFFSET;
+                        let end_pos = end.position().as_vec2() + GRID_CENTER_OFFSET;
+                        let pos = tab.world_to_screen(wire.elbow.calculate(start_pos, end_pos));
+                        d.draw_line_v(link_anchor, pos, theme.hyperref);
+                    }
+                });
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct ConsoleAnchoring {
     pub left: bool,
@@ -363,17 +495,15 @@ pub struct ConsoleAnchoring {
 pub struct Console {
     content: RichString,
     pub bottom_offset: f64,
-    pub bounds: Bounds,
-    pub anchoring: ConsoleAnchoring,
+    pub panel: Panel,
 }
 
 impl Console {
-    pub fn new(capacity: usize, bounds: Bounds, anchoring: ConsoleAnchoring) -> Self {
+    pub fn new(panel: Panel, capacity: usize) -> Self {
         Self {
             content: RichString::with_capacity(capacity),
-            bounds,
             bottom_offset: 0.0,
-            anchoring,
+            panel,
         }
     }
 
@@ -412,15 +542,16 @@ impl Console {
         self.bottom_offset = 0.0;
     }
 
+    #[inline]
     pub const fn content_str(&self) -> &RichStr {
         self.content.as_rich_str()
     }
 
+    #[inline]
     pub fn displayable_lines(&self, theme: &Theme) -> usize {
-        (((self.bounds.max.y - theme.console_padding_bottom)
-            - (self.bounds.min.y + theme.console_padding_top)
-            + /* Off by one otherwise */ theme.console_line_spacing)
-            / theme.console_line_height()) as usize
+        ((self.panel.content_bounds(theme).height()
+            + /* Off by one otherwise */ theme.console_font.line_spacing)
+            / theme.console_font.line_height()) as usize
     }
 
     pub fn content(&self) -> impl Iterator<Item = (ColorRef, &str)> {
@@ -463,12 +594,68 @@ impl Console {
             })
     }
 
-    #[allow(clippy::too_many_arguments)]
+    pub fn tick(&mut self, theme: &Theme, input: &Inputs, graphs: &GraphList) {
+        self.bottom_offset = (self.bottom_offset + input.scroll_console as f64).clamp(
+            0.0,
+            self.content_str()
+                .lines()
+                .count()
+                .saturating_sub(self.displayable_lines(theme)) as f64,
+        );
+
+        let Vector2 { mut x, mut y } = self.panel.content_bounds(theme).min;
+        let left = x;
+        for (_, text) in self.visible_content(theme) {
+            let text_size = theme.console_font.measure_text(text);
+            if Rectangle::new(x, y, text_size.x, text_size.y)
+                .check_collision_point_rec(input.cursor)
+                && let Ok(hyper_ref) = text.parse::<HyperRef>()
+            {
+                match hyper_ref {
+                    HyperRef::Gate(_gate_ref) => {
+                        // TODO
+                    }
+
+                    HyperRef::Tool(_tool_ref) => {
+                        // TODO
+                    }
+
+                    HyperRef::Position(_position_ref) => {
+                        // TODO
+                    }
+
+                    HyperRef::Graph(graph_ref) => {
+                        graph_ref.deref_with(graphs, |_g, _borrow| {
+                            // TODO
+                        });
+                    }
+
+                    HyperRef::Node(node_ref) => {
+                        node_ref.deref_with(graphs, |_g, _borrow, _node| {
+                            // TODO
+                        });
+                    }
+
+                    HyperRef::Wire(wire_ref) => {
+                        wire_ref.deref_with(graphs, |_g, _borrow, _wire| {
+                            // TODO
+                        });
+                    }
+                }
+            }
+            if text.ends_with('\n') {
+                y += theme.console_font.line_height();
+                x = left;
+            } else {
+                x += theme.console_font.measure_text(text).x;
+            }
+        }
+    }
+
     pub fn draw<D>(
         &self,
         d: &mut D,
         theme: &Theme,
-        fonts: &Fonts,
         input: &Inputs,
         graphs: &GraphList,
         tabs: &TabList,
@@ -476,32 +663,13 @@ impl Console {
     ) where
         D: RaylibDraw,
     {
-        let Rectangle {
-            x,
-            y,
-            width,
-            height,
-        } = Rectangle::from(self.bounds);
-
-        // content
-        {
-            d.draw_rectangle_rec(Rectangle::new(x, y, width, height), theme.background2);
-            d.draw_rectangle_rec(
-                Rectangle::new(x + 1.0, y + 1.0, width - 2.0, height - 2.0),
-                theme.background1,
-            );
-
-            let mut x = x + theme.console_padding_left;
-            let mut y = self.bounds.max.y
-                - theme.console_padding_bottom
-                - self.displayable_lines(theme) as f32 * theme.console_line_height();
+        self.panel.draw(d, theme, move |d, bounds, theme| {
+            let mut x = bounds.min.x;
+            let mut y = bounds.max.y
+                - self.displayable_lines(theme) as f32 * theme.console_font.line_height();
             let left = x;
             for (color, text) in self.visible_content(theme) {
-                let size = fonts.console.measure_text(
-                    text,
-                    theme.console_font_size,
-                    theme.console_char_spacing,
-                );
+                let size = theme.console_font.measure_text(text);
                 let hyper_rec = IRect::new(x as i32, y as i32, size.x as i32, size.y as i32);
                 let is_live = if let Ok(hr) = text.parse::<HyperRef>() {
                     let is_live = match hr {
@@ -518,19 +686,17 @@ impl Console {
                         && IBounds::from(hyper_rec).contains(input.cursor.as_ivec2())
                         && let Ok(hr) = text.parse::<HyperRef>()
                     {
-                        draw_hyper_ref_link(d, hr, hyper_rec, theme, graphs, tabs, toolpane);
+                        hr.draw_link(d, hyper_rec, theme, graphs, tabs, toolpane);
                     }
 
                     Some(is_live)
                 } else {
                     None
                 };
-                d.draw_text_ex(
-                    &fonts.console,
+                theme.console_font.draw_text(
+                    d,
                     text,
                     rvec2(x, y),
-                    theme.console_font_size,
-                    theme.console_char_spacing,
                     if is_live.is_none_or(|x| x) {
                         color.get(theme)
                     } else {
@@ -538,45 +704,13 @@ impl Console {
                     },
                 );
                 if text.ends_with('\n') {
-                    y += theme.console_line_height();
+                    y += theme.console_font.line_height();
                     x = left;
                 } else {
                     x += size.x;
                 }
             }
-        }
-
-        // title
-        {
-            let title = "Log";
-            let title_text_size = fonts.general.measure_text(
-                title,
-                theme.console_font_size,
-                theme.console_char_spacing,
-            );
-            let title_width = title_text_size.x + 2.0 * theme.title_padding_x;
-            let title_height = title_text_size.y + 2.0 * theme.title_padding_y;
-            d.draw_rectangle_rec(
-                Rectangle::new(
-                    self.bounds.max.x - title_width,
-                    self.bounds.min.y,
-                    title_width,
-                    title_height,
-                ),
-                theme.background2,
-            );
-            d.draw_text_ex(
-                &fonts.console,
-                title,
-                Vector2::new(
-                    self.bounds.max.x - title_width + theme.title_padding_x,
-                    self.bounds.min.y + theme.title_padding_y,
-                ),
-                theme.console_font_size,
-                theme.console_char_spacing,
-                theme.foreground,
-            );
-        }
+        });
     }
 }
 
