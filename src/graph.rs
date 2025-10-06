@@ -20,6 +20,13 @@ pub mod wire;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GraphId(u32);
 
+/// Defaults to [`Self::INVALID`]
+impl Default for GraphId {
+    fn default() -> Self {
+        Self::INVALID
+    }
+}
+
 impl std::fmt::Display for GraphId {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -35,6 +42,25 @@ impl std::str::FromStr for GraphId {
             .ok_or(())
             .and_then(|x| u32::from_str_radix(x, 16).map_err(|_| ()))
             .map(Self)
+    }
+}
+
+impl GraphId {
+    pub const INVALID: Self = Self(!0);
+
+    /// Returns the current value and increments `self`.
+    /// Returns [`None`] if [`Self::INVALID`] would have been returned.
+    /// Does not increment if `self` is [`Self::INVALID`].
+    #[inline]
+    pub const fn step(&mut self) -> Option<Self> {
+        const INVALID: GraphId = GraphId::INVALID;
+        match *self {
+            INVALID => None,
+            id => {
+                self.0 += 1;
+                Some(id)
+            }
+        }
     }
 }
 
@@ -115,8 +141,7 @@ impl Graph {
         position: IVec2,
         console: &mut Console,
     ) -> Result<&mut Node, NodeId> {
-        let id = self.next_node_id;
-        self.next_node_id.0 += 1;
+        let id = self.next_node_id.step().expect("out of IDs");
         let grid_pos = Self::world_to_grid(position);
         if let Some(&existing) = self.node_grid.get(&grid_pos) {
             logln!(
@@ -236,8 +261,7 @@ impl Graph {
             Err(existing)
         } else {
             let graph_ref = GraphRef(self.id);
-            let id = self.next_wire_id;
-            self.next_wire_id.0 += 1;
+            let id = self.next_wire_id.step().expect("out of IDs");
             let wire = self
                 .wires
                 .entry(id)
@@ -366,8 +390,9 @@ impl Graph {
     }
 
     pub fn refresh_eval_order(&mut self) {
+        // traverse with BFS starting at the end, inserting in reverse
         self.eval_order.clear();
-        self.eval_order.resize(self.nodes.len(), NodeId(0));
+        self.eval_order.resize(self.nodes.len(), NodeId::INVALID);
         let mut visited = FxHashSet::default();
         let adj = self.adjacent_in();
         let mut queue = self.outputless_nodes(|it| VecDeque::from_iter(it.copied()));
@@ -384,7 +409,14 @@ impl Graph {
                     .filter(|&id| visited.insert(id)),
             );
         }
-        assert_eq!(i, 0, "eval order should include every node once");
+        // some subgraphs may "end" in a cycle.
+        // in this case, choose the nodes with the longest
+        if i > 0 {}
+        assert_eq!(
+            i, 0,
+            "eval order should include every node once\nnodes: {:?}\neval_order: {:?}",
+            self.nodes, self.eval_order
+        );
         self.is_eval_order_dirty = false;
     }
 
@@ -456,9 +488,9 @@ impl GraphList {
 
     #[inline]
     pub fn create_graph(&mut self) -> &mut Arc<RwLock<Graph>> {
-        let id = self.next_graph_id;
-        self.next_graph_id.0 += 1;
-        self.graphs.push(Arc::new(RwLock::new(Graph::new(id))));
+        self.graphs.push(Arc::new(RwLock::new(Graph::new(
+            self.next_graph_id.step().expect("out of IDs"),
+        ))));
         self.graphs.last_mut().expect("just pushed")
     }
 
@@ -499,27 +531,31 @@ mod tests {
         nodes: impl IntoIterator<Item = (NodeId, Gate)>,
         wires: impl IntoIterator<Item = (WireId, (NodeId, NodeId))>,
     ) -> Graph {
-        let mut max_node_id = 0;
-        let mut max_wire_id = 0;
+        let mut next_node_id = NodeId(0);
+        let mut next_wire_id = WireId(0);
+        let nodes = nodes
+            .into_iter()
+            .map(|(id, gate)| {
+                next_node_id.0 = id.0.max(next_node_id.0);
+                (id, Node::new(id, gate, IVec2::default()))
+            })
+            .collect();
+        let wires = wires
+            .into_iter()
+            .map(|(id, (src, dst))| {
+                next_wire_id.0 = id.0.max(next_wire_id.0);
+                (id, Wire::new(id, Elbow::default(), src, dst))
+            })
+            .collect();
+        _ = next_node_id.step();
+        _ = next_wire_id.step();
         Graph {
             id,
-            nodes: nodes
-                .into_iter()
-                .map(|(id, gate)| {
-                    max_node_id = id.0.max(max_node_id);
-                    (id, Node::new(id, gate, IVec2::default()))
-                })
-                .collect(),
-            wires: wires
-                .into_iter()
-                .map(|(id, (src, dst))| {
-                    max_wire_id = id.0.max(max_wire_id);
-                    (id, Wire::new(id, Elbow::default(), src, dst))
-                })
-                .collect(),
+            nodes,
+            wires,
             node_grid: FxHashMap::default(),
-            next_node_id: NodeId(max_node_id + 1),
-            next_wire_id: WireId(max_wire_id + 1),
+            next_node_id,
+            next_wire_id,
             eval_order: Vec::new(),
             is_eval_order_dirty: true,
         }

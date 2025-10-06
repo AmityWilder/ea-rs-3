@@ -4,6 +4,13 @@ use raylib::prelude::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WireId(pub(super) u128);
 
+/// Defaults to [`Self::INVALID`]
+impl Default for WireId {
+    fn default() -> Self {
+        Self::INVALID
+    }
+}
+
 impl std::fmt::Display for WireId {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -19,6 +26,25 @@ impl std::str::FromStr for WireId {
             .ok_or(())
             .and_then(|x| u128::from_str_radix(x, 16).map_err(|_| ()))
             .map(Self)
+    }
+}
+
+impl WireId {
+    pub const INVALID: Self = Self(!0);
+
+    /// Returns the current value and increments `self`.
+    /// Returns [`None`] if [`Self::INVALID`] would have been returned.
+    /// Does not increment if `self` is [`Self::INVALID`].
+    #[inline]
+    pub const fn step(&mut self) -> Option<Self> {
+        const INVALID: WireId = WireId::INVALID;
+        match *self {
+            INVALID => None,
+            id => {
+                self.0 += 1;
+                Some(id)
+            }
+        }
     }
 }
 

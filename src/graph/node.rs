@@ -4,13 +4,23 @@ use serde_derive::{Deserialize, Serialize};
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub(super) u128);
 
+/// Defaults to [`Self::INVALID`].
+impl Default for NodeId {
+    #[inline]
+    fn default() -> Self {
+        Self::INVALID
+    }
+}
+
 impl std::fmt::Display for NodeId {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "n{:x}", self.0)
     }
 }
 
 impl std::fmt::Debug for NodeId {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "n{:x}", self.0)
     }
@@ -24,6 +34,25 @@ impl std::str::FromStr for NodeId {
             .ok_or(())
             .and_then(|x| u128::from_str_radix(x, 16).map_err(|_| ()))
             .map(Self)
+    }
+}
+
+impl NodeId {
+    pub const INVALID: Self = Self(!0);
+
+    /// Returns the current value and increments `self`.
+    /// Returns [`None`] if [`Self::INVALID`] would have been returned.
+    /// Does not increment if `self` is [`Self::INVALID`].
+    #[inline]
+    pub const fn step(&mut self) -> Option<Self> {
+        const INVALID: NodeId = NodeId::INVALID;
+        match *self {
+            INVALID => None,
+            id => {
+                self.0 += 1;
+                Some(id)
+            }
+        }
     }
 }
 
