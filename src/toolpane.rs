@@ -325,16 +325,19 @@ impl ToolPane {
     }
 
     #[inline]
-    pub fn set_tool(&mut self, tool_id: ToolId, console: &mut Console) {
-        if self.tool.id() != tool_id {
+    pub fn set_tool(&mut self, tool_id: ToolId, console: &mut Console) -> bool {
+        let change = self.tool.id() != tool_id;
+        if change {
             self.tool = tool_id.init();
             logln!(console, LogType::Info, "set tool to {}", ToolRef(tool_id));
         }
+        change
     }
 
     #[inline]
-    pub fn set_gate(&mut self, gate_id: GateId, console: &mut Console) {
-        if self.gate.id() != gate_id {
+    pub fn set_gate(&mut self, gate_id: GateId, console: &mut Console) -> bool {
+        let change = self.gate.id() != gate_id;
+        if change {
             self.gate = gate_id.to_gate(self.ntd);
             logln!(
                 console,
@@ -343,11 +346,13 @@ impl ToolPane {
                 GateRef(self.gate.id())
             );
         }
+        change
     }
 
     #[inline]
-    pub fn set_ntd(&mut self, data: u8, console: &mut Console) {
-        if self.ntd != data {
+    pub fn set_ntd(&mut self, data: u8, console: &mut Console) -> bool {
+        let change = self.ntd != data;
+        if change {
             self.ntd = data;
             logln!(
                 console,
@@ -356,6 +361,7 @@ impl ToolPane {
                 self.ntd
             );
         }
+        change
     }
 
     /// get `position` from [`Self::bounds`]

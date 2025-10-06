@@ -211,7 +211,9 @@ impl EditorTab {
         _theme: &Theme,
         input: &Inputs,
         editorgrid: &mut EditorGrid,
-    ) {
+    ) -> bool {
+        let mut is_dirty = false;
+
         if let Some(gate) = input.gate() {
             toolpane.set_gate(gate, console);
         }
@@ -221,9 +223,9 @@ impl EditorTab {
 
         self.zoom_and_pan(input.cursor, input.pan, input.zoom, 5.0, editorgrid);
 
+        // `try_write`: if graph is being borrowed, don't edit it! it might be saving!
         if let Some(graph) = self.graph.upgrade()
-                                    // if graph is being borrowed, don't edit it! it might be saving!
-                                    && let Ok(mut graph) = graph.try_write()
+            && let Ok(mut graph) = graph.try_write()
         {
             let pos = self
                 .screen_to_world(input.cursor)
@@ -256,6 +258,7 @@ impl EditorTab {
                             }
                             *current_node = Some(new_node_id);
                         }
+                        is_dirty = true;
                     }
                     if input.secondary.is_starting() {
                         *current_node = None;
@@ -269,6 +272,7 @@ impl EditorTab {
                         graph
                             .destroy_node(&id, false, console)
                             .expect("cannot reach this branch if graph did not contain the node");
+                        is_dirty = true;
                     }
                 }
 
@@ -299,9 +303,28 @@ impl EditorTab {
                     }
                 }
 
-                Tool::Interact {} => {}
+                Tool::Interact {} => {
+                    if input.primary.is_starting()
+                        && let Some(&id) = graph.find_node_at(pos)
+                        && graph.is_inputless(&id)
+                    {
+                        let node = graph.node_mut(&id).expect("all nodes should be valid");
+                        match node.gate_ntd_mut() {
+                            gate @ GateNtd::Or => {
+                                *gate = GateNtd::Nor;
+                                is_dirty = true;
+                            }
+                            gate @ GateNtd::Nor => {
+                                *gate = GateNtd::Or;
+                                is_dirty = true;
+                            }
+                            _ => {}
+                        };
+                    }
+                }
             }
         }
+        is_dirty
     }
 
     pub fn draw<D: RaylibDraw>(

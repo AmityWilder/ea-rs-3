@@ -303,7 +303,12 @@ fn main() {
             if let Some(tab) = tabs.focused_tab_mut() {
                 match tab {
                     Tab::Editor(tab) => {
-                        tab.tick(&mut console, &mut toolpane, &theme, &input, &mut editorgrid);
+                        let is_dirty =
+                            tab.tick(&mut console, &mut toolpane, &theme, &input, &mut editorgrid);
+                        if is_dirty {
+                            // refresh immediately on change
+                            next_eval_tick = Instant::now();
+                        }
                     }
                 }
             } else {

@@ -292,4 +292,9 @@ impl Node {
     pub const fn gate_ntd(&self) -> &GateNtd {
         &self.gate
     }
+
+    #[inline]
+    pub const fn gate_ntd_mut(&mut self) -> &mut GateNtd {
+        &mut self.gate
+    }
 }

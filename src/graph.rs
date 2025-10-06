@@ -250,26 +250,56 @@ impl Graph {
         self.nodes.get(&wire.src).zip(self.nodes.get(&wire.dst))
     }
 
+    #[inline]
+    pub fn is_inputless(&self, node: &NodeId) -> bool {
+        self.wires_to(node).next().is_none()
+    }
+
+    #[inline]
+    pub fn is_outputless(&self, node: &NodeId) -> bool {
+        self.wires_from(node).next().is_none()
+    }
+
+    #[inline]
+    pub fn inputless_nodes<C>(&self) -> C
+    where
+        C: FromIterator<NodeId>,
+    {
+        FxHashSet::from_iter(self.nodes.keys().copied())
+            .difference(&FxHashSet::from_iter(
+                self.wires.values().map(|wire| wire.dst),
+            ))
+            .copied()
+            .collect()
+    }
+
+    #[inline]
+    pub fn outputless_nodes<C>(&self) -> C
+    where
+        C: FromIterator<NodeId>,
+    {
+        FxHashSet::from_iter(self.nodes.keys().copied())
+            .difference(&FxHashSet::from_iter(
+                self.wires.values().map(|wire| wire.src),
+            ))
+            .copied()
+            .collect()
+    }
+
     fn eval_order(&self) -> Vec<NodeId> {
         let mut order = Vec::with_capacity(self.nodes.len());
         let mut visited = FxHashSet::default();
-        let mut outputs: FxHashMap<NodeId, Vec<NodeId>> = FxHashMap::default();
+        let mut outputs = FxHashMap::default();
         for wire in self.wires.values() {
-            outputs.entry(wire.src).or_default().push(wire.dst);
+            outputs
+                .entry(wire.src)
+                .and_modify(|v: &mut Vec<_>| v.push(wire.dst))
+                .or_insert_with(|| vec![wire.dst]);
         }
-        let mut queue = {
-            let nodes = FxHashSet::from_iter(self.nodes.keys().copied());
-            let with_input = FxHashSet::from_iter(self.wires.values().map(|wire| wire.dst));
-            VecDeque::from_iter(
-                nodes
-                    .difference(&with_input)
-                    .copied()
-                    .inspect(|&node| _ = visited.insert(node)),
-            )
-        };
+        let mut queue = self.inputless_nodes::<VecDeque<NodeId>>();
         while let Some(node) = queue.pop_front() {
             order.push(node);
-            for &next in outputs.values().flatten() {
+            for &next in outputs.values().flat_map(|v| v.iter().rev()) {
                 if visited.insert(next) {
                     queue.push_back(next);
                 }
