@@ -202,7 +202,7 @@ impl Graph {
                 graph_ref.node(src),
                 graph_ref.node(dst),
             );
-            self.wire_mut(&existing).expect("just found")
+            self.wires.get_mut(&existing).expect("just found")
         } else {
             let graph_ref = GraphRef(self.id);
             let id = self.next_wire_id;
