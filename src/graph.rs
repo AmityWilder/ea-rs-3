@@ -77,8 +77,8 @@ pub struct Graph {
 }
 
 type EvalOrder = std::iter::Rev<std::vec::IntoIter<NodeId>>;
-type IOLessNodeIter<'a> =
-    std::collections::hash_set::Difference<'a, NodeId, rustc_hash::FxBuildHasher>;
+type IOLessNodeIter<'a, F> =
+    std::iter::Filter<std::iter::Copied<std::collections::hash_map::Keys<'a, NodeId, Node>>, F>;
 type NodesIter<'a> = std::collections::hash_map::Values<'a, NodeId, Node>;
 type WiresIter<'a> = std::collections::hash_map::Values<'a, WireId, Wire>;
 
@@ -347,23 +347,21 @@ impl Graph {
     }
 
     #[inline]
-    pub fn inputless_nodes<T, F>(&self, f: F) -> T
-    where
-        F: FnOnce(IOLessNodeIter<'_>) -> T,
-    {
-        let a = FxHashSet::from_iter(self.nodes.keys().copied());
-        let b = FxHashSet::from_iter(self.wires.values().map(|wire| wire.dst));
-        f(a.difference(&b))
+    pub fn inputless_nodes(&self) -> IOLessNodeIter<'_, impl FnMut(&NodeId) -> bool> {
+        let input_taking = FxHashSet::from_iter(self.wires.values().map(|wire| wire.dst));
+        self.nodes
+            .keys()
+            .copied()
+            .filter(move |node| !input_taking.contains(node))
     }
 
     #[inline]
-    pub fn outputless_nodes<T, F>(&self, f: F) -> T
-    where
-        F: FnOnce(IOLessNodeIter<'_>) -> T,
-    {
-        let a = FxHashSet::from_iter(self.nodes.keys().copied());
-        let b = FxHashSet::from_iter(self.wires.values().map(|wire| wire.src));
-        f(a.difference(&b))
+    pub fn outputless_nodes(&self) -> IOLessNodeIter<'_, impl FnMut(&NodeId) -> bool> {
+        let output_giving = FxHashSet::from_iter(self.wires.values().map(|wire| wire.src));
+        self.nodes
+            .keys()
+            .copied()
+            .filter(move |node| !output_giving.contains(node))
     }
 
     #[inline]
@@ -390,41 +388,60 @@ impl Graph {
     }
 
     pub fn refresh_eval_order(&mut self) {
-        // traverse with BFS starting at the end, inserting in reverse
         self.eval_order.clear();
-        self.eval_order.resize(self.nodes.len(), NodeId::INVALID);
+        self.eval_order.reserve(self.nodes.len());
         let adj = self.adjacent_in();
-        let mut queue = self.outputless_nodes(|it| VecDeque::from_iter(it.copied()));
-        let mut visited = FxHashSet::from_iter(queue.iter().copied());
-        let mut i = self.nodes.len();
+        let mut queue: VecDeque<_> = self.outputless_nodes().collect();
+        let mut discovered = FxHashSet::from_iter(queue.iter().copied());
         loop {
-            while let Some(node) = queue.pop_front() {
-                i -= 1;
-                self.eval_order[i] = node;
+            // traverse with BFS starting at the end, inserting in reverse.
+            while let Some(v) = queue.pop_front() {
                 queue.extend(
-                    adj.get(&node)
+                    adj.get(&v)
                         .into_iter()
                         .flatten()
                         .copied()
-                        .filter(|&id| visited.insert(id)),
+                        .filter(|&w| discovered.insert(w)),
                 );
+                self.eval_order.push(v);
             }
-            // some subgraphs may "end" in a cycle.
-            // in this case, choose endpoints arbitrarily.
-            if let Some(arbitrary) = self
-                .nodes
-                .keys()
-                .find(|node| !visited.contains(node))
-                .copied()
+            // some subgraphs may end in a cycle. find furthest nodes with DFS and use those as endpoints.
+            let mut stack: Vec<_> = self
+                .inputless_nodes()
+                .filter(|v| !discovered.contains(v))
+                .collect();
+            if !stack.is_empty() {
+                while let Some(v) = stack.pop() {
+                    if discovered.insert(v) {
+                        stack.extend(adj.get(&v).into_iter().flatten().copied());
+                        queue.push_back(v);
+                    }
+                }
+            }
+            // some subgraphs both start and end in a cycle. choose an endpoint arbitrarily.
+            else if let Some(arbitrary) =
+                self.nodes.keys().find(|v| !discovered.contains(v)).copied()
             {
-                assert_ne!(i, 0, "i should not be 0 if there are unvisited nodes");
-                visited.insert(arbitrary);
+                discovered.insert(arbitrary);
                 queue.push_back(arbitrary);
-            } else {
+            }
+            // no nodes remain
+            else {
                 break;
             }
         }
+        assert_eq!(
+            self.eval_order.len(),
+            self.nodes.len(),
+            "every node should be visited by eval_order"
+        );
+        self.eval_order.reverse();
         self.is_eval_order_dirty = false;
+    }
+
+    #[inline]
+    pub const fn eval_order(&self) -> &[NodeId] {
+        self.eval_order.as_slice()
     }
 
     pub fn evaluate(&mut self) {
@@ -531,7 +548,6 @@ impl GraphList {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::node::GateNtd;
 
     fn gen_graph(
         id: GraphId,
@@ -568,160 +584,250 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test0() {
-        let mut g = gen_graph(
-            GraphId(0),
-            [
-                (NodeId(0), Gate::Or),
-                (NodeId(1), Gate::Or),
-                (NodeId(2), Gate::Or),
-                (NodeId(3), Gate::Or),
-            ],
-            [
-                (WireId(0), (NodeId(0), NodeId(1))),
-                (WireId(1), (NodeId(1), NodeId(2))),
-                (WireId(2), (NodeId(2), NodeId(3))),
-            ],
-        );
-        assert_eq!(
-            g.adjacent_in(),
-            FxHashMap::from_iter([
-                (NodeId(1), vec![NodeId(0)]),
-                (NodeId(2), vec![NodeId(1)]),
-                (NodeId(3), vec![NodeId(2)]),
-            ]),
-            "adjacent_in"
-        );
-        assert_eq!(
-            g.adjacent_out(),
-            FxHashMap::from_iter([
-                (NodeId(0), vec![NodeId(1)]),
-                (NodeId(1), vec![NodeId(2)]),
-                (NodeId(2), vec![NodeId(3)]),
-            ]),
-            "adjacent_out"
-        );
-        assert_eq!(
-            g.inputless_nodes(|it| Vec::from_iter(it.copied()))
-                .as_slice(),
-            &[NodeId(0)],
-            "inputless_nodes"
-        );
-        assert_eq!(
-            g.outputless_nodes(|it| Vec::from_iter(it.copied()))
-                .as_slice(),
-            &[NodeId(3)],
-            "outputless_nodes"
-        );
-        g.refresh_eval_order();
-        assert_eq!(
-            &g.eval_order,
-            &[NodeId(0), NodeId(1), NodeId(2), NodeId(3),],
-            "eval_order"
-        );
-        g.evaluate();
-        assert_eq!(
-            FxHashMap::from_iter(g.nodes.iter().map(|(id, node)| (*id, node.state))),
-            FxHashMap::from_iter([
-                (NodeId(0), false),
-                (NodeId(1), false),
-                (NodeId(2), false),
-                (NodeId(3), false),
-            ])
-        );
-        g.node_mut(&NodeId(0)).unwrap().gate = GateNtd::Nor;
-        g.evaluate();
-        assert_eq!(
-            FxHashMap::from_iter(g.nodes.iter().map(|(id, node)| (*id, node.state))),
-            FxHashMap::from_iter([
-                (NodeId(0), true),
-                (NodeId(1), true),
-                (NodeId(2), true),
-                (NodeId(3), true),
-            ])
-        );
-        g.node_mut(&NodeId(0)).unwrap().gate = GateNtd::Or;
-        g.evaluate();
-        assert_eq!(
-            FxHashMap::from_iter(g.nodes.iter().map(|(id, node)| (*id, node.state))),
-            FxHashMap::from_iter([
-                (NodeId(0), false),
-                (NodeId(1), false),
-                (NodeId(2), false),
-                (NodeId(3), false),
-            ])
-        );
+    /// must contain every node, but order does not matter
+    struct Unordered<T>(FxHashSet<T>);
+
+    impl<T: std::fmt::Debug> std::fmt::Debug for Unordered<T> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_set().entries(&self.0).finish()
+        }
+    }
+
+    impl<T> FromIterator<T> for Unordered<T>
+    where
+        FxHashSet<T>: FromIterator<T>,
+    {
+        fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+            Self(FxHashSet::from_iter(iter))
+        }
+    }
+
+    impl<T> PartialEq<[T]> for Unordered<T>
+    where
+        T: Copy,
+        FxHashSet<T>: FromIterator<T> + PartialEq,
+    {
+        fn eq(&self, other: &[T]) -> bool {
+            self.0 == other.iter().copied().collect::<FxHashSet<T>>()
+        }
+    }
+
+    impl<T> Unordered<T> {
+        #[inline]
+        pub fn len(&self) -> usize {
+            self.0.len()
+        }
+    }
+
+    /// must be in order, but can start with any subset
+    struct RingOrder<T>(VecDeque<Unordered<T>>);
+
+    impl<T: std::fmt::Debug> std::fmt::Debug for RingOrder<T> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("(")?;
+            let mut it = self.0.iter();
+            if let Some(set) = it.next() {
+                set.fmt(f)?;
+                for set in it {
+                    f.write_str(", ")?;
+                    set.fmt(f)?;
+                }
+            }
+            f.write_str(")")
+        }
+    }
+
+    impl<T> FromIterator<Unordered<T>> for RingOrder<T>
+    where
+        VecDeque<Unordered<T>>: FromIterator<Unordered<T>>,
+    {
+        fn from_iter<I: IntoIterator<Item = Unordered<T>>>(iter: I) -> Self {
+            Self(VecDeque::from_iter(iter))
+        }
+    }
+
+    impl<T> PartialEq<[T]> for RingOrder<T>
+    where
+        Unordered<T>: PartialEq<[T]>,
+    {
+        fn eq(&self, other: &[T]) -> bool {
+            (0..self.0.len()).any(|i| {
+                let mut slice = other;
+                self.0
+                    .iter()
+                    .cycle()
+                    .skip(i)
+                    .take(self.0.len())
+                    .all(|set| set == slice.split_off(..set.len()).unwrap())
+            })
+        }
+    }
+
+    impl<T> RingOrder<T> {
+        pub fn len(&self) -> usize {
+            self.0.iter().map(|set| set.len()).sum::<usize>()
+        }
+    }
+
+    /// Must be in order with exact start and end
+    struct ExactOrder<T>(Vec<RingOrder<T>>);
+
+    impl<T: std::fmt::Debug> std::fmt::Debug for ExactOrder<T> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_list().entries(&self.0).finish()
+        }
+    }
+
+    impl<T> FromIterator<RingOrder<T>> for ExactOrder<T>
+    where
+        Vec<RingOrder<T>>: FromIterator<RingOrder<T>>,
+    {
+        fn from_iter<I: IntoIterator<Item = RingOrder<T>>>(iter: I) -> Self {
+            Self(Vec::from_iter(iter))
+        }
+    }
+
+    impl<T> PartialEq<[T]> for ExactOrder<T>
+    where
+        RingOrder<T>: PartialEq<[T]>,
+    {
+        fn eq(&self, mut other: &[T]) -> bool {
+            self.0.iter().all(|series| {
+                other
+                    .split_off(..series.len())
+                    .is_some_and(|slice| series == slice)
+            })
+        }
+    }
+
+    impl<T> ExactOrder<T> {
+        pub fn len(&self) -> usize {
+            self.0.iter().map(|series| series.len()).sum::<usize>()
+        }
+    }
+
+    macro_rules! test_graph {
+        (
+            // nodes
+            $({$gate:expr} $id:ident;)*
+            // wires
+            $($src:ident -> $dst:ident;)*
+            // expected eval order
+            [$(($({$($ord:ident),*}),*)),*];
+            // optional message
+            $($args:tt)*
+        ) => {
+            {
+                use Gate::*;
+                let mut next_node_id = NodeId(0);
+                let mut next_wire_id = WireId(0);
+                let [$($id),*] = std::array::from_fn(|_| next_node_id.step().unwrap());
+                let mut g = gen_graph(
+                    GraphId(0),
+                    [$(($id, $gate)),*],
+                    [$(($src, $dst)),*].map(|x| (next_wire_id.step().unwrap(), x)),
+                );
+                g.refresh_eval_order();
+                assert_eq!(
+                    &ExactOrder::from_iter([$(
+                        RingOrder::from_iter([$(
+                            Unordered::from_iter([$(
+                                $ord
+                            ),*])
+                        ),*])
+                    ),*]),
+                    g.eval_order.as_slice(),
+                    $($args)*
+                );
+                g
+            }
+        };
     }
 
     #[test]
-    fn test1() {
-        let mut g = gen_graph(
-            GraphId(0),
-            [
-                (NodeId(0), Gate::Nor),
-                (NodeId(1), Gate::Or),
-                (NodeId(2), Gate::Or),
-                (NodeId(3), Gate::Or),
-                (NodeId(4), Gate::Or),
-                (NodeId(5), Gate::Or),
-            ],
-            [
-                (WireId(0), (NodeId(0), NodeId(1))),
-                (WireId(1), (NodeId(1), NodeId(3))),
-                (WireId(2), (NodeId(2), NodeId(3))),
-                (WireId(3), (NodeId(3), NodeId(4))),
-                (WireId(4), (NodeId(3), NodeId(5))),
-            ],
-        );
-        assert_eq!(
-            g.adjacent_in(),
-            FxHashMap::from_iter([
-                (NodeId(1), vec![NodeId(0)]),
-                (NodeId(3), vec![NodeId(2), NodeId(1)]),
-                (NodeId(4), vec![NodeId(3)]),
-                (NodeId(5), vec![NodeId(3)]),
-            ]),
-            "adjacent_in"
-        );
-        assert_eq!(
-            g.adjacent_out(),
-            FxHashMap::from_iter([
-                (NodeId(0), vec![NodeId(1)]),
-                (NodeId(1), vec![NodeId(3)]),
-                (NodeId(2), vec![NodeId(3)]),
-                (NodeId(3), vec![NodeId(5), NodeId(4)]),
-            ]),
-            "adjacent_out"
-        );
-        assert_eq!(
-            g.inputless_nodes(|it| Vec::from_iter(it.copied()))
-                .as_slice(),
-            &[NodeId(0), NodeId(2)],
-            "inputless_nodes"
-        );
-        assert_eq!(
-            g.outputless_nodes(|it| Vec::from_iter(it.copied()))
-                .as_slice(),
-            &[NodeId(4), NodeId(5)],
-            "outputless_nodes"
-        );
-        g.refresh_eval_order();
-        assert_eq!(
-            &g.eval_order,
-            &[
-                // ---
-                NodeId(0),
-                // ---
-                NodeId(1),
-                NodeId(2),
-                // ---
-                NodeId(3),
-                // ---
-                NodeId(5),
-                NodeId(4),
-            ],
-            "eval_order"
-        );
+    fn test_one_to_one() {
+        test_graph! {
+            {Or} a;
+            {Or} b;
+            {Or} c;
+            {Or} d;
+            a -> b;
+            b -> c;
+            c -> d;
+            [({a}), ({b}), ({c}), ({d})];
+            "{d} relies on {c} which relies on {b} which relies on {a}, forcing a strict order"
+        };
+    }
+
+    #[test]
+    fn test_many_to_many() {
+        test_graph! {
+            {Nor} a;
+            {Or} b;
+            {Or} c;
+            {Or} d;
+            {Or} e;
+            {Or} f;
+            a -> b;
+            b -> d;
+            c -> d;
+            d -> e;
+            d -> f;
+            [({a}), ({b, c}), ({d}), ({e, f})];
+            "{e} and {f} rely on {d}, forcing {d} to come before both. \
+            {d} relies on both {b} and {c}, forcing both to come before it. \
+            {b} relies on {a}, forcing it to come before it. \
+            {b} and {c} do not rely on each other and {e} and {f} do not rely on each other. \
+            Each pair can theoretically be evaluated in parallel, so their order is free to be \
+            rearranged by the implementation so long as they are ordered after all their inputs \
+            are met and before any outputs need them"
+        };
+    }
+
+    #[test]
+    fn test_cyclic() {
+        test_graph! {
+            {Or} a;
+            {Or} b;
+            {Or} c;
+            a -> b;
+            b -> c;
+            c -> a;
+            [({a}, {b}, {c})];
+            "{c} relies on {b} and {b} relies on {a}, but {a} also relies on {c}; the starting/ending \
+            nodes don't matter, so long {b} does not come after {c} without {a} between them"
+        };
+    }
+
+    #[test]
+    fn test_cyclic_with_input() {
+        test_graph! {
+            {Or} a;
+            {Or} b;
+            {Or} c;
+            {Or} d;
+            a -> b;
+            b -> c;
+            c -> d;
+            d -> b;
+            [({a}), ({b}), ({c}), ({d})];
+            "{b} relies on {a}, forcing {a} to come first. since {b}, {c}, and {d} form a cycle, their \
+            order is fixed but their endpoint is not. "
+        };
+    }
+
+    #[test]
+    fn test_cyclic_with_output() {
+        test_graph! {
+            {Or} a;
+            {Or} b;
+            {Or} c;
+            {Or} d;
+            b -> c;
+            c -> d;
+            d -> b;
+            d -> a;
+            [({b}), ({c}), ({d}), ({a})];
+        };
     }
 }
