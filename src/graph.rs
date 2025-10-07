@@ -393,30 +393,37 @@ impl Graph {
         // traverse with BFS starting at the end, inserting in reverse
         self.eval_order.clear();
         self.eval_order.resize(self.nodes.len(), NodeId::INVALID);
-        let mut visited = FxHashSet::default();
         let adj = self.adjacent_in();
         let mut queue = self.outputless_nodes(|it| VecDeque::from_iter(it.copied()));
-        visited.extend(queue.iter().copied());
+        let mut visited = FxHashSet::from_iter(queue.iter().copied());
         let mut i = self.nodes.len();
-        while let Some(node) = queue.pop_front() {
-            i -= 1;
-            self.eval_order[i] = node;
-            queue.extend(
-                adj.get(&node)
-                    .into_iter()
-                    .flatten()
-                    .copied()
-                    .filter(|&id| visited.insert(id)),
-            );
+        loop {
+            while let Some(node) = queue.pop_front() {
+                i -= 1;
+                self.eval_order[i] = node;
+                queue.extend(
+                    adj.get(&node)
+                        .into_iter()
+                        .flatten()
+                        .copied()
+                        .filter(|&id| visited.insert(id)),
+                );
+            }
+            // some subgraphs may "end" in a cycle.
+            // in this case, choose endpoints arbitrarily.
+            if let Some(arbitrary) = self
+                .nodes
+                .keys()
+                .find(|node| !visited.contains(node))
+                .copied()
+            {
+                assert_ne!(i, 0, "i should not be 0 if there are unvisited nodes");
+                visited.insert(arbitrary);
+                queue.push_back(arbitrary);
+            } else {
+                break;
+            }
         }
-        // some subgraphs may "end" in a cycle.
-        // in this case, choose the nodes with the longest
-        if i > 0 {}
-        assert_eq!(
-            i, 0,
-            "eval order should include every node once\nnodes: {:?}\neval_order: {:?}",
-            self.nodes, self.eval_order
-        );
         self.is_eval_order_dirty = false;
     }
 
