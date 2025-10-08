@@ -404,22 +404,42 @@ impl Graph {
     }
 
     pub fn refresh_eval_order(&mut self) {
-        println!("refreshing...");
+        macro_rules! dbg_ord_prinln {
+            ($($bindings:pat),*$(,)? => $($args:tt)*) => {{
+                #[cfg(feature = "dbg_order_algorithm")] {
+                    |$($bindings),*| { println!($($args)*); }
+                }
+                #[cfg(not(feature = "dbg_order_algorithm"))] {
+                    #[allow(unused_variables)]
+                    |$($bindings),*| {}
+                }
+            }};
+
+            ($($args:tt)*) => {{
+                #[cfg(feature = "dbg_order_algorithm")]
+                println!($($args)*);
+            }};
+        }
+
+        dbg_ord_prinln!("refreshing...");
         self.eval_order.clear();
         self.eval_order.reserve(self.nodes.len());
         let (adj_in, adj_out) = self.adjacent();
-        println!("  adj_in: {adj_in:?}");
-        println!("  adj_out: {adj_out:?}");
+        dbg_ord_prinln!("  adj_in: {adj_in:?}");
+        dbg_ord_prinln!("  adj_out: {adj_out:?}");
         let mut queue: VecDeque<_> = self.outputless_nodes().collect();
-        println!("  queue (outputless): {queue:?}");
+        dbg_ord_prinln!("  queue (outputless): {queue:?}");
         let mut discovered = FxHashSet::from_iter(queue.iter().copied());
-        println!("  discovered: {discovered:?}");
+        dbg_ord_prinln!("  discovered: {discovered:?}");
         loop {
-            println!("  loop");
-            println!("    bfs...");
-            println!("      queue: {queue:?}");
+            dbg_ord_prinln!("  loop");
+            dbg_ord_prinln!("    bfs...");
+            dbg_ord_prinln!("      queue: {queue:?}");
             // traverse with BFS starting at the end, inserting in reverse.
-            while let Some(v) = queue.pop_front().inspect(|v| println!("      v: {v:?}")) {
+            while let Some(v) = queue
+                .pop_front()
+                .inspect(dbg_ord_prinln!(v => "      v: {v:?}"))
+            {
                 queue.extend(
                     adj_in
                         .get(&v)
@@ -427,37 +447,48 @@ impl Graph {
                         .flatten()
                         .copied()
                         .filter(|&w| discovered.insert(w))
-                        .inspect(|w| println!("        w: {w:?}")),
+                        .inspect(dbg_ord_prinln!(w => "        w: {w:?}")),
                 );
-                println!("      queue: {queue:?}");
+                dbg_ord_prinln!("      queue: {queue:?}");
                 self.eval_order.push(v);
             }
             // some subgraphs may end in a cycle. find furthest nodes with DFS and use those as endpoints.
-            let mut dfs_discovered = discovered.clone();
-            let mut stack: Vec<_> = self
+            dbg_ord_prinln!("    dfs...");
+            let root_discovered = discovered.clone();
+            for root in self
                 .inputless_nodes()
-                .filter(|v| !dfs_discovered.contains(v))
-                .collect();
-            println!("    dfs...");
-            println!("      stack (undiscovered inputless): {stack:?}");
-            if !stack.is_empty() {
-                while let Some(v) = stack.pop().inspect(|v| println!("      v: {v:?}")) {
-                    if dfs_discovered.insert(v) {
-                        let ws = adj_out.get(&v).map(Vec::as_slice).unwrap_or_default();
-                        stack.extend(ws.iter().copied().inspect(|w| println!("        w: {w:?}")));
-                        println!("      stack: {stack:?}");
-                        if ws.iter().all(|w| dfs_discovered.contains(w)) {
-                            println!("      all w are already discovered; dead end");
-                            // end of path
-                            assert!(discovered.insert(v), "should not enqueue a discovered node");
-                            queue.push_back(v);
-                            println!("      queue: {queue:?}");
+                .filter(|v| !root_discovered.contains(v))
+            {
+                let mut dfs_discovered = root_discovered.clone();
+                let mut stack = vec![root];
+                dbg_ord_prinln!("      stack (undiscovered inputless): {stack:?}");
+                if !stack.is_empty() {
+                    while let Some(v) = stack.pop().inspect(dbg_ord_prinln!(v => "      v: {v:?}"))
+                    {
+                        if dfs_discovered.insert(v) {
+                            let ws = adj_out.get(&v).map(Vec::as_slice).unwrap_or_default();
+                            stack.extend(
+                                ws.iter()
+                                    .copied()
+                                    .inspect(dbg_ord_prinln!(w => "        w: {w:?}")),
+                            );
+                            dbg_ord_prinln!("      stack: {stack:?}");
+                            if ws.iter().all(|w| dfs_discovered.contains(w)) {
+                                dbg_ord_prinln!("      all w are already discovered; dead end");
+                                // end of path
+                                assert!(
+                                    discovered.insert(v),
+                                    "should not enqueue a discovered node"
+                                );
+                                queue.push_back(v);
+                                dbg_ord_prinln!("      queue: {queue:?}");
+                            }
                         }
                     }
                 }
             }
             // some subgraphs both start and end in a cycle. choose an endpoint arbitrarily.
-            else {
+            if queue.is_empty() {
                 println!("    arbitrary...");
                 if let Some(arbitrary) = self
                     .nodes
@@ -594,6 +625,8 @@ impl GraphList {
 
 #[cfg(test)]
 mod tests {
+    use crate::graph::node::GateNtd;
+
     use super::*;
 
     fn gen_graph(
@@ -762,7 +795,17 @@ mod tests {
             // expected eval order
             [$(($({$($ord:ident),*}),*)),*];
             // optional message
-            $($args:tt)*
+            $(($($ord_args:tt)*))?
+            $(
+                $(|$graph:ident|)?
+                $changes:block
+                $(
+                    // expected state
+                    -> {$($eval_id:ident: $value:expr),*$(,)?}
+                    // optional message
+                    $(($($eval_args:tt)*))?
+                )?
+            )*
         ) => {
             {
                 use Gate::*;
@@ -774,6 +817,7 @@ mod tests {
                     [$(($id, $gate)),*],
                     [$(($src, $dst)),*].map(|x| (next_wire_id.step().unwrap(), x)),
                 );
+                // order
                 g.refresh_eval_order();
                 assert_eq!(
                     &ExactOrder::from_iter([$(
@@ -784,9 +828,24 @@ mod tests {
                         ),*])
                     ),*]),
                     g.eval_order.as_slice(),
-                    $($args)*
+                    $($($ord_args)*)?
                 );
-                g
+                // state
+                $(
+                    $(let $graph = &mut g;)?
+                    $changes
+                    g.evaluate();
+                    $(assert_eq!(
+                        FxHashMap::from_iter([$(($eval_id, $value)),*]),
+                        g.nodes
+                            .iter()
+                            .map(|(id, node)| (*id, node.state))
+                            .collect::<FxHashMap<_, _>>(),
+                        $($($eval_args)*)?
+                    );)?
+                )*
+                // return
+                (g, [$($id),*])
             }
         };
     }
@@ -802,7 +861,7 @@ mod tests {
             b -> c;
             c -> d;
             [({a}), ({b}), ({c}), ({d})];
-            "{d} relies on {c} which relies on {b} which relies on {a}, forcing a strict order."
+            ("{d} relies on {c} which relies on {b} which relies on {a}, forcing a strict order.")
         };
     }
 
@@ -821,13 +880,13 @@ mod tests {
             d -> e;
             d -> f;
             [({a}), ({b, c}), ({d}), ({e, f})];
-            "{e} and {f} rely on {d}, forcing {d} to come before both. \
+            ("{e} and {f} rely on {d}, forcing {d} to come before both. \
             {d} relies on both {b} and {c}, forcing both to come before it. \
             {b} relies on {a}, forcing it to come before it. \
             {b} and {c} do not rely on each other and {e} and {f} do not rely on each other. \
             Each pair can theoretically be evaluated in parallel, so their order is free to be \
             rearranged by the implementation so long as they are ordered after all their inputs \
-            are met and before any outputs need them."
+            are met and before any outputs need them.")
         };
     }
 
@@ -841,8 +900,8 @@ mod tests {
             b -> c;
             c -> a;
             [({a}, {b}, {c})];
-            "{c} relies on {b} and {b} relies on {a}, but {a} also relies on {c}; the starting/ending \
-            nodes don't matter, so long {b} does not come after {c} without {a} between them."
+            ("{c} relies on {b} and {b} relies on {a}, but {a} also relies on {c}; the starting/ending \
+            nodes don't matter, so long {b} does not come after {c} without {a} between them.")
         };
     }
 
@@ -858,10 +917,10 @@ mod tests {
             c -> d;
             d -> b;
             [({a}), ({b}), ({c}), ({d})];
-            "{b} relies on {a}, forcing {a} to come first. since {b}, {c}, and {d} form a cycle, their \
+            ("{b} relies on {a}, forcing {a} to come first. since {b}, {c}, and {d} form a cycle, their \
             order is fixed but their endpoint is not. however, {b} requiring {a} to be up to date forces \
             all other nodes relying on {b} to yield until {b} is updated by {a}, making {b} the \
-            entrypoint of the cycle."
+            entrypoint of the cycle.")
         };
     }
 
@@ -877,9 +936,51 @@ mod tests {
             d -> b;
             d -> a;
             [({b}), ({c}), ({d}), ({a})];
-            "{a} relies on {d}, forcing {d} to come before it. since {b}, {c}, and {d} form a cycle, their \
+            ("{a} relies on {d}, forcing {d} to come before it. since {b}, {c}, and {d} form a cycle, their \
             order is fixed but their endpoint is not. however, {a} requiring {d} to be up to date forces {d} \
-            to act as an endpoint for the cycle, giving it a strict order."
+            to act as an endpoint for the cycle, giving it a strict order.")
+        };
+    }
+
+    #[test]
+    fn test_rs_nor_latch() {
+        test_graph! {
+            {Or} r;
+            {Or} s;
+            {Nor} q;
+            {Nor} q_;
+            r -> q;
+            s -> q_;
+            q -> q_;
+            q_ -> q;
+            [({r, s}), ({q, q_})];
+            ("{q} and {q_} form a cycle, so their start/end is arbitrary. they each rely on \
+            {r} and {s} respectively however, so {r} and {s} must come before them.")
+
+            {} -> {
+                r: false,
+                s: false,
+                q: false,
+                q_: true,
+            }
+
+            |g| {
+                g.node_mut(&s).unwrap().gate = GateNtd::Nor;
+            } -> {
+                r: false,
+                s: true,
+                q: true,
+                q_: false,
+            }
+
+            |g| {
+                g.node_mut(&s).unwrap().gate = GateNtd::Or;
+            } -> {
+                r: false,
+                s: false,
+                q: true,
+                q_: false,
+            }
         };
     }
 }
