@@ -376,7 +376,7 @@ impl Gate {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
-pub enum GateNtd {
+pub enum GateInstance {
     #[default]
     Or,
     And,
@@ -398,7 +398,7 @@ pub enum GateNtd {
     Battery,
 }
 
-impl GateNtd {
+impl GateInstance {
     #[inline]
     pub const fn from_gate(gate: Gate) -> Self {
         match gate {
@@ -441,18 +441,18 @@ impl GateNtd {
     {
         let mut inputs = inputs.into_iter().peekable();
         match *self {
-            GateNtd::Or | GateNtd::Led { .. } => inputs.any(|x| x),
-            GateNtd::And => inputs.peek().is_some() && inputs.all(|x| x),
-            GateNtd::Nor => !inputs.any(|x| x),
-            GateNtd::Xor => inputs.filter(|&x| x).count() == 1,
-            GateNtd::Resistor { resistance } => {
+            GateInstance::Or | GateInstance::Led { .. } => inputs.any(|x| x),
+            GateInstance::And => inputs.peek().is_some() && inputs.all(|x| x),
+            GateInstance::Nor => !inputs.any(|x| x),
+            GateInstance::Xor => inputs.filter(|&x| x).count() == 1,
+            GateInstance::Resistor { resistance } => {
                 *inputs
                     .map(Ntd::from)
                     .map(SaturatingNtd)
                     .sum::<SaturatingNtd>()
                     > resistance
             }
-            GateNtd::Capacitor {
+            GateInstance::Capacitor {
                 capacity,
                 ref mut stored,
             } => {
@@ -466,8 +466,8 @@ impl GateNtd {
                     *stored > Ntd::Zero
                 }
             }
-            GateNtd::Delay { ref mut prev } => std::mem::replace(prev, inputs.any(|x| x)),
-            GateNtd::Battery => true,
+            GateInstance::Delay { ref mut prev } => std::mem::replace(prev, inputs.any(|x| x)),
+            GateInstance::Battery => true,
         }
     }
 }
@@ -476,7 +476,7 @@ impl GateNtd {
 pub struct Node {
     pub(super) state: bool,
     id: NodeId,
-    pub(super) gate: GateNtd,
+    pub(super) gate: GateInstance,
     pub(super) position: IVec2,
 }
 
@@ -485,7 +485,7 @@ impl Node {
         Self {
             state: false,
             id,
-            gate: GateNtd::from_gate(gate),
+            gate: GateInstance::from_gate(gate),
             position,
         }
     }
@@ -506,12 +506,12 @@ impl Node {
     }
 
     #[inline]
-    pub const fn gate_ntd(&self) -> &GateNtd {
+    pub const fn gate(&self) -> &GateInstance {
         &self.gate
     }
 
     #[inline]
-    pub const fn gate_ntd_mut(&mut self) -> &mut GateNtd {
+    pub const fn gate_mut(&mut self) -> &mut GateInstance {
         &mut self.gate
     }
 }

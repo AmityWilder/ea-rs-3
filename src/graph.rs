@@ -688,7 +688,7 @@ impl GraphList {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::node::GateNtd;
+    use crate::graph::node::GateInstance;
 
     fn gen_graph(
         id: GraphId,
@@ -1021,7 +1021,7 @@ mod tests {
             {}
 
             |g| {
-                g.node_mut(&s).unwrap().gate = GateNtd::Nor;
+                g.node_mut(&s).unwrap().gate = GateInstance::Nor;
             }
             {} -> {
                 r: false,
@@ -1032,7 +1032,7 @@ mod tests {
             ("1: setting {s} should set {q} and unset {q_}, possibly taking an extra tick depending on the cycle order")
 
             |g| {
-                g.node_mut(&s).unwrap().gate = GateNtd::Or;
+                g.node_mut(&s).unwrap().gate = GateInstance::Or;
             }
             {} -> {
                 r: false,
@@ -1043,7 +1043,7 @@ mod tests {
             ("1: should remain latched after inputs are turned back off")
 
             |g| {
-                g.node_mut(&r).unwrap().gate = GateNtd::Nor;
+                g.node_mut(&r).unwrap().gate = GateInstance::Nor;
             }
             {} -> {
                 r: true,
@@ -1054,7 +1054,7 @@ mod tests {
             ("2: setting {r} should set {q_} and unset {q}, possibly taking an extra tick depending on the cycle order")
 
             |g| {
-                g.node_mut(&r).unwrap().gate = GateNtd::Or;
+                g.node_mut(&r).unwrap().gate = GateInstance::Or;
             }
             {} -> {
                 r: false,

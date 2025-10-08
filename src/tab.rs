@@ -3,7 +3,7 @@ use crate::{
     console::Console,
     graph::{
         Graph,
-        node::GateNtd,
+        node::GateInstance,
         wire::{Flow, Wire},
     },
     icon_sheets::{NodeIconSheetId, NodeIconSheetSetId},
@@ -311,13 +311,13 @@ impl EditorTab {
                         && graph.is_inputless(&id)
                     {
                         let node = graph.node_mut(&id).expect("all nodes should be valid");
-                        match node.gate_ntd_mut() {
-                            gate @ GateNtd::Or => {
-                                *gate = GateNtd::Nor;
+                        match node.gate_mut() {
+                            gate @ GateInstance::Or => {
+                                *gate = GateInstance::Nor;
                                 is_dirty = true;
                             }
-                            gate @ GateNtd::Nor => {
-                                *gate = GateNtd::Or;
+                            gate @ GateInstance::Nor => {
+                                *gate = GateInstance::Or;
                                 is_dirty = true;
                             }
                             _ => {}
@@ -473,7 +473,7 @@ impl EditorTab {
                         if let Some((scale, icon_width)) = scale_and_width {
                             d.draw_texture_pro(
                                 &theme.node_icons[scale][NodeIconSheetId::Basic],
-                                node.gate_ntd()
+                                node.gate()
                                     .as_gate()
                                     .id()
                                     .icon_cell_irec(icon_width)
@@ -496,8 +496,8 @@ impl EditorTab {
             match &toolpane.tool {
                 Tool::Interact { .. } => {
                     for node in graph.nodes_iter() {
-                        match node.gate_ntd() {
-                            GateNtd::Led { color } => {
+                        match node.gate() {
+                            GateInstance::Led { color } => {
                                 let node_position = node.position().as_vec2();
                                 let rec = Rectangle {
                                     x: node_position.x,
@@ -515,7 +515,9 @@ impl EditorTab {
                                 );
                             }
 
-                            GateNtd::Or | GateNtd::Nor if graph.is_inputless(node.id()) => {
+                            GateInstance::Or | GateInstance::Nor
+                                if graph.is_inputless(node.id()) =>
+                            {
                                 let node_position = node.position().as_vec2();
                                 let rec = Rectangle {
                                     x: node_position.x,
@@ -526,7 +528,7 @@ impl EditorTab {
                                 let color = theme.available;
                                 if let Some((scale, icon_width)) = scale_and_width {
                                     let src_rec = node
-                                        .gate_ntd()
+                                        .gate()
                                         .as_gate()
                                         .id()
                                         .icon_cell_irec(icon_width)
@@ -573,7 +575,7 @@ impl EditorTab {
                         };
                         if let Some((scale, icon_width)) = scale_and_width {
                             let src_rec = node
-                                .gate_ntd()
+                                .gate()
                                 .as_gate()
                                 .id()
                                 .icon_cell_irec(icon_width)
@@ -594,25 +596,24 @@ impl EditorTab {
                                 0.0,
                                 color,
                             );
-                            if let Some(color) = match *node.gate_ntd() {
-                                GateNtd::Or
-                                | GateNtd::And
-                                | GateNtd::Nor
-                                | GateNtd::Xor
-                                | GateNtd::Battery
-                                | GateNtd::Delay { .. } => None,
+                            if let Some(color) = match *node.gate() {
+                                GateInstance::Or
+                                | GateInstance::And
+                                | GateInstance::Nor
+                                | GateInstance::Xor
+                                | GateInstance::Battery
+                                | GateInstance::Delay { .. } => None,
 
-                                GateNtd::Resistor { resistance: n } | GateNtd::Led { color: n } => {
-                                    Some(
-                                        theme
-                                            .resistance
-                                            .get(n as usize)
-                                            .copied()
-                                            .expect("gate should never contain invalid NT data"),
-                                    )
-                                }
+                                GateInstance::Resistor { resistance: n }
+                                | GateInstance::Led { color: n } => Some(
+                                    theme
+                                        .resistance
+                                        .get(n as usize)
+                                        .copied()
+                                        .expect("gate should never contain invalid NT data"),
+                                ),
 
-                                GateNtd::Capacitor { capacity, stored } => Some(
+                                GateInstance::Capacitor { capacity, stored } => Some(
                                     theme
                                         .active
                                         .alpha(u8::from(stored) as f32 / u8::from(capacity) as f32),
@@ -661,7 +662,7 @@ impl EditorTab {
                 if let Some((scale, icon_width)) = scale_and_width {
                     d.draw_texture_pro(
                         &theme.node_icons[scale][NodeIconSheetId::Highlight],
-                        node.gate_ntd()
+                        node.gate()
                             .as_gate()
                             .id()
                             .icon_cell_irec(icon_width)
