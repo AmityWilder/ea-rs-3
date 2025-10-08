@@ -11,6 +11,7 @@ use crate::{
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::{
     collections::VecDeque,
+    marker::PhantomData,
     sync::{Arc, RwLock},
 };
 
@@ -63,6 +64,159 @@ impl GraphId {
         }
     }
 }
+
+macro_rules! dbg_ord_prinln {
+    ($($bindings:pat),*$(,)? => $($args:tt)*) => {{
+        #[cfg(feature = "dbg_order_algorithm")] {
+            |$($bindings),*| { println!($($args)*); }
+        }
+        #[cfg(not(feature = "dbg_order_algorithm"))] {
+            #[allow(unused_variables)]
+            |$($bindings),*| {}
+        }
+    }};
+
+    ($($args:tt)*) => {{
+        #[cfg(feature = "dbg_order_algorithm")]
+        println!($($args)*);
+    }};
+}
+
+#[derive(Debug, Clone)]
+struct RevEvalOrderIter<'a> {
+    adj_in: FxHashMap<NodeId, FxHashSet<NodeId>>,
+    adj_out: FxHashMap<NodeId, FxHashSet<NodeId>>,
+    queue: VecDeque<NodeId>,
+    discovered: FxHashSet<NodeId>,
+    inputless: FxHashSet<NodeId>,
+    all_nodes: FxHashSet<NodeId>,
+    _marker: PhantomData<&'a Graph>,
+}
+
+impl<'a> RevEvalOrderIter<'a> {
+    fn new(g: &'a Graph) -> Self {
+        let (adj_in, adj_out) = g.adjacent();
+        dbg_ord_prinln!("  adj_in: {adj_in:?}");
+        dbg_ord_prinln!("  adj_out: {adj_out:?}");
+        let inputless = g.inputless_nodes().collect();
+        dbg_ord_prinln!("  inputless: {inputless:?}");
+        let queue: VecDeque<_> = g.outputless_nodes().collect();
+        dbg_ord_prinln!("  queue (outputless): {queue:?}");
+        let discovered = queue.iter().copied().collect();
+        dbg_ord_prinln!("  discovered: {discovered:?}");
+        Self {
+            adj_in,
+            adj_out,
+            queue,
+            discovered,
+            inputless,
+            all_nodes: g.nodes.keys().copied().collect(),
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl Iterator for RevEvalOrderIter<'_> {
+    type Item = NodeId;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            dbg_ord_prinln!("  loop");
+            dbg_ord_prinln!("    bfs...");
+            dbg_ord_prinln!("      queue: {:?}", self.queue);
+            // traverse with BFS starting at the end, inserting in reverse.
+            if let Some(v) = self
+                .queue
+                .pop_front()
+                .inspect(dbg_ord_prinln!(v => "      v: {v:?}"))
+            {
+                self.queue.extend(
+                    self.adj_in
+                        .get(&v)
+                        .into_iter()
+                        .flatten()
+                        .copied()
+                        .filter(|&w| self.discovered.insert(w))
+                        .inspect(dbg_ord_prinln!(w => "        w: {w:?}")),
+                );
+                dbg_ord_prinln!("      queue: {:?}", self.queue);
+                return Some(v);
+            }
+            // some subgraphs may end in a cycle. find furthest nodes with DFS and use those as endpoints.
+            dbg_ord_prinln!("    dfs...");
+            let root_discovered = self.discovered.clone();
+            for root in self.inputless.difference(&root_discovered).copied() {
+                let mut dfs_discovered = root_discovered.clone();
+                let mut stack = vec![root];
+                dbg_ord_prinln!("      stack (undiscovered inputless): {:?}", self.stack);
+                if !stack.is_empty() {
+                    while let Some(v) = stack.pop().inspect(dbg_ord_prinln!(v => "      v: {v:?}"))
+                    {
+                        if dfs_discovered.insert(v) {
+                            stack.extend(
+                                self.adj_out
+                                    .get(&v)
+                                    .into_iter()
+                                    .flatten()
+                                    .copied()
+                                    .inspect(dbg_ord_prinln!(w => "        w: {w:?}")),
+                            );
+                            dbg_ord_prinln!("      stack: {:?}", self.stack);
+                            let all_discovered = self
+                                .adj_out
+                                .get(&v)
+                                .is_some_and(|ws| ws.difference(&dfs_discovered).next().is_none());
+                            if all_discovered {
+                                dbg_ord_prinln!("      all w are already discovered; dead end");
+                                // end of path
+                                self.discovered.insert(v);
+                                self.queue.push_back(v);
+                                dbg_ord_prinln!("      queue: {:?}", self.queue);
+                            }
+                        }
+                    }
+                }
+            }
+            // some subgraphs both start and end in a cycle. choose an endpoint arbitrarily.
+            if self.queue.is_empty() {
+                dbg_ord_prinln!("    arbitrary...");
+                if let Some(arbitrary) = self
+                    .all_nodes
+                    .difference(&self.discovered)
+                    .next()
+                    .copied()
+                    .inspect(dbg_ord_prinln!(v => "      v: {v:?}"))
+                {
+                    self.discovered.insert(arbitrary);
+                    self.queue.push_back(arbitrary);
+                    dbg_ord_prinln!("      queue: {:?}", self.queue);
+                }
+                // no nodes remain
+                else {
+                    dbg_ord_prinln!("  no nodes remain");
+                    break;
+                }
+            }
+        }
+        None
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let n = self.len();
+        (n, Some(n))
+    }
+}
+
+impl ExactSizeIterator for RevEvalOrderIter<'_> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.all_nodes.len()
+    }
+}
+
+impl std::iter::FusedIterator for RevEvalOrderIter<'_> {}
 
 #[derive(Debug)]
 pub struct Graph {
@@ -368,32 +522,32 @@ impl Graph {
     pub fn adjacent(
         &self,
     ) -> (
-        FxHashMap<NodeId, Vec<NodeId>>,
-        FxHashMap<NodeId, Vec<NodeId>>,
+        FxHashMap<NodeId, FxHashSet<NodeId>>,
+        FxHashMap<NodeId, FxHashSet<NodeId>>,
     ) {
-        let mut inputs = FxHashMap::<_, Vec<_>>::default();
-        let mut outputs = FxHashMap::<_, Vec<_>>::default();
+        let mut inputs = FxHashMap::<_, FxHashSet<_>>::default();
+        let mut outputs = FxHashMap::<_, FxHashSet<_>>::default();
         for wire in self.wires.values() {
-            inputs.entry(wire.dst).or_default().push(wire.src);
-            outputs.entry(wire.src).or_default().push(wire.dst);
+            inputs.entry(wire.dst).or_default().insert(wire.src);
+            outputs.entry(wire.src).or_default().insert(wire.dst);
         }
         (inputs, outputs)
     }
 
     #[inline]
-    pub fn adjacent_out(&self) -> FxHashMap<NodeId, Vec<NodeId>> {
-        let mut outputs = FxHashMap::<_, Vec<_>>::default();
+    pub fn adjacent_out(&self) -> FxHashMap<NodeId, FxHashSet<NodeId>> {
+        let mut outputs = FxHashMap::<_, FxHashSet<_>>::default();
         for wire in self.wires.values() {
-            outputs.entry(wire.src).or_default().push(wire.dst);
+            outputs.entry(wire.src).or_default().insert(wire.dst);
         }
         outputs
     }
 
     #[inline]
-    pub fn adjacent_in(&self) -> FxHashMap<NodeId, Vec<NodeId>> {
-        let mut inputs = FxHashMap::<_, Vec<_>>::default();
+    pub fn adjacent_in(&self) -> FxHashMap<NodeId, FxHashSet<NodeId>> {
+        let mut inputs = FxHashMap::<_, FxHashSet<_>>::default();
         for wire in self.wires.values() {
-            inputs.entry(wire.dst).or_default().push(wire.src);
+            inputs.entry(wire.dst).or_default().insert(wire.src);
         }
         inputs
     }
@@ -403,115 +557,26 @@ impl Graph {
         self.is_eval_order_dirty
     }
 
+    #[inline]
+    fn rev_eval_order_iter(&self) -> RevEvalOrderIter<'_> {
+        RevEvalOrderIter::new(self)
+    }
+
     pub fn refresh_eval_order(&mut self) {
-        macro_rules! dbg_ord_prinln {
-            ($($bindings:pat),*$(,)? => $($args:tt)*) => {{
-                #[cfg(feature = "dbg_order_algorithm")] {
-                    |$($bindings),*| { println!($($args)*); }
-                }
-                #[cfg(not(feature = "dbg_order_algorithm"))] {
-                    #[allow(unused_variables)]
-                    |$($bindings),*| {}
-                }
-            }};
-
-            ($($args:tt)*) => {{
-                #[cfg(feature = "dbg_order_algorithm")]
-                println!($($args)*);
-            }};
+        if self.is_eval_order_dirty {
+            dbg_ord_prinln!("refreshing...");
+            let mut eval_order = std::mem::take(&mut self.eval_order);
+            eval_order.clear();
+            eval_order.extend(self.rev_eval_order_iter());
+            eval_order.reverse();
+            self.eval_order = eval_order;
+            self.is_eval_order_dirty = false;
+            assert_eq!(
+                self.eval_order.len(),
+                self.nodes.len(),
+                "every node should be visited by eval_order"
+            );
         }
-
-        dbg_ord_prinln!("refreshing...");
-        self.eval_order.clear();
-        self.eval_order.reserve(self.nodes.len());
-        let (adj_in, adj_out) = self.adjacent();
-        dbg_ord_prinln!("  adj_in: {adj_in:?}");
-        dbg_ord_prinln!("  adj_out: {adj_out:?}");
-        let mut queue: VecDeque<_> = self.outputless_nodes().collect();
-        dbg_ord_prinln!("  queue (outputless): {queue:?}");
-        let mut discovered = FxHashSet::from_iter(queue.iter().copied());
-        dbg_ord_prinln!("  discovered: {discovered:?}");
-        loop {
-            dbg_ord_prinln!("  loop");
-            dbg_ord_prinln!("    bfs...");
-            dbg_ord_prinln!("      queue: {queue:?}");
-            // traverse with BFS starting at the end, inserting in reverse.
-            while let Some(v) = queue
-                .pop_front()
-                .inspect(dbg_ord_prinln!(v => "      v: {v:?}"))
-            {
-                queue.extend(
-                    adj_in
-                        .get(&v)
-                        .into_iter()
-                        .flatten()
-                        .copied()
-                        .filter(|&w| discovered.insert(w))
-                        .inspect(dbg_ord_prinln!(w => "        w: {w:?}")),
-                );
-                dbg_ord_prinln!("      queue: {queue:?}");
-                self.eval_order.push(v);
-            }
-            // some subgraphs may end in a cycle. find furthest nodes with DFS and use those as endpoints.
-            dbg_ord_prinln!("    dfs...");
-            let root_discovered = discovered.clone();
-            for root in self
-                .inputless_nodes()
-                .filter(|v| !root_discovered.contains(v))
-            {
-                let mut dfs_discovered = root_discovered.clone();
-                let mut stack = vec![root];
-                dbg_ord_prinln!("      stack (undiscovered inputless): {stack:?}");
-                if !stack.is_empty() {
-                    while let Some(v) = stack.pop().inspect(dbg_ord_prinln!(v => "      v: {v:?}"))
-                    {
-                        if dfs_discovered.insert(v) {
-                            let ws = adj_out.get(&v).map(Vec::as_slice).unwrap_or_default();
-                            stack.extend(
-                                ws.iter()
-                                    .copied()
-                                    .inspect(dbg_ord_prinln!(w => "        w: {w:?}")),
-                            );
-                            dbg_ord_prinln!("      stack: {stack:?}");
-                            if ws.iter().all(|w| dfs_discovered.contains(w)) {
-                                dbg_ord_prinln!("      all w are already discovered; dead end");
-                                // end of path
-                                discovered.insert(v);
-                                queue.push_back(v);
-                                dbg_ord_prinln!("      queue: {queue:?}");
-                            }
-                        }
-                    }
-                }
-            }
-            // some subgraphs both start and end in a cycle. choose an endpoint arbitrarily.
-            if queue.is_empty() {
-                dbg_ord_prinln!("    arbitrary...");
-                if let Some(arbitrary) = self
-                    .nodes
-                    .keys()
-                    .find(|v| !discovered.contains(v))
-                    .copied()
-                    .inspect(dbg_ord_prinln!(v => "      v: {v:?}"))
-                {
-                    discovered.insert(arbitrary);
-                    queue.push_back(arbitrary);
-                    dbg_ord_prinln!("      queue: {queue:?}");
-                }
-                // no nodes remain
-                else {
-                    dbg_ord_prinln!("  no nodes remain");
-                    break;
-                }
-            }
-        }
-        assert_eq!(
-            self.eval_order.len(),
-            self.nodes.len(),
-            "every node should be visited by eval_order"
-        );
-        self.eval_order.reverse();
-        self.is_eval_order_dirty = false;
     }
 
     #[inline]
