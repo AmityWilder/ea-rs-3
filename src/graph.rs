@@ -125,7 +125,7 @@ impl Iterator for RevEvalOrderIter<'_> {
             dbg_ord_prinln!("  loop");
             dbg_ord_prinln!("    bfs...");
             dbg_ord_prinln!("      queue: {:?}", self.queue);
-            // traverse with BFS starting at the end, inserting in reverse.
+            // traverse with BFS starting at the end.
             if let Some(v) = self
                 .queue
                 .pop_front()
@@ -143,6 +143,7 @@ impl Iterator for RevEvalOrderIter<'_> {
                 dbg_ord_prinln!("      queue: {:?}", self.queue);
                 return Some(v);
             }
+
             // some subgraphs may end in a cycle. find furthest nodes with DFS and use those as endpoints.
             dbg_ord_prinln!("    dfs...");
             let root_discovered = self.discovered.clone();
@@ -178,6 +179,7 @@ impl Iterator for RevEvalOrderIter<'_> {
                     }
                 }
             }
+
             // some subgraphs both start and end in a cycle. choose an endpoint arbitrarily.
             if self.queue.is_empty() {
                 dbg_ord_prinln!("    arbitrary...");
@@ -191,9 +193,7 @@ impl Iterator for RevEvalOrderIter<'_> {
                     self.discovered.insert(arbitrary);
                     self.queue.push_back(arbitrary);
                     dbg_ord_prinln!("      queue: {:?}", self.queue);
-                }
-                // no nodes remain
-                else {
+                } else {
                     dbg_ord_prinln!("  no nodes remain");
                     break;
                 }
@@ -687,9 +687,8 @@ impl GraphList {
 
 #[cfg(test)]
 mod tests {
-    use crate::graph::node::GateNtd;
-
     use super::*;
+    use crate::graph::node::GateNtd;
 
     fn gen_graph(
         id: GraphId,
