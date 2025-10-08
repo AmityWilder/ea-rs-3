@@ -755,7 +755,7 @@ mod tests {
             b -> c;
             c -> d;
             [({a}), ({b}), ({c}), ({d})];
-            "{d} relies on {c} which relies on {b} which relies on {a}, forcing a strict order"
+            "{d} relies on {c} which relies on {b} which relies on {a}, forcing a strict order."
         };
     }
 
@@ -780,7 +780,7 @@ mod tests {
             {b} and {c} do not rely on each other and {e} and {f} do not rely on each other. \
             Each pair can theoretically be evaluated in parallel, so their order is free to be \
             rearranged by the implementation so long as they are ordered after all their inputs \
-            are met and before any outputs need them"
+            are met and before any outputs need them."
         };
     }
 
@@ -795,7 +795,7 @@ mod tests {
             c -> a;
             [({a}, {b}, {c})];
             "{c} relies on {b} and {b} relies on {a}, but {a} also relies on {c}; the starting/ending \
-            nodes don't matter, so long {b} does not come after {c} without {a} between them"
+            nodes don't matter, so long {b} does not come after {c} without {a} between them."
         };
     }
 
@@ -812,7 +812,9 @@ mod tests {
             d -> b;
             [({a}), ({b}), ({c}), ({d})];
             "{b} relies on {a}, forcing {a} to come first. since {b}, {c}, and {d} form a cycle, their \
-            order is fixed but their endpoint is not. "
+            order is fixed but their endpoint is not. however, {b} requiring {a} to be up to date forces \
+            all other nodes relying on {b} to yield until {b} is updated by {a}, making {b} the \
+            entrypoint of the cycle."
         };
     }
 
@@ -828,6 +830,9 @@ mod tests {
             d -> b;
             d -> a;
             [({b}), ({c}), ({d}), ({a})];
+            "{a} relies on {d}, forcing {d} to come before it. since {b}, {c}, and {d} form a cycle, their \
+            order is fixed but their endpoint is not. however, {a} requiring {d} to be up to date forces {d} \
+            to act as an endpoint for the cycle, giving it a strict order."
         };
     }
 }
