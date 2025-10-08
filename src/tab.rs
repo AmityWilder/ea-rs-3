@@ -505,13 +505,26 @@ impl EditorTab {
                                     width: GRID_SIZE.into(),
                                     height: GRID_SIZE.into(),
                                 };
+                                let (count, sum) = graph
+                                    .wires_to(node.id())
+                                    .map(|(_, wire)| {
+                                        graph
+                                            .node(wire.src())
+                                            .expect("all wires should be valid")
+                                            .state()
+                                    })
+                                    .enumerate()
+                                    .fold((0, 0), |(_, a), (n, b)| (n, a + b as u32));
                                 d.draw_rectangle_rec(
                                     rec,
-                                    if node.state() {
-                                        theme.resistance[*color as usize]
-                                    } else {
-                                        theme.background
-                                    },
+                                    theme.background.lerp(
+                                        theme.resistance[*color as usize],
+                                        if count != 0 {
+                                            sum as f32 / count as f32
+                                        } else {
+                                            0.0
+                                        },
+                                    ),
                                 );
                             }
 
