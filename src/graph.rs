@@ -433,21 +433,23 @@ impl Graph {
                 self.eval_order.push(v);
             }
             // some subgraphs may end in a cycle. find furthest nodes with DFS and use those as endpoints.
+            let mut dfs_discovered = discovered.clone();
             let mut stack: Vec<_> = self
                 .inputless_nodes()
-                .filter(|v| !discovered.contains(v))
+                .filter(|v| !dfs_discovered.contains(v))
                 .collect();
             println!("    dfs...");
             println!("      stack (undiscovered inputless): {stack:?}");
             if !stack.is_empty() {
                 while let Some(v) = stack.pop().inspect(|v| println!("      v: {v:?}")) {
-                    if discovered.insert(v) {
+                    if dfs_discovered.insert(v) {
                         let ws = adj_out.get(&v).map(Vec::as_slice).unwrap_or_default();
                         stack.extend(ws.iter().copied().inspect(|w| println!("        w: {w:?}")));
                         println!("      stack: {stack:?}");
-                        if ws.iter().all(|w| discovered.contains(w)) {
+                        if ws.iter().all(|w| dfs_discovered.contains(w)) {
                             println!("      all w are already discovered; dead end");
                             // end of path
+                            assert!(discovered.insert(v), "should not enqueue a discovered node");
                             queue.push_back(v);
                             println!("      queue: {queue:?}");
                         }
