@@ -1,7 +1,7 @@
 use crate::{
     console::{Console, GateRef, LogType, ToolRef},
     graph::{
-        node::{Gate, GateId},
+        node::{Gate, GateId, Ntd},
         wire::Elbow,
     },
     icon_sheets::{ButtonIconId, ButtonIconSheetId},
@@ -55,7 +55,7 @@ impl ButtonGroup {
 pub enum ButtonAction {
     SetTool(ToolId),
     SetGate(GateId),
-    SetNtd(u8),
+    SetNtd(Ntd),
     Blueprints,
     Clipboard,
     Settings,
@@ -66,7 +66,7 @@ pub struct ToolPane {
     pub panel: Panel,
     pub tool: Tool,
     pub gate: Gate,
-    pub ntd: u8,
+    pub ntd: Ntd,
     pub elbow: Elbow,
     pub orientation: Orientation,
     pub visibility: Visibility,
@@ -87,8 +87,8 @@ impl ToolPane {
         Self {
             panel,
             tool,
+            ntd: gate.ntd().unwrap_or_default(),
             gate,
-            ntd: 0,
             elbow,
             orientation,
             visibility,
@@ -233,7 +233,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::WHITE)),
                             icon: None,
-                            action: ButtonAction::SetNtd(9),
+                            action: ButtonAction::SetNtd(Ntd::Nine),
                         },
                         Button {
                             text: Some("8"),
@@ -241,7 +241,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::GRAY)),
                             icon: None,
-                            action: ButtonAction::SetNtd(8),
+                            action: ButtonAction::SetNtd(Ntd::Eight),
                         },
                         Button {
                             text: Some("7"),
@@ -249,7 +249,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::PURPLE)),
                             icon: None,
-                            action: ButtonAction::SetNtd(7),
+                            action: ButtonAction::SetNtd(Ntd::Seven),
                         },
                         Button {
                             text: Some("6"),
@@ -257,7 +257,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::BLUE)),
                             icon: None,
-                            action: ButtonAction::SetNtd(6),
+                            action: ButtonAction::SetNtd(Ntd::Six),
                         },
                         Button {
                             text: Some("5"),
@@ -265,7 +265,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::GREEN)),
                             icon: None,
-                            action: ButtonAction::SetNtd(5),
+                            action: ButtonAction::SetNtd(Ntd::Five),
                         },
                         Button {
                             text: Some("4"),
@@ -273,7 +273,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::YELLOW)),
                             icon: None,
-                            action: ButtonAction::SetNtd(4),
+                            action: ButtonAction::SetNtd(Ntd::Four),
                         },
                         Button {
                             text: Some("3"),
@@ -281,7 +281,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::ORANGE)),
                             icon: None,
-                            action: ButtonAction::SetNtd(3),
+                            action: ButtonAction::SetNtd(Ntd::Three),
                         },
                         Button {
                             text: Some("2"),
@@ -289,7 +289,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::RED)),
                             icon: None,
-                            action: ButtonAction::SetNtd(2),
+                            action: ButtonAction::SetNtd(Ntd::Two),
                         },
                         Button {
                             text: Some("1"),
@@ -297,7 +297,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::BROWN)),
                             icon: None,
-                            action: ButtonAction::SetNtd(1),
+                            action: ButtonAction::SetNtd(Ntd::One),
                         },
                         Button {
                             text: Some("0"),
@@ -305,7 +305,7 @@ impl ToolPane {
                             desc: None,
                             color: Some(ColorRef::Exact(Color::BLACK)),
                             icon: None,
-                            action: ButtonAction::SetNtd(0),
+                            action: ButtonAction::SetNtd(Ntd::Zero),
                         },
                     ],
                 },
@@ -339,21 +339,17 @@ impl ToolPane {
         let change = self.gate.id() != gate_id;
         if change {
             self.gate = gate_id.to_gate(self.ntd);
-            logln!(
-                console,
-                LogType::Info,
-                "set gate to {}",
-                GateRef(self.gate.id())
-            );
+            logln!(console, LogType::Info, "set gate to {}", GateRef(self.gate));
         }
         change
     }
 
     #[inline]
-    pub fn set_ntd(&mut self, data: u8, console: &mut Console) -> bool {
+    pub fn set_ntd(&mut self, data: Ntd, console: &mut Console) -> bool {
         let change = self.ntd != data;
         if change {
             self.ntd = data;
+            self.gate = self.gate.with_ntd(self.ntd);
             logln!(
                 console,
                 LogType::Info,

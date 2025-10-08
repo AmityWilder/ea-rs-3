@@ -2,17 +2,16 @@ use crate::{
     GRID_SIZE,
     graph::{
         Graph, GraphId, GraphList,
-        node::{GateId, Node, NodeId},
+        node::{Gate, Node, NodeId},
         wire::{Wire, WireId},
     },
-    icon_sheets::ButtonIconId,
     input::Inputs,
     ivec::{AsIVec2, IBounds, IRect, IVec2},
     rich_text::{ColorAct, ColorRef, RichStr, RichString},
     tab::TabList,
     theme::{ColorId, Theme},
     tool::ToolId,
-    toolpane::ToolPane,
+    toolpane::{ButtonAction, ToolPane},
     ui::Panel,
 };
 use raylib::prelude::*;
@@ -66,10 +65,10 @@ impl LogType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct GateRef(pub GateId);
+pub struct GateRef(pub Gate);
 
 impl std::ops::Deref for GateRef {
-    type Target = GateId;
+    type Target = Gate;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -391,22 +390,12 @@ impl HyperRef {
 
         match self {
             HyperRef::Gate(gate_ref) => {
-                // HACK: only matches against the icon of the button!
                 if let Some((rec, _)) =
                     toolpane
                         .buttons(Vector2::zero(), theme)
                         .find(|(_, button)| {
-                            matches!(
-                                (button.icon, gate_ref.0),
-                                (Some(ButtonIconId::Or), GateId::Or)
-                                    | (Some(ButtonIconId::And), GateId::And)
-                                    | (Some(ButtonIconId::Nor), GateId::Nor)
-                                    | (Some(ButtonIconId::Xor), GateId::Xor)
-                                    | (Some(ButtonIconId::Resistor), GateId::Resistor)
-                                    | (Some(ButtonIconId::Capacitor), GateId::Capacitor)
-                                    | (Some(ButtonIconId::Led), GateId::Led)
-                                    | (Some(ButtonIconId::Delay), GateId::Delay)
-                                    | (Some(ButtonIconId::Battery), GateId::Battery)
+                            matches!(button.action,
+                                ButtonAction::SetGate(id) if id == gate_ref.0.id()
                             )
                         })
                 {
@@ -424,12 +413,8 @@ impl HyperRef {
                     toolpane
                         .buttons(Vector2::zero(), theme)
                         .find(|(_, button)| {
-                            matches!(
-                                (button.icon, tool_ref.0),
-                                (Some(ButtonIconId::Pen), ToolId::Create)
-                                    | (Some(ButtonIconId::Erase), ToolId::Erase)
-                                    | (Some(ButtonIconId::Edit), ToolId::Edit)
-                                    | (Some(ButtonIconId::Interact), ToolId::Interact)
+                            matches!(button.action,
+                                ButtonAction::SetTool(id) if id == tool_ref.0
                             )
                         })
                 {

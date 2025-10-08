@@ -5,24 +5,20 @@ use crate::{
     config::Config,
     console::{Console, LogType},
     graph::{GraphList, node::Gate, wire::Elbow},
-    ivec::IVec2,
-    properties::PropertySection,
-    tab::{EditorTab, Tab, TabList},
+    ivec::{Bounds, IVec2},
+    properties::{DrawPropertySection, PropertiesPanel, PropertySection},
+    tab::{EditorGrid, EditorTab, Tab, TabList},
     theme::Theme,
     tool::Tool,
     toolpane::ToolPane,
-    ui::{NcSizing, Padding},
+    ui::{Anchoring, ExactSizing, NcSizing, Padding, Panel, Sizing},
 };
-use ivec::Bounds;
-use properties::{DrawPropertySection, PropertiesPanel};
 use raylib::prelude::*;
 use std::{
     io::Write,
     sync::Arc,
     time::{Duration, Instant},
 };
-use tab::EditorGrid;
-use ui::{Anchoring, ExactSizing, Panel, Sizing};
 
 mod config;
 mod console;

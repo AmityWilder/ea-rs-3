@@ -319,7 +319,7 @@ impl Graph {
                 console,
                 LogType::Info,
                 "create {} node {} at {}",
-                GateRef(gate.id()),
+                GateRef(gate),
                 NodeRef(self.id, *node.id()),
                 PositionRef(position),
             );

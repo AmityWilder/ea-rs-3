@@ -110,7 +110,7 @@ impl std::str::FromStr for GateId {
 
 impl GateId {
     #[inline]
-    pub const fn to_gate(self, ntd: u8) -> Gate {
+    pub const fn to_gate(self, ntd: Ntd) -> Gate {
         match self {
             GateId::Or => Gate::Or,
             GateId::And => Gate::And,
@@ -125,6 +125,158 @@ impl GateId {
     }
 }
 
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
+#[serde(try_from = "u8", into = "u8")]
+pub enum Ntd {
+    #[default]
+    Zero,
+    One,
+    Two,
+    Three,
+    Four,
+    Five,
+    Six,
+    Seven,
+    Eight,
+    Nine,
+}
+
+impl std::ops::Add for Ntd {
+    type Output = Self;
+
+    #[inline]
+    fn add(self, rhs: Self) -> Self::Output {
+        Self::try_from(u8::from(self) + u8::from(rhs)).expect("attempted to add with overflow")
+    }
+}
+
+impl Ntd {
+    #[inline]
+    pub fn saturating_sub(self, rhs: Self) -> Self {
+        match Self::try_from(u8::from(self).saturating_sub(u8::from(rhs))) {
+            Ok(n) => n,
+            Err(_) => unreachable!(),
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
+pub struct SaturatingNtd(pub Ntd);
+
+impl std::ops::Deref for SaturatingNtd {
+    type Target = Ntd;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for SaturatingNtd {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl std::iter::Sum for SaturatingNtd {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        match Ntd::try_from(
+            iter.map(|x| u8::from(x.0))
+                .fold(0, |a, b| (a + b).clamp(0, 9)),
+        ) {
+            Ok(n) => Self(n),
+            Err(_) => unreachable!(),
+        }
+    }
+}
+
+impl std::fmt::Display for Ntd {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Zero => '0',
+            Self::One => '1',
+            Self::Two => '2',
+            Self::Three => '3',
+            Self::Four => '4',
+            Self::Five => '5',
+            Self::Six => '6',
+            Self::Seven => '7',
+            Self::Eight => '8',
+            Self::Nine => '9',
+        }
+        .fmt(f)
+    }
+}
+
+impl std::str::FromStr for Ntd {
+    type Err = ();
+
+    #[inline]
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "0" => Ok(Self::Zero),
+            "1" => Ok(Self::One),
+            "2" => Ok(Self::Two),
+            "3" => Ok(Self::Three),
+            "4" => Ok(Self::Four),
+            "5" => Ok(Self::Five),
+            "6" => Ok(Self::Six),
+            "7" => Ok(Self::Seven),
+            "8" => Ok(Self::Eight),
+            "9" => Ok(Self::Nine),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<u8> for Ntd {
+    type Error = &'static str;
+
+    #[inline]
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Zero),
+            1 => Ok(Self::One),
+            2 => Ok(Self::Two),
+            3 => Ok(Self::Three),
+            4 => Ok(Self::Four),
+            5 => Ok(Self::Five),
+            6 => Ok(Self::Six),
+            7 => Ok(Self::Seven),
+            8 => Ok(Self::Eight),
+            9 => Ok(Self::Nine),
+            _ => Err("NTD only supports the values 0-9"),
+        }
+    }
+}
+
+impl From<bool> for Ntd {
+    fn from(value: bool) -> Self {
+        match value {
+            true => Ntd::One,
+            false => Ntd::Zero,
+        }
+    }
+}
+
+impl From<Ntd> for u8 {
+    fn from(value: Ntd) -> Self {
+        value as u8
+    }
+}
+
+impl From<Ntd> for usize {
+    fn from(value: Ntd) -> Self {
+        value as usize
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum Gate {
     #[default]
@@ -133,13 +285,13 @@ pub enum Gate {
     Nor,
     Xor,
     Resistor {
-        resistance: u8,
+        resistance: Ntd,
     },
     Capacitor {
-        capacity: u8,
+        capacity: Ntd,
     },
     Led {
-        color: u8,
+        color: Ntd,
     },
     Delay,
     Battery,
@@ -201,6 +353,26 @@ impl Gate {
             Gate::Battery => GateId::Battery,
         }
     }
+
+    #[inline]
+    pub const fn ntd(self) -> Option<Ntd> {
+        match self {
+            Self::Or | Self::And | Self::Nor | Self::Xor | Self::Delay | Self::Battery => None,
+            Self::Resistor { resistance: n }
+            | Self::Capacitor { capacity: n }
+            | Self::Led { color: n } => Some(n),
+        }
+    }
+
+    #[inline]
+    pub const fn with_ntd(self, value: Ntd) -> Self {
+        match self {
+            Self::Or | Self::And | Self::Nor | Self::Xor | Self::Delay | Self::Battery => self,
+            Self::Resistor { .. } => Self::Resistor { resistance: value },
+            Self::Capacitor { .. } => Self::Capacitor { capacity: value },
+            Self::Led { .. } => Self::Led { color: value },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
@@ -211,14 +383,14 @@ pub enum GateNtd {
     Nor,
     Xor,
     Resistor {
-        resistance: u8,
+        resistance: Ntd,
     },
     Capacitor {
-        capacity: u8,
-        stored: u8,
+        capacity: Ntd,
+        stored: Ntd,
     },
     Led {
-        color: u8,
+        color: Ntd,
     },
     Delay {
         prev: bool,
@@ -237,7 +409,7 @@ impl GateNtd {
             Gate::Resistor { resistance } => Self::Resistor { resistance },
             Gate::Capacitor { capacity } => Self::Capacitor {
                 capacity,
-                stored: 0,
+                stored: Ntd::Zero,
             },
             Gate::Led { color } => Self::Led { color },
             Gate::Delay => Self::Delay { prev: false },
@@ -273,16 +445,25 @@ impl GateNtd {
             GateNtd::And => inputs.peek().is_some() && inputs.all(|x| x),
             GateNtd::Nor => !inputs.any(|x| x),
             GateNtd::Xor => inputs.filter(|&x| x).count() == 1,
-            GateNtd::Resistor { resistance } => inputs.map(|x| x as u8).sum::<u8>() > resistance,
+            GateNtd::Resistor { resistance } => {
+                *inputs
+                    .map(Ntd::from)
+                    .map(SaturatingNtd)
+                    .sum::<SaturatingNtd>()
+                    > resistance
+            }
             GateNtd::Capacitor {
                 capacity,
                 ref mut stored,
             } => {
-                let total = inputs.map(|x| x as u8).sum::<u8>();
+                let total = *inputs
+                    .map(Ntd::from)
+                    .map(SaturatingNtd)
+                    .sum::<SaturatingNtd>();
                 *stored = (*stored + total).min(capacity);
-                total > 0 || {
-                    *stored = stored.saturating_sub(1);
-                    *stored > 0
+                total > Ntd::Zero || {
+                    *stored = stored.saturating_sub(Ntd::One);
+                    *stored > Ntd::Zero
                 }
             }
             GateNtd::Delay { ref mut prev } => std::mem::replace(prev, inputs.any(|x| x)),
