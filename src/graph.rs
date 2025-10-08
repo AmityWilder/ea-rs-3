@@ -957,30 +957,51 @@ mod tests {
             ("{q} and {q_} form a cycle, so their start/end is arbitrary. they each rely on \
             {r} and {s} respectively however, so {r} and {s} must come before them.")
 
+            {}
+
+            |g| {
+                g.node_mut(&s).unwrap().gate = GateNtd::Nor;
+            }
+            {} -> {
+                r: false,
+                s: true,
+                q: true,
+                q_: false,
+            }
+            ("1: setting {s} should set {q} and unset {q_}, possibly taking an extra tick depending on the cycle order")
+
+            |g| {
+                g.node_mut(&s).unwrap().gate = GateNtd::Or;
+            }
+            {} -> {
+                r: false,
+                s: false,
+                q: true,
+                q_: false,
+            }
+            ("1: should remain latched after inputs are turned back off")
+
+            |g| {
+                g.node_mut(&r).unwrap().gate = GateNtd::Nor;
+            }
+            {} -> {
+                r: true,
+                s: false,
+                q: false,
+                q_: true,
+            }
+            ("2: setting {r} should set {q_} and unset {q}, possibly taking an extra tick depending on the cycle order")
+
+            |g| {
+                g.node_mut(&r).unwrap().gate = GateNtd::Or;
+            }
             {} -> {
                 r: false,
                 s: false,
                 q: false,
                 q_: true,
             }
-
-            |g| {
-                g.node_mut(&s).unwrap().gate = GateNtd::Nor;
-            } -> {
-                r: false,
-                s: true,
-                q: true,
-                q_: false,
-            }
-
-            |g| {
-                g.node_mut(&s).unwrap().gate = GateNtd::Or;
-            } -> {
-                r: false,
-                s: false,
-                q: true,
-                q_: false,
-            }
+            ("2: should remain latched after inputs are turned back off")
         };
     }
 }
