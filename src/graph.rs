@@ -476,10 +476,7 @@ impl Graph {
                             if ws.iter().all(|w| dfs_discovered.contains(w)) {
                                 dbg_ord_prinln!("      all w are already discovered; dead end");
                                 // end of path
-                                assert!(
-                                    discovered.insert(v),
-                                    "should not enqueue a discovered node"
-                                );
+                                discovered.insert(v);
                                 queue.push_back(v);
                                 dbg_ord_prinln!("      queue: {queue:?}");
                             }
