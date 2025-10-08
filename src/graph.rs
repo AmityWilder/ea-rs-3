@@ -365,6 +365,22 @@ impl Graph {
     }
 
     #[inline]
+    pub fn adjacent(
+        &self,
+    ) -> (
+        FxHashMap<NodeId, Vec<NodeId>>,
+        FxHashMap<NodeId, Vec<NodeId>>,
+    ) {
+        let mut inputs = FxHashMap::<_, Vec<_>>::default();
+        let mut outputs = FxHashMap::<_, Vec<_>>::default();
+        for wire in self.wires.values() {
+            inputs.entry(wire.dst).or_default().push(wire.src);
+            outputs.entry(wire.src).or_default().push(wire.dst);
+        }
+        (inputs, outputs)
+    }
+
+    #[inline]
     pub fn adjacent_out(&self) -> FxHashMap<NodeId, Vec<NodeId>> {
         let mut outputs = FxHashMap::<_, Vec<_>>::default();
         for wire in self.wires.values() {
@@ -388,21 +404,32 @@ impl Graph {
     }
 
     pub fn refresh_eval_order(&mut self) {
+        println!("refreshing...");
         self.eval_order.clear();
         self.eval_order.reserve(self.nodes.len());
-        let adj = self.adjacent_in();
+        let (adj_in, adj_out) = self.adjacent();
+        println!("  adj_in: {adj_in:?}");
+        println!("  adj_out: {adj_out:?}");
         let mut queue: VecDeque<_> = self.outputless_nodes().collect();
+        println!("  queue (outputless): {queue:?}");
         let mut discovered = FxHashSet::from_iter(queue.iter().copied());
+        println!("  discovered: {discovered:?}");
         loop {
+            println!("  loop");
+            println!("    bfs...");
+            println!("      queue: {queue:?}");
             // traverse with BFS starting at the end, inserting in reverse.
-            while let Some(v) = queue.pop_front() {
+            while let Some(v) = queue.pop_front().inspect(|v| println!("      v: {v:?}")) {
                 queue.extend(
-                    adj.get(&v)
+                    adj_in
+                        .get(&v)
                         .into_iter()
                         .flatten()
                         .copied()
-                        .filter(|&w| discovered.insert(w)),
+                        .filter(|&w| discovered.insert(w))
+                        .inspect(|w| println!("        w: {w:?}")),
                 );
+                println!("      queue: {queue:?}");
                 self.eval_order.push(v);
             }
             // some subgraphs may end in a cycle. find furthest nodes with DFS and use those as endpoints.
@@ -410,24 +437,42 @@ impl Graph {
                 .inputless_nodes()
                 .filter(|v| !discovered.contains(v))
                 .collect();
+            println!("    dfs...");
+            println!("      stack (undiscovered inputless): {stack:?}");
             if !stack.is_empty() {
-                while let Some(v) = stack.pop() {
+                while let Some(v) = stack.pop().inspect(|v| println!("      v: {v:?}")) {
                     if discovered.insert(v) {
-                        stack.extend(adj.get(&v).into_iter().flatten().copied());
-                        queue.push_back(v);
+                        let ws = adj_out.get(&v).map(Vec::as_slice).unwrap_or_default();
+                        stack.extend(ws.iter().copied().inspect(|w| println!("        w: {w:?}")));
+                        println!("      stack: {stack:?}");
+                        if ws.iter().all(|w| discovered.contains(w)) {
+                            println!("      all w are already discovered; dead end");
+                            // end of path
+                            queue.push_back(v);
+                            println!("      queue: {queue:?}");
+                        }
                     }
                 }
             }
             // some subgraphs both start and end in a cycle. choose an endpoint arbitrarily.
-            else if let Some(arbitrary) =
-                self.nodes.keys().find(|v| !discovered.contains(v)).copied()
-            {
-                discovered.insert(arbitrary);
-                queue.push_back(arbitrary);
-            }
-            // no nodes remain
             else {
-                break;
+                println!("    arbitrary...");
+                if let Some(arbitrary) = self
+                    .nodes
+                    .keys()
+                    .find(|v| !discovered.contains(v))
+                    .copied()
+                    .inspect(|v| println!("      v: {v:?}"))
+                {
+                    discovered.insert(arbitrary);
+                    queue.push_back(arbitrary);
+                    println!("      queue: {queue:?}");
+                }
+                // no nodes remain
+                else {
+                    println!("  no nodes remain");
+                    break;
+                }
             }
         }
         assert_eq!(
