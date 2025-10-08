@@ -489,21 +489,21 @@ impl Graph {
             }
             // some subgraphs both start and end in a cycle. choose an endpoint arbitrarily.
             if queue.is_empty() {
-                println!("    arbitrary...");
+                dbg_ord_prinln!("    arbitrary...");
                 if let Some(arbitrary) = self
                     .nodes
                     .keys()
                     .find(|v| !discovered.contains(v))
                     .copied()
-                    .inspect(|v| println!("      v: {v:?}"))
+                    .inspect(dbg_ord_prinln!(v => "      v: {v:?}"))
                 {
                     discovered.insert(arbitrary);
                     queue.push_back(arbitrary);
-                    println!("      queue: {queue:?}");
+                    dbg_ord_prinln!("      queue: {queue:?}");
                 }
                 // no nodes remain
                 else {
-                    println!("  no nodes remain");
+                    dbg_ord_prinln!("  no nodes remain");
                     break;
                 }
             }
