@@ -505,26 +505,26 @@ impl EditorTab {
                                     width: GRID_SIZE.into(),
                                     height: GRID_SIZE.into(),
                                 };
-                                let (count, sum) = graph
-                                    .wires_to(node.id())
-                                    .map(|(_, wire)| {
-                                        graph
+                                let (count, sum) = graph.wires_to(node.id()).fold(
+                                    (0, 0),
+                                    |(n, acc), (_, wire)| {
+                                        let state = graph
                                             .node(wire.src())
                                             .expect("all wires should be valid")
-                                            .state()
-                                    })
-                                    .enumerate()
-                                    .fold((0, 0), |(_, a), (n, b)| (n, a + b as u32));
+                                            .state();
+                                        (n + 1, acc + usize::from(state))
+                                    },
+                                );
+                                let alpha = if count == 0 {
+                                    0.0
+                                } else {
+                                    sum as f32 / count as f32
+                                };
                                 d.draw_rectangle_rec(
                                     rec,
-                                    theme.background.lerp(
-                                        theme.resistance[*color as usize],
-                                        if count != 0 {
-                                            sum as f32 / count as f32
-                                        } else {
-                                            0.0
-                                        },
-                                    ),
+                                    theme
+                                        .background
+                                        .lerp(theme.resistance[usize::from(*color)], alpha),
                                 );
                             }
 
