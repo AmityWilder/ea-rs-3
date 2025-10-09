@@ -3,7 +3,7 @@ use crate::{
     console::Console,
     graph::{
         Graph,
-        node::GateInstance,
+        node::{GateInstance, NodeId},
         wire::{Flow, Wire},
     },
     icon_sheets::{NodeIconSheetId, NodeIconSheetSetId},
@@ -14,34 +14,8 @@ use crate::{
     ui::Panel,
 };
 use raylib::prelude::*;
+use rustc_hash::FxHashSet;
 use std::sync::{RwLock, Weak};
-
-#[derive(Debug)]
-pub struct EditorGrid {
-    pub shader: Shader,
-    offset_loc: i32,
-    zoom_exp_loc: i32,
-}
-
-impl EditorGrid {
-    pub fn new(shader: Shader) -> Self {
-        Self {
-            offset_loc: shader.get_shader_location("offset"),
-            zoom_exp_loc: shader.get_shader_location("zoom_exp"),
-            shader,
-        }
-    }
-
-    #[inline]
-    pub fn set_offset(&mut self, value: Vector2) {
-        self.shader.set_shader_value(self.offset_loc, value);
-    }
-
-    #[inline]
-    pub fn set_zoom_exp(&mut self, value: f32) {
-        self.shader.set_shader_value(self.zoom_exp_loc, value);
-    }
-}
 
 #[derive(Debug)]
 pub struct EditorTab {
@@ -50,6 +24,7 @@ pub struct EditorTab {
     grid: RenderTexture2D,
     dirty: bool,
     pub graph: Weak<RwLock<Graph>>,
+    pub selection: FxHashSet<NodeId>,
 }
 
 impl EditorTab {
@@ -67,6 +42,7 @@ impl EditorTab {
             grid,
             dirty: true,
             graph,
+            selection: FxHashSet::default(),
         })
     }
 
@@ -86,14 +62,7 @@ impl EditorTab {
     }
 
     /// `pan_speed` is scaled by zoom (zoom applied first)
-    pub fn zoom_and_pan(
-        &mut self,
-        origin: Vector2,
-        pan: Vector2,
-        zoom: f32,
-        pan_speed: f32,
-        editorgrid: &mut EditorGrid,
-    ) {
+    pub fn zoom_and_pan(&mut self, origin: Vector2, pan: Vector2, zoom: f32, pan_speed: f32) {
         if zoom != 0.0 {
             let new_zoom = (self.zoom_exp + zoom).clamp(-3.0, 2.0);
             if self.zoom_exp != new_zoom {
@@ -121,8 +90,6 @@ impl EditorTab {
                 self.dirty = true;
             }
         }
-        editorgrid.set_offset(self.camera_target);
-        editorgrid.set_zoom_exp(self.zoom_exp);
     }
 
     pub fn resize(
@@ -210,7 +177,6 @@ impl EditorTab {
         toolpane: &mut ToolPane,
         _theme: &Theme,
         input: &Inputs,
-        editorgrid: &mut EditorGrid,
     ) -> bool {
         let mut is_dirty = false;
 
@@ -221,7 +187,7 @@ impl EditorTab {
             toolpane.set_tool(tool, console);
         }
 
-        self.zoom_and_pan(input.cursor, input.pan, input.zoom, 5.0, editorgrid);
+        self.zoom_and_pan(input.cursor, input.pan, input.zoom, 5.0);
 
         // `try_write`: if graph is being borrowed, don't edit it! it might be saving!
         if let Some(graph) = self.graph.upgrade()
@@ -279,6 +245,15 @@ impl EditorTab {
                 }
 
                 Tool::Edit { target } => {
+                    if input.secondary.is_starting()
+                        && let Some(&id) = graph.find_node_at(pos)
+                    {
+                        *graph
+                            .node_mut(&id)
+                            .expect("hovered node should be valid")
+                            .gate_mut() = GateInstance::from_gate(toolpane.gate);
+                    }
+
                     if input.primary.is_starting()
                         && let Some(&id) = graph.find_node_at(pos)
                     {
@@ -336,7 +311,6 @@ impl EditorTab {
         theme: &Theme,
         input: &Inputs,
         toolpane: &ToolPane,
-        _editorgrid: &mut EditorGrid,
     ) {
         let Rectangle {
             x,
@@ -344,26 +318,6 @@ impl EditorTab {
             width,
             height,
         } = Rectangle::from(*bounds);
-        #[cfg(false)]
-        {
-            let mut _d = d.begin_shader_mode(&mut editorgrid.shader);
-            // SAFETY: exclusive access to RaylibDraw guarantees all rlgl requirements are met
-            unsafe {
-                ffi::rlBegin(ffi::RL_QUADS as i32);
-                {
-                    ffi::rlColor4ub(255, 255, 255, 255);
-                    ffi::rlTexCoord2f(0.0, 0.0);
-                    ffi::rlVertex2f(x, y);
-                    ffi::rlTexCoord2f(0.0, 1.0);
-                    ffi::rlVertex2f(x, y + height);
-                    ffi::rlTexCoord2f(1.0, 1.0);
-                    ffi::rlVertex2f(x + width, y + height);
-                    ffi::rlTexCoord2f(1.0, 0.0);
-                    ffi::rlVertex2f(x + width, y);
-                }
-                ffi::rlEnd();
-            }
-        }
         let mut d = d.begin_scissor_mode(x as i32, y as i32, width as i32, height as i32);
         d.draw_texture_pro(
             self.grid_tex(),
@@ -601,6 +555,16 @@ impl EditorTab {
                                 0.0,
                                 theme.background,
                             );
+                            if self.selection.contains(node.id()) {
+                                d.draw_texture_pro(
+                                    &theme.node_icons[scale][NodeIconSheetId::Highlight],
+                                    src_rec,
+                                    rec,
+                                    Vector2::zero(),
+                                    0.0,
+                                    theme.interact,
+                                );
+                            }
                             d.draw_texture_pro(
                                 &theme.node_icons[scale][NodeIconSheetId::Basic],
                                 src_rec,

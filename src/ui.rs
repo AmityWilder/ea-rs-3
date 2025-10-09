@@ -356,6 +356,12 @@ pub struct RectHover {
     pub is_dragging: bool,
 }
 
+pub trait PanelContent {
+    fn panel(&self) -> &Panel;
+    fn panel_mut(&mut self) -> &mut Panel;
+    fn content_size(&self, theme: &Theme) -> Vector2;
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Panel {
     pub title: &'static str,
@@ -680,6 +686,23 @@ impl Panel {
         }
     }
 
+    pub fn tick_resize_set<'a, I>(mut container: Bounds, theme: &Theme, input: &Inputs, panels: I)
+    where
+        I: IntoIterator<Item = &'a mut dyn PanelContent>,
+    {
+        for item in panels {
+            let content_size = item.content_size(theme);
+            let panel = item.panel_mut();
+
+            panel.tick_resize(theme, input, &container, content_size);
+
+            // bounds must update regardless of if *this panel* has been resized
+            if let Some(new_container) = panel.update_bounds(theme, &container, content_size) {
+                container = new_container;
+            }
+        }
+    }
+
     pub fn draw<T, D, F>(&self, d: &mut D, theme: &Theme, content: F) -> T
     where
         D: RaylibDraw,
@@ -701,7 +724,7 @@ impl Panel {
         }
 
         // content
-        let res = content(d, self.bounds.pad(&(self.padding)(theme)), theme);
+        let res = content(d, self.content_bounds(theme), theme);
 
         // title
         if !self.title.is_empty() {

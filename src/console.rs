@@ -12,7 +12,7 @@ use crate::{
     theme::{ColorId, Theme},
     tool::ToolId,
     toolpane::{ButtonAction, ToolPane},
-    ui::Panel,
+    ui::{Panel, PanelContent},
 };
 use raylib::prelude::*;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
@@ -481,6 +481,23 @@ pub struct Console {
     content: RichString,
     pub bottom_offset: f64,
     pub panel: Panel,
+}
+
+impl PanelContent for Console {
+    #[inline]
+    fn panel(&self) -> &Panel {
+        &self.panel
+    }
+
+    #[inline]
+    fn panel_mut(&mut self) -> &mut Panel {
+        &mut self.panel
+    }
+
+    #[inline]
+    fn content_size(&self, _theme: &Theme) -> Vector2 {
+        Vector2::zero() // TODO
+    }
 }
 
 impl Console {

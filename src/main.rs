@@ -6,8 +6,8 @@ use crate::{
     console::{Console, LogType},
     graph::{GraphList, node::Gate, wire::Elbow},
     ivec::{Bounds, IVec2},
-    properties::{DrawPropertySection, PropertiesPanel, PropertySection},
-    tab::{EditorGrid, EditorTab, Tab, TabList},
+    properties::PropertiesPanel,
+    tab::{EditorTab, Tab, TabList},
     theme::Theme,
     tool::Tool,
     toolpane::ToolPane,
@@ -19,6 +19,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use ui::PanelContent;
 
 mod config;
 mod console;
@@ -90,12 +91,6 @@ fn main() {
         LogType::Attempt,
         "Loading config from {CONFIG_PATH}..."
     );
-
-    let mut editorgrid = EditorGrid::new(rl.load_shader_from_memory(
-        &thread,
-        None,
-        Some(include_str!("../assets/editorgrid.fs")),
-    ));
 
     // load preferences
     let Config {
@@ -250,28 +245,20 @@ fn main() {
             // TODO: refresh bounds on other panels
         }
 
-        {
-            // tabs only changes when window does, for now
-
-            let toolpane_content_size = toolpane.content_size(&theme);
-            let panels = [
-                (&mut properties.panel, Vector2::zero(/* TODO */)),
-                (&mut console.panel, Vector2::zero(/* TODO */)),
-                (&mut toolpane.panel, toolpane_content_size),
-            ];
-            let mut container = Bounds::new(
+        Panel::tick_resize_set(
+            Bounds::new(
                 Vector2::zero(),
                 rvec2(rl.get_screen_width(), rl.get_screen_height()),
-            );
-            for (panel, content_size) in panels {
-                panel.tick_resize(&theme, &input, &container, content_size);
-
-                // bounds must update regardless of if *this panel* has been resized
-                if let Some(new_container) = panel.update_bounds(&theme, &container, content_size) {
-                    container = new_container;
-                }
-            }
-        }
+            ),
+            &theme,
+            &input,
+            [
+                // tabs only changes when window does, for now
+                &mut properties,
+                &mut console,
+                &mut toolpane,
+            ] as [&mut dyn PanelContent; _],
+        );
 
         let focused_panel = {
             let panels = [
@@ -291,21 +278,29 @@ fn main() {
         if std::ptr::eq(focused_panel, &toolpane.panel) {
             toolpane.tick(&mut console, &theme, &input);
         } else if std::ptr::eq(focused_panel, &properties.panel) {
-            properties.tick(
-                &mut rl,
-                &thread,
-                &theme,
-                &input,
-                [&mut toolpane.tool, &mut toolpane.gate] as [&mut dyn PropertySection; _],
-            );
+            properties.tick(&theme, |properties, bounds, theme| {
+                let mut y = bounds.min.y;
+                if let Tool::Edit {
+                    target: Some(tool::EditDragging { id, .. }),
+                } = &toolpane.tool
+                    && let Some(Tab::Editor(tab)) = tabs.focused_tab()
+                    && let Some(graph) = tab.graph.upgrade()
+                    && let Ok(mut borrow) = graph.write()
+                {
+                    let node = borrow.node_mut(id).expect("edit target should be valid");
+                    y = properties.tick_section(&mut rl, &thread, theme, &input, y, node);
+                }
+                y = properties.tick_section(&mut rl, &thread, theme, &input, y, &mut toolpane.tool);
+                y = properties.tick_section(&mut rl, &thread, theme, &input, y, &mut toolpane.gate);
+                _ = y;
+            });
         } else if std::ptr::eq(focused_panel, &console.panel) {
             console.tick(&theme, &input, &graphs);
         } else if std::ptr::eq(focused_panel, tabs.panel()) {
             if let Some(tab) = tabs.focused_tab_mut() {
                 match tab {
                     Tab::Editor(tab) => {
-                        let is_dirty =
-                            tab.tick(&mut console, &mut toolpane, &theme, &input, &mut editorgrid);
+                        let is_dirty = tab.tick(&mut console, &mut toolpane, &theme, &input);
                         if is_dirty {
                             // refresh immediately on change
                             next_eval_tick = Instant::now();
@@ -368,14 +363,7 @@ fn main() {
             if let Some(focused_tab) = tabs.focused_tab() {
                 match focused_tab {
                     Tab::Editor(tab) => {
-                        tab.draw(
-                            &mut d,
-                            tabs.panel().bounds(),
-                            &theme,
-                            &input,
-                            &toolpane,
-                            &mut editorgrid,
-                        );
+                        tab.draw(&mut d, tabs.panel().bounds(), &theme, &input, &toolpane);
                     }
                 }
             }
@@ -393,11 +381,22 @@ fn main() {
 
         // properties
         {
-            properties.draw(
-                &mut d,
-                &theme,
-                [&toolpane.tool, &toolpane.gate] as [&dyn DrawPropertySection<_>; _],
-            );
+            properties.draw(&mut d, &theme, |properties, d, bounds, theme| {
+                let mut y = bounds.min.y;
+                if let Tool::Edit {
+                    target: Some(tool::EditDragging { id, .. }),
+                } = &toolpane.tool
+                    && let Some(Tab::Editor(tab)) = tabs.focused_tab()
+                    && let Some(graph) = tab.graph.upgrade()
+                    && let Ok(borrow) = graph.read()
+                {
+                    let node = borrow.node(id).expect("edit target should be valid");
+                    y = properties.draw_section(d, theme, bounds, y, node);
+                }
+                y = properties.draw_section(d, theme, bounds, y, &toolpane.tool);
+                y = properties.draw_section(d, theme, bounds, y, &toolpane.gate);
+                _ = y;
+            });
         }
     }
 }

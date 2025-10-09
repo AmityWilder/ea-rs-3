@@ -1,11 +1,11 @@
 use crate::{
-    graph::node::Gate,
+    graph::node::{Gate, Node},
     icon_sheets::{ButtonIconId, ButtonIconSheetId},
     input::Inputs,
     ivec::Bounds,
     theme::{Theme, ThemeFont},
     tool::Tool,
-    ui::Panel,
+    ui::{Panel, PanelContent},
 };
 use raylib::prelude::*;
 
@@ -63,8 +63,16 @@ fn tool_data(tool: &Tool) -> (ButtonIconId, &'static str, &'static str) {
             "Erase",
             "Click nodes to delete them. A deleted node will delete all its wires as well.",
         ),
-        Tool::Edit { .. } => (ButtonIconId::Edit, "Edit", "Drag nodes with primary input."),
-        Tool::Interact { .. } => (ButtonIconId::Interact, "Interact", "NOT YET IMPLEMENTED"),
+        Tool::Edit { .. } => (
+            ButtonIconId::Edit,
+            "Edit",
+            "Drag nodes with primary input. Replace the gate of the selected node(s) with secondary input.",
+        ),
+        Tool::Interact { .. } => (
+            ButtonIconId::Interact,
+            "Interact",
+            "Interact with input nodes using primary input to toggle them on and off",
+        ),
     }
 }
 
@@ -269,9 +277,52 @@ impl<D: RaylibDraw> DrawPropertySection<D> for Gate {
     }
 }
 
+impl PropertySection for Node {
+    #[inline]
+    fn title(&self) -> &str {
+        "Node"
+    }
+
+    fn content_height(&self, _container_width: f32, _theme: &Theme) -> f32 {
+        0.0
+    }
+
+    fn tick(
+        &mut self,
+        _rl: &RaylibHandle,
+        _thread: &RaylibThread,
+        _container: Bounds,
+        _theme: &Theme,
+        _input: &Inputs,
+    ) {
+        // TODO
+    }
+}
+
+impl<D: RaylibDraw> DrawPropertySection<D> for Node {
+    fn draw(&self, _d: &mut D, _container: Bounds, _theme: &Theme) {}
+}
+
 #[derive(Debug, Clone)]
 pub struct PropertiesPanel {
     pub panel: Panel,
+}
+
+impl PanelContent for PropertiesPanel {
+    #[inline]
+    fn panel(&self) -> &Panel {
+        &self.panel
+    }
+
+    #[inline]
+    fn panel_mut(&mut self) -> &mut Panel {
+        &mut self.panel
+    }
+
+    #[inline]
+    fn content_size(&self, _theme: &Theme) -> Vector2 {
+        Vector2::zero() // TODO
+    }
 }
 
 impl PropertiesPanel {
@@ -279,65 +330,88 @@ impl PropertiesPanel {
         Self { panel }
     }
 
-    pub fn tick<'a, I>(
+    pub fn tick_section<T>(
         &mut self,
-        rl: &'a mut RaylibHandle,
-        thread: &'a RaylibThread,
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
         theme: &Theme,
         input: &Inputs,
-        sections: I,
-    ) where
-        I: IntoIterator<Item = &'a mut dyn PropertySection>,
+        mut y: f32,
+        section: &mut T,
+    ) -> f32
+    where
+        T: PropertySection,
     {
         // self.panel.tick_resize(rl, theme, input);
         let bounds = self.panel.content_bounds(theme);
-        let mut y = bounds.min.y;
-        for section in sections {
-            y += theme.console_font.line_height() * section.title().lines().count() as f32;
-            let height = section.content_height(bounds.width(), theme);
-            section.tick(
-                rl,
-                thread,
-                Bounds::new(
-                    Vector2::new(bounds.max.x, y),
-                    Vector2::new(bounds.min.x, y + height),
-                ),
-                theme,
-                input,
-            );
-        }
+        y += theme.console_font.line_height() * section.title().lines().count() as f32;
+        let height = section.content_height(bounds.width(), theme);
+        section.tick(
+            rl,
+            thread,
+            Bounds::new(
+                Vector2::new(bounds.max.x, y),
+                Vector2::new(bounds.min.x, y + height),
+            ),
+            theme,
+            input,
+        );
+        y
     }
 
-    pub fn draw<'a, D, I>(&self, d: &'a mut D, theme: &Theme, sections: I)
+    pub fn tick<T, F>(&mut self, theme: &Theme, f: F) -> T
+    where
+        F: FnOnce(&mut Self, Bounds, &Theme) -> T,
+    {
+        let bounds = self.panel.content_bounds(theme);
+        f(self, bounds, theme)
+    }
+
+    pub fn draw_section<D, T>(
+        &self,
+        d: &mut D,
+        theme: &Theme,
+        bounds: Bounds,
+        mut y: f32,
+        section: &T,
+    ) -> f32
     where
         D: RaylibDraw,
-        I: IntoIterator<Item = &'a dyn DrawPropertySection<D>>,
+        T: DrawPropertySection<D>,
     {
-        self.panel.draw(d, theme, |d, bounds, theme| {
-            let Vector2 { x, mut y } = bounds.min;
-            for section in sections {
-                let header_size = theme.properties_header_font.measure_text(section.title());
-                theme.properties_header_font.draw_text(
-                    d,
-                    section.title(),
-                    Vector2::new(x, y),
-                    theme.foreground,
-                );
-                y += header_size.y;
-                y += theme.properties_header_font.line_spacing;
-                d.draw_rectangle_rec(Rectangle::new(x, y, bounds.width(), 1.0), theme.foreground2);
-                y += theme.properties_header_font.line_spacing + theme.general_font.line_spacing;
-                let height = section.content_height(bounds.width(), theme);
-                section.draw(
-                    d,
-                    Bounds::new(
-                        Vector2::new(bounds.min.x, y.clamp(bounds.min.y, bounds.max.y)),
-                        Vector2::new(bounds.max.x, (y + height).clamp(bounds.min.y, bounds.max.y)),
-                    ),
-                    theme,
-                );
-                y += height + theme.properties_section_gap;
-            }
-        });
+        let header_size = theme.properties_header_font.measure_text(section.title());
+        theme.properties_header_font.draw_text(
+            d,
+            section.title(),
+            Vector2::new(bounds.min.x, y),
+            theme.foreground,
+        );
+        y += header_size.y;
+        y += theme.properties_header_font.line_spacing;
+        d.draw_rectangle_rec(
+            Rectangle::new(bounds.min.x, y, bounds.width(), 1.0),
+            theme.foreground2,
+        );
+        y += theme.properties_header_font.line_spacing + theme.general_font.line_spacing;
+        let height = section.content_height(bounds.width(), theme);
+        section.draw(
+            d,
+            Bounds::new(
+                Vector2::new(bounds.min.x, y.clamp(bounds.min.y, bounds.max.y)),
+                Vector2::new(bounds.max.x, (y + height).clamp(bounds.min.y, bounds.max.y)),
+            ),
+            theme,
+        );
+        y += height + theme.properties_section_gap;
+        y
+    }
+
+    pub fn draw<D, F>(&self, d: &mut D, theme: &Theme, f: F)
+    where
+        D: RaylibDraw,
+        F: FnOnce(&Self, &mut D, Bounds, &Theme),
+    {
+        self.panel
+            .draw(d, theme, |d, bounds, theme| f(self, d, bounds, theme));
     }
 }

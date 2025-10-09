@@ -11,7 +11,7 @@ use crate::{
     rich_text::ColorRef,
     theme::Theme,
     tool::{Tool, ToolId},
-    ui::{Orientation, Panel, Visibility},
+    ui::{Orientation, Panel, PanelContent, Visibility},
 };
 use raylib::prelude::*;
 
@@ -72,6 +72,23 @@ pub struct ToolPane {
     pub visibility: Visibility,
     pub scale: ButtonIconSheetId,
     pub button_groups: Vec<ButtonGroup>,
+}
+
+impl PanelContent for ToolPane {
+    #[inline]
+    fn panel(&self) -> &Panel {
+        &self.panel
+    }
+
+    #[inline]
+    fn panel_mut(&mut self) -> &mut Panel {
+        &mut self.panel
+    }
+
+    #[inline]
+    fn content_size(&self, theme: &Theme) -> Vector2 {
+        self.content_size(theme)
+    }
 }
 
 impl ToolPane {
