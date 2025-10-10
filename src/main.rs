@@ -4,7 +4,7 @@
 use crate::{
     config::Config,
     console::{Console, LogType},
-    graph::{GraphList, eag, node::Gate, wire::Elbow},
+    graph::{GraphList, node::Gate, wire::Elbow},
     ivec::{Bounds, IVec2},
     properties::PropertiesPanel,
     tab::{EditorTab, Tab, TabList},

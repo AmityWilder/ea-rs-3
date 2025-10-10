@@ -521,7 +521,21 @@ impl EditorTab {
                                 }
                             }
 
-                            _ => {}
+                            _ => {
+                                let node_position = node.position().as_vec2();
+                                let rec = Rectangle {
+                                    x: node_position.x + f32::from(GRID_SIZE) * (0.5 - 0.25 * 0.5),
+                                    y: node_position.y + f32::from(GRID_SIZE) * (0.5 - 0.25 * 0.5),
+                                    width: f32::from(GRID_SIZE) * 0.25,
+                                    height: f32::from(GRID_SIZE) * 0.25,
+                                };
+                                let color = if node.state() {
+                                    theme.active
+                                } else {
+                                    theme.foreground1
+                                };
+                                d.draw_rectangle_rec(rec, color);
+                            }
                         }
                     }
                 }
@@ -624,7 +638,8 @@ impl EditorTab {
                 self.screen_to_world(input.cursor)
                     .as_ivec2()
                     .snap(GRID_SIZE.into()),
-            ) {
+            ) && (!matches!(toolpane.tool, Tool::Interact { .. }) || graph.is_inputless(id))
+            {
                 let node = graph
                     .node(id)
                     .expect("find_node_at should never return an invalid node");

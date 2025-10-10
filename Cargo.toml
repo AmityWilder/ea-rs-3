@@ -9,7 +9,7 @@ edition = "2024"
 [dependencies]
 raylib = "5.5.1"
 rl_input = { path = "rl_input" }
-obj = { path = "obj" }
+# obj = { path = "obj" }
 rustc-hash = "2.1.1"
 serde = "1.0.228"
 serde_derive = "1.0.228"

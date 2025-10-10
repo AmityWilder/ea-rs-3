@@ -86,7 +86,6 @@ dependencies = [
 name = "ea-rs-3"
 version = "0.1.0"
 dependencies = [
- "obj",
  "raylib",
  "rl_input",
  "rustc-hash 2.1.1",

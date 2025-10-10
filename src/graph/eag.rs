@@ -12,10 +12,7 @@ use serde::{
     ser::{Serialize, SerializeSeq, SerializeStruct, Serializer},
 };
 use serde_derive::Deserialize;
-use std::{
-    io::{Read, Write},
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
 impl Serialize for Graph {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
