@@ -17,7 +17,7 @@ use console::Logger;
 use raylib::prelude::*;
 use std::{
     io::Write,
-    sync::{Arc, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant},
 };
 
@@ -36,6 +36,8 @@ mod toolpane;
 mod ui;
 
 pub const GRID_SIZE: u8 = 8;
+
+static RL_LOGGER: OnceLock<Arc<Mutex<Option<Logger>>>> = OnceLock::new();
 
 fn main() {
     let (mut console, mut logger) = Console::new(
@@ -59,12 +61,14 @@ fn main() {
         4096 * 80,
     );
 
+    // setup raylib logging
     {
-        static RL_LOGGER: OnceLock<Logger> = OnceLock::new();
-        RL_LOGGER.set(logger.clone()).unwrap();
+        RL_LOGGER
+            .set(Arc::new(Mutex::new(Some(logger.clone()))))
+            .unwrap();
         fn trace_log_callback(level: TraceLogLevel, msg: &str) {
             logln!(
-                RL_LOGGER.get().cloned().unwrap(),
+                RL_LOGGER.get().unwrap().lock().unwrap().as_mut().unwrap(),
                 match level {
                     TraceLogLevel::LOG_DEBUG => LogType::Debug,
                     TraceLogLevel::LOG_TRACE | TraceLogLevel::LOG_INFO => LogType::Info,
@@ -423,4 +427,10 @@ fn main() {
             });
         }
     }
+
+    // Raylib will create extra messages when it closes.
+    // Even if we never see them, its logger needs to still be valid or
+    // the program will crash instead of closing successfully.
+    drop(rl);
+    *RL_LOGGER.get().unwrap().lock().unwrap() = None;
 }
