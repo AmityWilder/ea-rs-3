@@ -13,10 +13,11 @@ use crate::{
     toolpane::ToolPane,
     ui::{Anchoring, ExactSizing, NcSizing, Padding, Panel, PanelContent, Sizing},
 };
+use console::Logger;
 use raylib::prelude::*;
 use std::{
     io::Write,
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::{Duration, Instant},
 };
 
@@ -37,7 +38,7 @@ mod ui;
 pub const GRID_SIZE: u8 = 8;
 
 fn main() {
-    let mut console = Console::new(
+    let (mut console, mut logger) = Console::new(
         Panel::new(
             "Log",
             Anchoring::Bottom {
@@ -57,6 +58,32 @@ fn main() {
         ),
         4096 * 80,
     );
+
+    {
+        static RL_LOGGER: OnceLock<Logger> = OnceLock::new();
+        RL_LOGGER.set(logger.clone()).unwrap();
+        fn trace_log_callback(level: TraceLogLevel, msg: &str) {
+            logln!(
+                RL_LOGGER.get().cloned().unwrap(),
+                match level {
+                    TraceLogLevel::LOG_DEBUG => LogType::Debug,
+                    TraceLogLevel::LOG_TRACE | TraceLogLevel::LOG_INFO => LogType::Info,
+                    TraceLogLevel::LOG_WARNING => LogType::Warning,
+                    TraceLogLevel::LOG_ERROR | TraceLogLevel::LOG_FATAL => LogType::Error,
+                    TraceLogLevel::LOG_NONE | TraceLogLevel::LOG_ALL =>
+                        unreachable!("not actual log levels, only for comparison"),
+                },
+                "Raylib: {msg}",
+            )
+        }
+        if let Err(e) = set_trace_log_callback(trace_log_callback) {
+            logln!(
+                logger,
+                LogType::Error,
+                "failed to set Raylib tracelog callback: {e}"
+            )
+        }
+    }
 
     let program_icon =
         Image::load_image_from_mem(".png", include_bytes!("../assets/program_icon32x.png")).ok();
@@ -86,7 +113,7 @@ fn main() {
 
     const CONFIG_PATH: &str = "config.toml";
     logln!(
-        &mut console,
+        logger,
         LogType::Attempt,
         "Loading config from {CONFIG_PATH}..."
     );
@@ -99,17 +126,17 @@ fn main() {
         match std::fs::read_to_string(CONFIG_PATH) {
             Ok(s) => match toml::from_str(&s) {
                 Ok(config) => {
-                    logln!(&mut console, LogType::Success, "Config loaded.");
+                    logln!(logger, LogType::Success, "Config loaded.");
                     config
                 }
                 Err(e) => {
-                    logln!(&mut console, LogType::Error, "Failed to read config: {e}");
+                    logln!(logger, LogType::Error, "Failed to read config: {e}");
                     Config::default()
                 }
             },
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 logln!(
-                    &mut console,
+                    logger,
                     LogType::Warning,
                     "Config does not exist. Generating default."
                 );
@@ -121,16 +148,12 @@ fn main() {
                             .as_bytes(),
                     )
                 }) {
-                    logln!(&mut console, LogType::Error, "Failed to generate file: {e}");
+                    logln!(logger, LogType::Error, "Failed to generate file: {e}");
                 }
                 config
             }
             Err(e) => {
-                logln!(
-                    &mut console,
-                    LogType::Error,
-                    "Failed to open config file: {e}"
-                );
+                logln!(logger, LogType::Error, "Failed to open config file: {e}");
                 Config::default()
             }
         }
@@ -224,7 +247,7 @@ fn main() {
         _ = container;
     }
 
-    logln!(&mut console, LogType::Success, "initialized");
+    logln!(logger, LogType::Success, "initialized");
 
     while !rl.window_should_close() {
         // Tick
@@ -275,7 +298,7 @@ fn main() {
         };
 
         if std::ptr::eq(focused_panel, &toolpane.panel) {
-            toolpane.tick(&mut console, &theme, &input);
+            toolpane.tick(&mut logger, &theme, &input);
         } else if std::ptr::eq(focused_panel, &properties.panel) {
             properties.tick(&theme, |properties, bounds, theme| {
                 let mut y = bounds.min.y;
@@ -299,7 +322,7 @@ fn main() {
             if let Some(tab) = tabs.focused_tab_mut() {
                 match tab {
                     Tab::Editor(tab) => {
-                        let is_dirty = tab.tick(&mut console, &mut toolpane, &theme, &input);
+                        let is_dirty = tab.tick(&mut logger, &mut toolpane, &theme, &input);
                         if is_dirty {
                             // refresh immediately on change
                             next_eval_tick = Instant::now();
@@ -351,6 +374,8 @@ fn main() {
                 next_eval_tick += eval_duration;
             }
         }
+
+        console.update_recv();
 
         // Draw
 

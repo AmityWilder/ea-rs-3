@@ -1,6 +1,6 @@
 use crate::{
     GRID_SIZE, IVec2, Theme,
-    console::Console,
+    console::Logger,
     graph::{
         Graph,
         node::{GateInstance, NodeId},
@@ -173,7 +173,7 @@ impl EditorTab {
 
     pub fn tick(
         &mut self,
-        console: &mut Console,
+        logger: &mut Logger,
         toolpane: &mut ToolPane,
         _theme: &Theme,
         input: &Inputs,
@@ -181,10 +181,10 @@ impl EditorTab {
         let mut is_dirty = false;
 
         if let Some(gate) = input.gate() {
-            toolpane.set_gate(gate, console);
+            toolpane.set_gate(gate, logger);
         }
         if let Some(tool) = input.tool() {
-            toolpane.set_tool(tool, console);
+            toolpane.set_tool(tool, logger);
         }
 
         self.zoom_and_pan(input.cursor, input.pan, input.zoom, 5.0);
@@ -206,14 +206,14 @@ impl EditorTab {
                             if let Some(current_node) = *current_node
                                 && current_node != id
                             {
-                                _ = graph.create_wire(toolpane.elbow, current_node, id, console);
+                                _ = graph.create_wire(toolpane.elbow, current_node, id, logger);
                             }
                             *current_node = Some(id);
                         } else {
                             // new node
                             let gate = toolpane.gate.with_ntd(toolpane.ntd);
                             let new_node = graph
-                                .create_node(gate, pos, console)
+                                .create_node(gate, pos, logger)
                                 .expect("this branch implies the position is available");
                             let new_node_id = *new_node.id();
                             if let Some(current_node) = current_node.as_ref() {
@@ -221,7 +221,7 @@ impl EditorTab {
                                     toolpane.elbow,
                                     *current_node,
                                     new_node_id,
-                                    console,
+                                    logger,
                                 );
                             }
                             *current_node = Some(new_node_id);
@@ -238,7 +238,7 @@ impl EditorTab {
                         && let Some(&id) = graph.find_node_at(pos)
                     {
                         graph
-                            .destroy_node(&id, false, console)
+                            .destroy_node(&id, false, logger)
                             .expect("cannot reach this branch if graph did not contain the node");
                         is_dirty = true;
                     }
@@ -270,7 +270,7 @@ impl EditorTab {
                             .as_ivec2()
                             .snap(GRID_SIZE.into());
                         graph
-                            .translate_node(&id, new_position, console)
+                            .translate_node(&id, new_position, logger)
                             .expect("edit mode target node should be valid");
                     }
 

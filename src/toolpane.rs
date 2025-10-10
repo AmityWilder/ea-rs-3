@@ -1,5 +1,5 @@
 use crate::{
-    console::{Console, GateRef, LogType, ToolRef},
+    console::{GateRef, LogType, Logger, ToolRef},
     graph::{
         node::{Gate, GateId, Ntd},
         wire::Elbow,
@@ -342,33 +342,33 @@ impl ToolPane {
     }
 
     #[inline]
-    pub fn set_tool(&mut self, tool_id: ToolId, console: &mut Console) -> bool {
+    pub fn set_tool(&mut self, tool_id: ToolId, logger: &mut Logger) -> bool {
         let change = self.tool.id() != tool_id;
         if change {
             self.tool = tool_id.init();
-            logln!(console, LogType::Info, "set tool to {}", ToolRef(tool_id));
+            logln!(logger, LogType::Info, "set tool to {}", ToolRef(tool_id));
         }
         change
     }
 
     #[inline]
-    pub fn set_gate(&mut self, gate_id: GateId, console: &mut Console) -> bool {
+    pub fn set_gate(&mut self, gate_id: GateId, logger: &mut Logger) -> bool {
         let change = self.gate.id() != gate_id;
         if change {
             self.gate = gate_id.to_gate(self.ntd);
-            logln!(console, LogType::Info, "set gate to {}", GateRef(self.gate));
+            logln!(logger, LogType::Info, "set gate to {}", GateRef(self.gate));
         }
         change
     }
 
     #[inline]
-    pub fn set_ntd(&mut self, data: Ntd, console: &mut Console) -> bool {
+    pub fn set_ntd(&mut self, data: Ntd, logger: &mut Logger) -> bool {
         let change = self.ntd != data;
         if change {
             self.ntd = data;
             self.gate = self.gate.with_ntd(self.ntd);
             logln!(
-                console,
+                logger,
                 LogType::Info,
                 "set non-transistor data to {}",
                 self.ntd
@@ -478,7 +478,7 @@ impl ToolPane {
         }
     }
 
-    pub fn tick(&mut self, console: &mut Console, theme: &Theme, input: &Inputs) {
+    pub fn tick(&mut self, logger: &mut Logger, theme: &Theme, input: &Inputs) {
         if input.primary.is_starting() {
             let bounds = self.panel.content_bounds(theme);
             let action = self
@@ -491,13 +491,13 @@ impl ToolPane {
             if let Some(action) = action {
                 match action {
                     ButtonAction::SetTool(tool_id) => {
-                        self.set_tool(tool_id, console);
+                        self.set_tool(tool_id, logger);
                     }
                     ButtonAction::SetGate(gate_id) => {
-                        self.set_gate(gate_id, console);
+                        self.set_gate(gate_id, logger);
                     }
                     ButtonAction::SetNtd(data) => {
-                        self.set_ntd(data, console);
+                        self.set_ntd(data, logger);
                     }
                     ButtonAction::Blueprints => {
                         // TODO

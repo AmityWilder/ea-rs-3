@@ -1,6 +1,6 @@
 use crate::{
     GRID_SIZE,
-    console::{Console, GateRef, GraphRef, LogType, NodeRef, PositionRef},
+    console::{GateRef, GraphRef, LogType, Logger, NodeRef, PositionRef},
     graph::{
         node::{Gate, Node, NodeId},
         wire::{Elbow, Flow, Wire, WireId},
@@ -296,13 +296,13 @@ impl Graph {
         &mut self,
         gate: Gate,
         position: IVec2,
-        console: &mut Console,
+        logger: &mut Logger,
     ) -> Result<&mut Node, NodeId> {
         let id = self.next_node_id.step().expect("out of IDs");
         let grid_pos = Self::world_to_grid(position);
         if let Some(&existing) = self.node_grid.get(&grid_pos) {
             logln!(
-                console,
+                logger,
                 LogType::Info,
                 "node at {} already exists: {}",
                 PositionRef(position),
@@ -319,7 +319,7 @@ impl Graph {
             self.is_eval_order_dirty = true;
 
             logln!(
-                console,
+                logger,
                 LogType::Info,
                 "create {} node {} at {}",
                 GateRef(gate),
@@ -335,7 +335,7 @@ impl Graph {
         &mut self,
         id: &NodeId,
         new_position: IVec2,
-        console: &mut Console,
+        logger: &mut Logger,
     ) -> Option<()> {
         self.nodes.get_mut(id).map(|node| {
             let old_grid_position = Self::world_to_grid(node.position);
@@ -352,7 +352,7 @@ impl Graph {
 
                 let old_position = std::mem::replace(&mut node.position, new_position);
                 logln!(
-                    console,
+                    logger,
                     LogType::Info,
                     "move node {} from {} to {}",
                     NodeRef(self.id, id),
@@ -365,7 +365,7 @@ impl Graph {
 
     /// Returns [`None`] if `id` is not a node in this graph.
     #[must_use]
-    pub fn destroy_node(&mut self, id: &NodeId, soft: bool, console: &mut Console) -> Option<Node> {
+    pub fn destroy_node(&mut self, id: &NodeId, soft: bool, logger: &mut Logger) -> Option<Node> {
         self.nodes.remove(id).inspect(|node| {
             self.node_grid
                 .remove(&Self::world_to_grid(node.position))
@@ -379,7 +379,7 @@ impl Graph {
             }
             self.is_eval_order_dirty = true;
             logln!(
-                console,
+                logger,
                 LogType::Info,
                 "destroy node {}",
                 NodeRef(self.id, *id)
@@ -397,7 +397,7 @@ impl Graph {
         elbow: Elbow,
         src: NodeId,
         dst: NodeId,
-        console: &mut Console,
+        logger: &mut Logger,
     ) -> Result<&mut Wire, WireId> {
         assert_ne!(src, dst, "cannot wire a node directly to itself");
         if let Some(existing) = self
@@ -408,7 +408,7 @@ impl Graph {
         {
             let graph_ref = GraphRef(self.id);
             logln!(
-                console,
+                logger,
                 LogType::Info,
                 "wire from {} to {} already exists: wire {}",
                 graph_ref.node(src),
@@ -426,7 +426,7 @@ impl Graph {
                 .into_mut();
             self.is_eval_order_dirty = true;
             logln!(
-                console,
+                logger,
                 LogType::Info,
                 "create wire {} from {} to {}",
                 graph_ref.wire(*wire.id()),

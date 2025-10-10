@@ -15,7 +15,10 @@ use crate::{
     ui::{Panel, PanelContent},
 };
 use raylib::prelude::*;
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::{
+    Arc, RwLock, RwLockReadGuard,
+    mpsc::{Receiver, Sender, channel},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum LogType {
@@ -476,9 +479,30 @@ pub struct ConsoleAnchoring {
     pub bottom: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct Logger(Sender<String>);
+
+impl std::fmt::Write for Logger {
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        self.0.send(s.to_string()).map_err(|_| std::fmt::Error)
+    }
+
+    fn write_fmt(&mut self, args: std::fmt::Arguments<'_>) -> std::fmt::Result {
+        self.0.send(args.to_string()).map_err(|_| std::fmt::Error)
+    }
+}
+
+impl Logger {
+    #[inline]
+    pub const fn by_ref(&mut self) -> &mut Self {
+        self
+    }
+}
+
 #[derive(Debug)]
 pub struct Console {
     content: RichString,
+    receiver: Receiver<String>,
     pub bottom_offset: f64,
     pub panel: Panel,
 }
@@ -501,25 +525,22 @@ impl PanelContent for Console {
 }
 
 impl Console {
-    pub fn new(panel: Panel, capacity: usize) -> Self {
-        Self {
-            content: RichString::with_capacity(capacity),
-            bottom_offset: 0.0,
-            panel,
-        }
+    pub fn new(panel: Panel, capacity: usize) -> (Self, Logger) {
+        let (sender, receiver) = channel();
+        (
+            Self {
+                content: RichString::with_capacity(capacity),
+                receiver,
+                bottom_offset: 0.0,
+                panel,
+            },
+            Logger(sender),
+        )
     }
 
     /// NOTE: You will need to append with newline
-    pub fn log(&mut self, text: std::fmt::Arguments<'_>) {
-        let buf;
-        let s = match text.as_str() {
-            Some(s) => s,
-            None => {
-                buf = text.to_string();
-                buf.as_str()
-            }
-        };
-        for mut line in s.split_inclusive('\n') {
+    fn push_log(&mut self, text: &str) {
+        for mut line in text.split_inclusive('\n') {
             if line.len() > self.content.capacity() {
                 self.content.clear();
                 line = &line[line.ceil_char_boundary(line.len() - self.content.capacity())..];
@@ -594,6 +615,12 @@ impl Console {
                 }
                 Err(e) => panic!("{e}"),
             })
+    }
+
+    pub fn update_recv(&mut self) {
+        while let Ok(item) = self.receiver.try_recv() {
+            self.push_log(&item);
+        }
     }
 
     pub fn tick(&mut self, theme: &Theme, input: &Inputs, graphs: &GraphList) {
@@ -718,15 +745,15 @@ impl Console {
 
 #[macro_export]
 macro_rules! logln {
-    ($console:expr, $ty:expr, $($args:tt)+) => {
-        $crate::console::Console::log(
-            $console,
+    ($logger:expr, $ty:expr, $($args:tt)+) => {
+        <$crate::console::Logger as std::fmt::Write>::write_fmt(
+            $logger.by_ref(),
             format_args!("{}[{}]: {}{}\n",
                 $crate::rich_text::ColorAct::Push(<$crate::rich_text::ColorRef as From<LogType>>::from($ty)),
                 $ty,
                 format_args!($($args)+),
                 $crate::rich_text::ColorAct::Pop,
-            )
-        )
+            ),
+        ).unwrap()
     };
 }
