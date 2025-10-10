@@ -280,20 +280,32 @@ impl From<Ntd> for usize {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum Gate {
     #[default]
+    #[serde(rename = "|")]
     Or,
+    #[serde(rename = "&")]
     And,
+    #[serde(rename = "!")]
     Nor,
+    #[serde(rename = "^")]
     Xor,
+    #[serde(rename = ">")]
     Resistor {
+        #[serde(flatten)]
         resistance: Ntd,
     },
+    #[serde(rename = "%")]
     Capacitor {
+        #[serde(flatten)]
         capacity: Ntd,
     },
+    #[serde(rename = "l")]
     Led {
+        #[serde(flatten)]
         color: Ntd,
     },
+    #[serde(rename = ";")]
     Delay,
+    #[serde(rename = "T")]
     Battery,
 }
 
@@ -481,9 +493,9 @@ pub struct Node {
 }
 
 impl Node {
-    pub const fn new(id: NodeId, gate: Gate, position: IVec2) -> Self {
+    pub const fn new(id: NodeId, gate: Gate, position: IVec2, state: bool) -> Self {
         Self {
-            state: false,
+            state,
             id,
             gate: GateInstance::from_gate(gate),
             position,

@@ -9,12 +9,14 @@ use crate::{
     logln,
 };
 use rustc_hash::{FxHashMap, FxHashSet};
+use serde_derive::Deserialize;
 use std::{
     collections::VecDeque,
     marker::PhantomData,
     sync::{Arc, RwLock},
 };
 
+pub mod eag;
 pub mod node;
 pub mod wire;
 
@@ -218,7 +220,8 @@ impl ExactSizeIterator for RevEvalOrderIter<'_> {
 
 impl std::iter::FusedIterator for RevEvalOrderIter<'_> {}
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
+#[serde(from = "eag::GraphTemplate")]
 pub struct Graph {
     next_node_id: NodeId,
     next_wire_id: WireId,
@@ -311,7 +314,7 @@ impl Graph {
             let node = self
                 .nodes
                 .entry(id)
-                .insert_entry(Node::new(id, gate, position))
+                .insert_entry(Node::new(id, gate, position, false))
                 .into_mut();
             self.is_eval_order_dirty = true;
 
@@ -701,7 +704,7 @@ mod tests {
             .into_iter()
             .map(|(id, gate)| {
                 next_node_id.0 = id.0.max(next_node_id.0);
-                (id, Node::new(id, gate, IVec2::default()))
+                (id, Node::new(id, gate, IVec2::default(), false))
             })
             .collect();
         let wires = wires

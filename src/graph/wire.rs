@@ -1,5 +1,6 @@
 use super::{Graph, node::NodeId};
 use raylib::prelude::*;
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WireId(pub(super) u128);
@@ -48,12 +49,18 @@ impl WireId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
 pub enum Elbow {
+    #[serde(rename = "-")]
     Horizontal,
+    #[serde(rename = "\\")]
     DiagonalStart,
+    #[serde(rename = "|")]
     Vertical,
     #[default]
+    #[serde(rename = "/")]
     DiagonalEnd,
 }
 
