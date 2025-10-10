@@ -618,8 +618,9 @@ impl Console {
     }
 
     pub fn update_recv(&mut self) {
-        while let Ok(item) = self.receiver.try_recv() {
-            self.push_log(&item);
+        let mut it = std::iter::from_fn(|| self.receiver.try_recv().ok()).peekable();
+        if it.peek().is_some() {
+            self.push_log(it.collect::<String>().as_str());
         }
     }
 
