@@ -37,7 +37,7 @@ mod ui;
 
 pub const GRID_SIZE: u8 = 8;
 
-static RL_LOGGER: OnceLock<Arc<Mutex<Option<Logger>>>> = OnceLock::new();
+static RL_LOGGER: Mutex<Option<Logger>> = Mutex::new(None);
 
 fn main() {
     let (mut console, mut logger) = Console::new(
@@ -63,12 +63,13 @@ fn main() {
 
     // setup raylib logging
     {
-        RL_LOGGER
-            .set(Arc::new(Mutex::new(Some(logger.clone()))))
-            .unwrap();
+        *RL_LOGGER.lock().unwrap() = Some(logger.clone());
         fn trace_log_callback(level: TraceLogLevel, msg: &str) {
+            if matches!(level, TraceLogLevel::LOG_ERROR | TraceLogLevel::LOG_FATAL) {
+                eprintln!("{msg}");
+            }
             logln!(
-                RL_LOGGER.get().unwrap().lock().unwrap().as_mut().unwrap(),
+                RL_LOGGER.lock().unwrap().as_mut().unwrap(),
                 match level {
                     TraceLogLevel::LOG_DEBUG => LogType::Debug,
                     TraceLogLevel::LOG_TRACE | TraceLogLevel::LOG_INFO => LogType::Info,
@@ -78,7 +79,7 @@ fn main() {
                         unreachable!("not actual log levels, only for comparison"),
                 },
                 "Raylib: {msg}",
-            )
+            );
         }
         if let Err(e) = set_trace_log_callback(trace_log_callback) {
             logln!(
@@ -432,5 +433,5 @@ fn main() {
     // Even if we never see them, its logger needs to still be valid or
     // the program will crash instead of closing successfully.
     drop(rl);
-    *RL_LOGGER.get().unwrap().lock().unwrap() = None;
+    *RL_LOGGER.lock().unwrap() = None;
 }
