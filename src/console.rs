@@ -16,7 +16,7 @@ use crate::{
 };
 use raylib::prelude::*;
 use std::sync::{
-    Arc, RwLock, RwLockReadGuard,
+    Arc, Mutex, RwLock, RwLockReadGuard,
     mpsc::{Receiver, Sender, channel},
 };
 
@@ -756,4 +756,66 @@ macro_rules! logln {
             ),
         ).unwrap()
     };
+}
+
+static RL_LOGGER: Mutex<Option<Logger>> = Mutex::new(None);
+
+pub struct RlLoggerHandle(());
+
+impl RlLoggerHandle {
+    pub fn init(logger: Logger) -> Self {
+        *RL_LOGGER.lock().unwrap() = Some(logger);
+        Self(())
+    }
+}
+
+impl Drop for RlLoggerHandle {
+    fn drop(&mut self) {
+        // Raylib will create extra messages when it closes.
+        // Even if we never see them, its logger needs to still be valid or
+        // the program will crash instead of closing successfully.
+        // All resources must go out of scope before dropping the Raylib logger.
+        RL_LOGGER.lock().unwrap().take();
+    }
+}
+
+#[deny(
+    clippy::correctness,
+    clippy::suspicious,
+    clippy::perf,
+    clippy::pedantic,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::unreachable,
+    clippy::unimplemented,
+    clippy::arithmetic_side_effects,
+    reason = "RlLoggerHandle callback(s) will be executed in ffi, which cannot unwind"
+)]
+impl RlLoggerHandle {
+    pub fn trace_log_callback(level: TraceLogLevel, msg: &str) {
+        // important messages should be printed to stdout in case of crash
+        if matches!(level, TraceLogLevel::LOG_ERROR | TraceLogLevel::LOG_FATAL) {
+            eprintln!("{msg}");
+        }
+
+        if let Ok(mut lock) = RL_LOGGER.lock()
+            && let Some(rl_logger) = lock.as_mut()
+        {
+            logln!(
+                rl_logger,
+                match level {
+                    TraceLogLevel::LOG_DEBUG => LogType::Debug,
+                    TraceLogLevel::LOG_TRACE | TraceLogLevel::LOG_INFO => LogType::Info,
+                    TraceLogLevel::LOG_WARNING => LogType::Warning,
+                    TraceLogLevel::LOG_ERROR | TraceLogLevel::LOG_FATAL => LogType::Error,
+                    // not actual log levels; only exist for min log level
+                    TraceLogLevel::LOG_NONE | TraceLogLevel::LOG_ALL => return,
+                },
+                "Raylib: {msg}",
+            );
+        } else {
+            eprintln!("error: failed to lock RL_LOGGER; args: {level:?} {msg}");
+        }
+    }
 }

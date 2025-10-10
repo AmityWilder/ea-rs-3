@@ -13,11 +13,11 @@ use crate::{
     toolpane::ToolPane,
     ui::{Anchoring, ExactSizing, NcSizing, Padding, Panel, PanelContent, Sizing},
 };
-use console::Logger;
+use console::RlLoggerHandle;
 use raylib::prelude::*;
 use std::{
     io::Write,
-    sync::{Arc, Mutex, OnceLock},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -36,8 +36,6 @@ mod toolpane;
 mod ui;
 
 pub const GRID_SIZE: u8 = 8;
-
-static RL_LOGGER: Mutex<Option<Logger>> = Mutex::new(None);
 
 fn main() {
     let (mut console, mut logger) = Console::new(
@@ -61,33 +59,15 @@ fn main() {
         4096 * 80,
     );
 
+    let _rl_logger = RlLoggerHandle::init(logger.clone());
+
     // setup raylib logging
-    {
-        *RL_LOGGER.lock().unwrap() = Some(logger.clone());
-        fn trace_log_callback(level: TraceLogLevel, msg: &str) {
-            if matches!(level, TraceLogLevel::LOG_ERROR | TraceLogLevel::LOG_FATAL) {
-                eprintln!("{msg}");
-            }
-            logln!(
-                RL_LOGGER.lock().unwrap().as_mut().unwrap(),
-                match level {
-                    TraceLogLevel::LOG_DEBUG => LogType::Debug,
-                    TraceLogLevel::LOG_TRACE | TraceLogLevel::LOG_INFO => LogType::Info,
-                    TraceLogLevel::LOG_WARNING => LogType::Warning,
-                    TraceLogLevel::LOG_ERROR | TraceLogLevel::LOG_FATAL => LogType::Error,
-                    TraceLogLevel::LOG_NONE | TraceLogLevel::LOG_ALL =>
-                        unreachable!("not actual log levels, only for comparison"),
-                },
-                "Raylib: {msg}",
-            );
-        }
-        if let Err(e) = set_trace_log_callback(trace_log_callback) {
-            logln!(
-                logger,
-                LogType::Error,
-                "failed to set Raylib tracelog callback: {e}"
-            )
-        }
+    if let Err(e) = set_trace_log_callback(RlLoggerHandle::trace_log_callback) {
+        logln!(
+            logger,
+            LogType::Error,
+            "failed to set Raylib tracelog callback: {e}"
+        )
     }
 
     let program_icon =
@@ -98,11 +78,6 @@ fn main() {
         .size(1280, 720)
         .resizable()
         .build();
-
-    // SAFETY: raylib has been initialized
-    unsafe {
-        ffi::SetTraceLogLevel(ffi::TraceLogLevel::LOG_WARNING as i32);
-    }
 
     rl.set_target_fps(
         get_monitor_refresh_rate(get_current_monitor())
@@ -428,10 +403,4 @@ fn main() {
             });
         }
     }
-
-    // Raylib will create extra messages when it closes.
-    // Even if we never see them, its logger needs to still be valid or
-    // the program will crash instead of closing successfully.
-    drop(rl);
-    *RL_LOGGER.lock().unwrap() = None;
 }
