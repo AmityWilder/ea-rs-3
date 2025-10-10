@@ -11,7 +11,7 @@ use crate::{
     theme::Theme,
     tool::Tool,
     toolpane::ToolPane,
-    ui::{Anchoring, ExactSizing, NcSizing, Padding, Panel, Sizing},
+    ui::{Anchoring, ExactSizing, NcSizing, Padding, Panel, PanelContent, Sizing},
 };
 use raylib::prelude::*;
 use std::{
@@ -19,7 +19,6 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use ui::PanelContent;
 
 mod config;
 mod console;
