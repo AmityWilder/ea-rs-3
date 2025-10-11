@@ -540,6 +540,9 @@ impl Console {
 
     /// NOTE: You will need to append with newline
     fn push_log(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
         for mut line in text.split_inclusive('\n') {
             if line.len() > self.content.capacity() {
                 self.content.clear();
@@ -618,10 +621,7 @@ impl Console {
     }
 
     pub fn update_recv(&mut self) {
-        let mut it = std::iter::from_fn(|| self.receiver.try_recv().ok()).peekable();
-        if it.peek().is_some() {
-            self.push_log(it.collect::<String>().as_str());
-        }
+        self.push_log(self.receiver.try_iter().collect::<String>().as_str());
     }
 
     pub fn tick(&mut self, theme: &Theme, input: &Inputs, graphs: &GraphList) {
