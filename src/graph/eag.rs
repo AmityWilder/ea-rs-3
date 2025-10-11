@@ -191,7 +191,7 @@ impl Serialize for GraphList {
         S: Serializer,
     {
         let mut seq = serializer.serialize_seq(Some(self.graphs.len()))?;
-        for graph in &self.graphs {
+        for graph in self.graphs.values() {
             seq.serialize_element(&*graph.read().unwrap())?;
         }
         seq.end()
@@ -216,11 +216,14 @@ impl<'de> Deserialize<'de> for GraphList {
             where
                 A: serde::de::SeqAccess<'de>,
             {
-                let mut graphs = seq.size_hint().map(Vec::with_capacity).unwrap_or_default();
+                let mut graphs = seq
+                    .size_hint()
+                    .map(|n| FxHashMap::with_capacity_and_hasher(n, FxBuildHasher))
+                    .unwrap_or_default();
                 let mut next_graph_id = GraphId(0);
                 while let Some(mut value) = seq.next_element::<Graph>()? {
                     value.id = next_graph_id.step().unwrap();
-                    graphs.push(Arc::new(RwLock::new(value)));
+                    graphs.insert(value.id, Arc::new(RwLock::new(value)));
                 }
                 Ok(GraphList {
                     graphs,

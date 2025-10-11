@@ -1,6 +1,6 @@
 use crate::{
     GRID_SIZE,
-    console::{GateRef, GraphRef, LogType, Logger, NodeRef, PositionRef},
+    console::{GateRef, GraphRef, NodeRef, PositionRef},
     graph::{
         node::{Gate, Node, NodeId},
         wire::{Elbow, Flow, Wire, WireId},
@@ -233,7 +233,6 @@ pub struct Graph {
     is_eval_order_dirty: bool,
 }
 
-type EvalOrder = std::iter::Rev<std::vec::IntoIter<NodeId>>;
 type IOLessNodeIter<'a, F> =
     std::iter::Filter<std::iter::Copied<std::collections::hash_map::Keys<'a, NodeId, Node>>, F>;
 type NodesIter<'a> = std::collections::hash_map::Values<'a, NodeId, Node>;
@@ -292,18 +291,12 @@ impl Graph {
     }
 
     /// Returns [`Err`] containing the existing node's ID if the position is already occupied.
-    pub fn create_node(
-        &mut self,
-        gate: Gate,
-        position: IVec2,
-        logger: &mut Logger,
-    ) -> Result<&mut Node, NodeId> {
+    pub fn create_node(&mut self, gate: Gate, position: IVec2) -> Result<&mut Node, NodeId> {
         let id = self.next_node_id.step().expect("out of IDs");
         let grid_pos = Self::world_to_grid(position);
         if let Some(&existing) = self.node_grid.get(&grid_pos) {
             logln!(
-                logger,
-                LogType::Info,
+                Info,
                 "node at {} already exists: {}",
                 PositionRef(position),
                 NodeRef(self.id, existing),
@@ -319,8 +312,7 @@ impl Graph {
             self.is_eval_order_dirty = true;
 
             logln!(
-                logger,
-                LogType::Info,
+                Info,
                 "create {} node {} at {}",
                 GateRef(gate),
                 NodeRef(self.id, *node.id()),
@@ -331,12 +323,7 @@ impl Graph {
     }
 
     /// Returns [`None`] if `id` is not a node in this graph.
-    pub fn translate_node(
-        &mut self,
-        id: &NodeId,
-        new_position: IVec2,
-        logger: &mut Logger,
-    ) -> Option<()> {
+    pub fn translate_node(&mut self, id: &NodeId, new_position: IVec2) -> Option<()> {
         self.nodes.get_mut(id).map(|node| {
             let old_grid_position = Self::world_to_grid(node.position);
             let new_grid_position = Self::world_to_grid(new_position);
@@ -352,8 +339,7 @@ impl Graph {
 
                 let old_position = std::mem::replace(&mut node.position, new_position);
                 logln!(
-                    logger,
-                    LogType::Info,
+                    Info,
                     "move node {} from {} to {}",
                     NodeRef(self.id, id),
                     PositionRef(old_position),
@@ -365,7 +351,7 @@ impl Graph {
 
     /// Returns [`None`] if `id` is not a node in this graph.
     #[must_use]
-    pub fn destroy_node(&mut self, id: &NodeId, soft: bool, logger: &mut Logger) -> Option<Node> {
+    pub fn destroy_node(&mut self, id: &NodeId, soft: bool) -> Option<Node> {
         self.nodes.remove(id).inspect(|node| {
             self.node_grid
                 .remove(&Self::world_to_grid(node.position))
@@ -378,12 +364,7 @@ impl Graph {
                     .retain(|_, wire| &wire.src != id && &wire.dst != id);
             }
             self.is_eval_order_dirty = true;
-            logln!(
-                logger,
-                LogType::Info,
-                "destroy node {}",
-                NodeRef(self.id, *id)
-            );
+            logln!(Info, "destroy node {}", NodeRef(self.id, *id));
         })
     }
 
@@ -397,7 +378,6 @@ impl Graph {
         elbow: Elbow,
         src: NodeId,
         dst: NodeId,
-        logger: &mut Logger,
     ) -> Result<&mut Wire, WireId> {
         assert_ne!(src, dst, "cannot wire a node directly to itself");
         if let Some(existing) = self
@@ -408,8 +388,7 @@ impl Graph {
         {
             let graph_ref = GraphRef(self.id);
             logln!(
-                logger,
-                LogType::Info,
+                Info,
                 "wire from {} to {} already exists: wire {}",
                 graph_ref.node(src),
                 graph_ref.node(dst),
@@ -426,8 +405,7 @@ impl Graph {
                 .into_mut();
             self.is_eval_order_dirty = true;
             logln!(
-                logger,
-                LogType::Info,
+                Info,
                 "create wire {} from {} to {}",
                 graph_ref.wire(*wire.id()),
                 graph_ref.node(src),
@@ -619,11 +597,11 @@ impl Graph {
 #[derive(Debug)]
 pub struct GraphList {
     next_graph_id: GraphId,
-    graphs: Vec<Arc<RwLock<Graph>>>,
+    graphs: FxHashMap<GraphId, Arc<RwLock<Graph>>>,
 }
 
 impl std::ops::Deref for GraphList {
-    type Target = Vec<Arc<RwLock<Graph>>>;
+    type Target = FxHashMap<GraphId, Arc<RwLock<Graph>>>;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -646,45 +624,24 @@ impl Default for GraphList {
 }
 
 impl GraphList {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             next_graph_id: GraphId(0),
-            graphs: Vec::new(),
+            graphs: FxHashMap::default(),
         }
     }
 
     #[inline]
     pub fn create_graph(&mut self) -> &mut Arc<RwLock<Graph>> {
-        self.graphs.push(Arc::new(RwLock::new(Graph::new(
-            self.next_graph_id.step().expect("out of IDs"),
-        ))));
-        self.graphs.last_mut().expect("just pushed")
-    }
-
-    #[inline]
-    pub fn try_get(&self, id: &GraphId) -> Option<&Arc<RwLock<Graph>>> {
+        let id = self.next_graph_id.step().expect("out of IDs");
         self.graphs
-            .iter()
-            .find(|g| g.try_read().unwrap().id() == id)
-    }
-
-    #[inline]
-    pub fn try_get_mut(&mut self, id: &GraphId) -> Option<&mut Arc<RwLock<Graph>>> {
-        self.graphs
-            .iter_mut()
-            .find(|g| g.try_read().unwrap().id() == id)
+            .insert(id, Arc::new(RwLock::new(Graph::new(id))));
+        self.graphs.get_mut(&id).expect("just inserted")
     }
 
     #[inline]
     pub fn get(&self, id: &GraphId) -> Option<&Arc<RwLock<Graph>>> {
-        self.graphs.iter().find(|g| g.read().unwrap().id() == id)
-    }
-
-    #[inline]
-    pub fn get_mut(&mut self, id: &GraphId) -> Option<&mut Arc<RwLock<Graph>>> {
-        self.graphs
-            .iter_mut()
-            .find(|g| g.read().unwrap().id() == id)
+        self.graphs.get(id)
     }
 }
 
@@ -785,6 +742,7 @@ mod tests {
     where
         VecDeque<Unordered<T>>: FromIterator<Unordered<T>>,
     {
+        #[inline]
         fn from_iter<I: IntoIterator<Item = Unordered<T>>>(iter: I) -> Self {
             Self(VecDeque::from_iter(iter))
         }
@@ -808,6 +766,7 @@ mod tests {
     }
 
     impl<T> RingOrder<T> {
+        #[inline]
         pub fn len(&self) -> usize {
             self.0.iter().map(|set| set.len()).sum::<usize>()
         }
@@ -841,12 +800,6 @@ mod tests {
                     .split_off(..series.len())
                     .is_some_and(|slice| series == slice)
             })
-        }
-    }
-
-    impl<T> ExactOrder<T> {
-        pub fn len(&self) -> usize {
-            self.0.iter().map(|series| series.len()).sum::<usize>()
         }
     }
 

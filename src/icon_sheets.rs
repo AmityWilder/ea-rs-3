@@ -111,27 +111,6 @@ impl std::ops::Index<NodeIconSheetSetId> for NodeIconSheetSets {
     }
 }
 
-static DEFAULT_NODE_ICON_SHEETSETS_DATA: [[&[u8]; 4]; 3] = [
-    [
-        include_bytes!("../assets/nodeicons/nodeIconsBasic8x.png"),
-        include_bytes!("../assets/nodeicons/nodeIconsBackground8x.png"),
-        include_bytes!("../assets/nodeicons/nodeIconsHighlight8x.png"),
-        include_bytes!("../assets/nodeicons/nodeIconsNTD8x.png"),
-    ],
-    [
-        include_bytes!("../assets/nodeicons/nodeIconsBasic16x.png"),
-        include_bytes!("../assets/nodeicons/nodeIconsBackground16x.png"),
-        include_bytes!("../assets/nodeicons/nodeIconsHighlight16x.png"),
-        include_bytes!("../assets/nodeicons/nodeIconsNTD16x.png"),
-    ],
-    [
-        include_bytes!("../assets/nodeicons/nodeIconsBasic32x.png"),
-        include_bytes!("../assets/nodeicons/nodeIconsBackground32x.png"),
-        include_bytes!("../assets/nodeicons/nodeIconsHighlight32x.png"),
-        include_bytes!("../assets/nodeicons/nodeIconsNTD32x.png"),
-    ],
-];
-
 #[derive(
     Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Eq, Hash, Default, Serialize, Deserialize,
 )]
@@ -222,23 +201,5 @@ impl std::ops::Index<ButtonIconSheetId> for ButtonIconSheets {
             ButtonIconSheetId::X16 => &self.x16,
             ButtonIconSheetId::X32 => &self.x32,
         }
-    }
-}
-
-impl ButtonIconSheets {
-    pub fn load(
-        rl: &mut RaylibHandle,
-        thread: &RaylibThread,
-    ) -> Result<Self, raylib::error::Error> {
-        Ok(Self {
-            x16: rl.load_texture_from_image(
-                thread,
-                &Image::load_image_from_mem(".png", include_bytes!("../assets/icons16x.png"))?,
-            )?,
-            x32: rl.load_texture_from_image(
-                thread,
-                &Image::load_image_from_mem(".png", include_bytes!("../assets/icons32x.png"))?,
-            )?,
-        })
     }
 }

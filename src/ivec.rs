@@ -136,6 +136,7 @@ pub struct IRect {
     pub h: i32,
 }
 
+#[allow(dead_code, reason = "reflexivity with as_rect()")]
 pub trait AsIRect {
     fn as_irect(&self) -> IRect;
 }

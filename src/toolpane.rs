@@ -1,5 +1,5 @@
 use crate::{
-    console::{GateRef, LogType, Logger, ToolRef},
+    console::{GateRef, ToolRef, rich_text::ColorRef},
     graph::{
         node::{Gate, GateId, Ntd},
         wire::Elbow,
@@ -8,7 +8,6 @@ use crate::{
     input::Inputs,
     ivec::Bounds,
     logln,
-    rich_text::ColorRef,
     theme::Theme,
     tool::{Tool, ToolId},
     ui::{Orientation, Panel, PanelContent, Visibility},
@@ -342,37 +341,32 @@ impl ToolPane {
     }
 
     #[inline]
-    pub fn set_tool(&mut self, tool_id: ToolId, logger: &mut Logger) -> bool {
+    pub fn set_tool(&mut self, tool_id: ToolId) -> bool {
         let change = self.tool.id() != tool_id;
         if change {
             self.tool = tool_id.init();
-            logln!(logger, LogType::Info, "set tool to {}", ToolRef(tool_id));
+            logln!(Info, "set tool to {}", ToolRef(tool_id));
         }
         change
     }
 
     #[inline]
-    pub fn set_gate(&mut self, gate_id: GateId, logger: &mut Logger) -> bool {
+    pub fn set_gate(&mut self, gate_id: GateId) -> bool {
         let change = self.gate.id() != gate_id;
         if change {
             self.gate = gate_id.to_gate(self.ntd);
-            logln!(logger, LogType::Info, "set gate to {}", GateRef(self.gate));
+            logln!(Info, "set gate to {}", GateRef(self.gate));
         }
         change
     }
 
     #[inline]
-    pub fn set_ntd(&mut self, data: Ntd, logger: &mut Logger) -> bool {
+    pub fn set_ntd(&mut self, data: Ntd) -> bool {
         let change = self.ntd != data;
         if change {
             self.ntd = data;
             self.gate = self.gate.with_ntd(self.ntd);
-            logln!(
-                logger,
-                LogType::Info,
-                "set non-transistor data to {}",
-                self.ntd
-            );
+            logln!(Info, "set non-transistor data to {}", self.ntd);
         }
         change
     }
@@ -478,7 +472,7 @@ impl ToolPane {
         }
     }
 
-    pub fn tick(&mut self, logger: &mut Logger, theme: &Theme, input: &Inputs) {
+    pub fn tick(&mut self, theme: &Theme, input: &Inputs) {
         if input.primary.is_starting() {
             let bounds = self.panel.content_bounds(theme);
             let action = self
@@ -491,13 +485,13 @@ impl ToolPane {
             if let Some(action) = action {
                 match action {
                     ButtonAction::SetTool(tool_id) => {
-                        self.set_tool(tool_id, logger);
+                        self.set_tool(tool_id);
                     }
                     ButtonAction::SetGate(gate_id) => {
-                        self.set_gate(gate_id, logger);
+                        self.set_gate(gate_id);
                     }
                     ButtonAction::SetNtd(data) => {
-                        self.set_ntd(data, logger);
+                        self.set_ntd(data);
                     }
                     ButtonAction::Blueprints => {
                         // TODO

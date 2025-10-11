@@ -1,5 +1,6 @@
 use crate::{
     icon_sheets::{ButtonIconSheetId, ButtonIconSheets, NodeIconSheetSet, NodeIconSheetSets},
+    logln,
     ui::{Orientation, Padding, Visibility},
 };
 use raylib::prelude::*;
@@ -578,34 +579,67 @@ impl Clone for ThemeButtonIcons {
     }
 }
 
+fn load_sheet<P>(
+    rl: &mut RaylibHandle,
+    thread: &RaylibThread,
+    path: Option<P>,
+    sheet: &str,
+    default: &[u8],
+) -> Result<Texture2D, raylib::error::Error>
+where
+    P: AsRef<Path>,
+{
+    logln!(Attempt, "Loading node icon sheet {sheet}...");
+    if let Some(path) = path {
+        let path = path.as_ref();
+        // SAFETY: ffi::LoadTexture uses the raw string anyway
+        match rl.load_texture(thread, unsafe {
+            str::from_utf8_unchecked(path.as_os_str().as_encoded_bytes())
+        }) {
+            Ok(v) => {
+                logln!(Success, "Icon sheet loaded from {}", path.display());
+                return Ok(v);
+            }
+            Err(e) => logln!(
+                Warning,
+                "Failed to load icon sheet from {}: {e}",
+                path.display()
+            ),
+        }
+    }
+    rl.load_texture_from_image(
+        thread,
+        &Image::load_image_from_mem(".png", default)
+            .expect("should be able to load internal images from memory"),
+    )
+    .inspect(|_| logln!(Success, "Default icon sheet loaded"))
+    .inspect_err(|e| logln!(Error, "Failed to load default icon sheet: {e}"))
+}
+
 impl ThemeButtonIcons {
     pub fn reload(
         &mut self,
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
     ) -> Result<(), raylib::error::Error> {
-        let mut load = |path: Option<&PathBuf>,
-                        default: &[u8]|
-         -> Result<Texture2D, raylib::error::Error> {
-            match path {
-                // SAFETY: ffi::LoadTexture uses the raw OS string anyway, load_texture using a &str just gets in our way
-                Some(path) => rl.load_texture(thread, unsafe {
-                    str::from_utf8_unchecked(path.as_os_str().as_encoded_bytes())
-                }),
-                None => rl
-                    .load_texture_from_image(thread, &Image::load_image_from_mem(".png", default)?),
-            }
-        };
+        logln!(Attempt, "Loading button icon sheets...");
         self.sheets = Some(ButtonIconSheets {
-            x16: load(
+            x16: load_sheet(
+                rl,
+                thread,
                 self.x16_path.as_ref(),
+                "16x",
                 include_bytes!("../assets/icons16x.png"),
             )?,
-            x32: load(
-                self.x16_path.as_ref(),
+            x32: load_sheet(
+                rl,
+                thread,
+                self.x32_path.as_ref(),
+                "32x",
                 include_bytes!("../assets/icons32x.png"),
             )?,
         });
+        logln!(Success, "Button icon sheets loaded.");
         Ok(())
     }
 }
@@ -705,75 +739,100 @@ impl ThemeNodeIcons {
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
     ) -> Result<(), raylib::error::Error> {
-        let mut load = |path: &Option<PathBuf>,
-                        default: &[u8]|
-         -> Result<Texture2D, raylib::error::Error> {
-            match path.as_ref() {
-                // SAFETY: ffi::LoadTexture uses the raw OS string anyway, load_texture using a &str just gets in our way
-                Some(path) => rl.load_texture(thread, unsafe {
-                    str::from_utf8_unchecked(path.as_os_str().as_encoded_bytes())
-                }),
-                None => rl
-                    .load_texture_from_image(thread, &Image::load_image_from_mem(".png", default)?),
-            }
-        };
-
+        logln!(Attempt, "Loading node icon sheets...");
         self.sheetsets = Some(NodeIconSheetSets {
             x8: NodeIconSheetSet {
-                basic: load(
-                    &self.basic8x_path,
-                    include_bytes!("../assets/nodeicons/nodeIconsBasic8x.png"),
+                basic: load_sheet(
+                    rl,
+                    thread,
+                    self.basic8x_path.as_ref(),
+                    "basic8x",
+                    include_bytes!("../assets/nodeicons/basic8x.png"),
                 )?,
-                background: load(
-                    &self.background8x_path,
-                    include_bytes!("../assets/nodeicons/nodeIconsBackground8x.png"),
+                background: load_sheet(
+                    rl,
+                    thread,
+                    self.background8x_path.as_ref(),
+                    "background8x",
+                    include_bytes!("../assets/nodeicons/background8x.png"),
                 )?,
-                highlight: load(
-                    &self.highlight8x_path,
-                    include_bytes!("../assets/nodeicons/nodeIconsHighlight8x.png"),
+                highlight: load_sheet(
+                    rl,
+                    thread,
+                    self.highlight8x_path.as_ref(),
+                    "highlight8x",
+                    include_bytes!("../assets/nodeicons/highlight8x.png"),
                 )?,
-                ntd: load(
-                    &self.ntd8x_path,
-                    include_bytes!("../assets/nodeicons/nodeIconsNTD8x.png"),
+                ntd: load_sheet(
+                    rl,
+                    thread,
+                    self.ntd8x_path.as_ref(),
+                    "ntd8x",
+                    include_bytes!("../assets/nodeicons/ntd8x.png"),
                 )?,
             },
             x16: NodeIconSheetSet {
-                basic: load(
-                    &self.basic16x_path,
-                    include_bytes!("../assets/nodeicons/nodeIconsBasic16x.png"),
+                basic: load_sheet(
+                    rl,
+                    thread,
+                    self.basic16x_path.as_ref(),
+                    "basic16x",
+                    include_bytes!("../assets/nodeicons/basic16x.png"),
                 )?,
-                background: load(
-                    &self.background16x_path,
-                    include_bytes!("../assets/nodeicons/nodeIconsBackground16x.png"),
+                background: load_sheet(
+                    rl,
+                    thread,
+                    self.background16x_path.as_ref(),
+                    "background16x",
+                    include_bytes!("../assets/nodeicons/background16x.png"),
                 )?,
-                highlight: load(
-                    &self.highlight16x_path,
-                    include_bytes!("../assets/nodeicons/nodeIconsHighlight16x.png"),
+                highlight: load_sheet(
+                    rl,
+                    thread,
+                    self.highlight16x_path.as_ref(),
+                    "highlight16x",
+                    include_bytes!("../assets/nodeicons/highlight16x.png"),
                 )?,
-                ntd: load(
-                    &self.ntd16x_path,
-                    include_bytes!("../assets/nodeicons/nodeIconsNTD16x.png"),
+                ntd: load_sheet(
+                    rl,
+                    thread,
+                    self.ntd16x_path.as_ref(),
+                    "ntd16x",
+                    include_bytes!("../assets/nodeicons/ntd16x.png"),
                 )?,
             },
             x32: NodeIconSheetSet {
-                basic: load(
-                    &self.basic32x_path,
-                    include_bytes!("../assets/nodeicons/nodeIconsBasic32x.png"),
+                basic: load_sheet(
+                    rl,
+                    thread,
+                    self.basic32x_path.as_ref(),
+                    "basic32x",
+                    include_bytes!("../assets/nodeicons/basic32x.png"),
                 )?,
-                background: load(
-                    &self.background32x_path,
-                    include_bytes!("../assets/nodeicons/nodeIconsBackground32x.png"),
+                background: load_sheet(
+                    rl,
+                    thread,
+                    self.background32x_path.as_ref(),
+                    "background32x",
+                    include_bytes!("../assets/nodeicons/background32x.png"),
                 )?,
-                highlight: load(
-                    &self.highlight32x_path,
-                    include_bytes!("../assets/nodeicons/nodeIconsHighlight32x.png"),
+                highlight: load_sheet(
+                    rl,
+                    thread,
+                    self.highlight32x_path.as_ref(),
+                    "highlight32x",
+                    include_bytes!("../assets/nodeicons/highlight32x.png"),
                 )?,
-                ntd: load(
-                    &self.ntd32x_path,
-                    include_bytes!("../assets/nodeicons/nodeIconsNTD32x.png"),
+                ntd: load_sheet(
+                    rl,
+                    thread,
+                    self.ntd32x_path.as_ref(),
+                    "ntd32x",
+                    include_bytes!("../assets/nodeicons/ntd32x.png"),
                 )?,
             },
         });
+        logln!(Success, "Node icon sheets loaded.");
         Ok(())
     }
 }
@@ -1034,16 +1093,34 @@ impl Theme {
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
     ) -> Result<(), raylib::error::Error> {
-        for font_item in [
-            &mut self.general_font,
-            &mut self.title_font,
-            &mut self.properties_header_font,
-            &mut self.console_font,
-        ] {
-            font_item.reload(rl, thread);
-        }
-        self.node_icons.reload(rl, thread)?;
-        self.button_icons.reload(rl, thread)?;
+        logln!(Attempt, "Loading general font...");
+        self.general_font.reload(rl, thread);
+        logln!(Success, "General font loaded.");
+
+        logln!(Attempt, "Loading title font...");
+        self.title_font.reload(rl, thread);
+        logln!(Success, "Title font loaded.");
+
+        logln!(Attempt, "Loading properties header font...");
+        self.properties_header_font.reload(rl, thread);
+        logln!(Success, "Properties header font loaded.");
+
+        logln!(Attempt, "Loading console font...");
+        self.console_font.reload(rl, thread);
+        logln!(Success, "Console font loaded.");
+
+        logln!(Attempt, "Loading node icon sheets...");
+        self.node_icons
+            .reload(rl, thread)
+            .inspect_err(|e| logln!(Error, "Failed to load node icon sheets: {e}"))?;
+        logln!(Success, "Loaded node icon sheets.");
+
+        logln!(Attempt, "Loading button icon sheet...");
+        self.button_icons
+            .reload(rl, thread)
+            .inspect_err(|e| logln!(Error, "Failed to load button icon sheet: {e}"))?;
+        logln!(Success, "Loaded button icon sheet.");
+
         Ok(())
     }
 
@@ -1140,28 +1217,6 @@ impl Theme {
             blueprints_background: Color::new(250, 250, 255, 255),
             ..Default::default()
         }
-    }
-}
-
-fn parse_color(s: &str) -> Result<Color, ()> {
-    if let Some(s) = s.strip_prefix('#') {
-        Color::from_hex(s).map_err(|_| ())
-    } else if let Some(s) = s.strip_prefix("rgba(").and_then(|s| s.strip_suffix(")")) {
-        let mut it = s.splitn(4, ",").map(|item| {
-            item.trim_start().parse::<u8>().ok().or_else(|| {
-                item.parse::<f32>()
-                    .ok()
-                    .map(|x| (x.clamp(0.0, 1.0) * 255.0) as u8)
-            })
-        });
-        Ok(Color {
-            r: it.next().and_then(|x| x).ok_or(())?,
-            g: it.next().and_then(|x| x).ok_or(())?,
-            b: it.next().and_then(|x| x).ok_or(())?,
-            a: it.next().and_then(|x| x).ok_or(())?,
-        })
-    } else {
-        Err(())
     }
 }
 
@@ -1367,20 +1422,28 @@ pub enum OptionalFont {
 
 impl OptionalFont {
     /// Uses default if error occurs
-    pub fn load<P>(rl: &mut RaylibHandle, _: &RaylibThread, path: Option<P>) -> Self
+    pub fn load<P>(rl: &mut RaylibHandle, thread: &RaylibThread, path: Option<P>) -> Self
     where
         P: AsRef<Path>,
     {
-        if let Some(path) = path
-            && let Ok(filename) =
-                std::ffi::CString::new(path.as_ref().as_os_str().as_encoded_bytes())
-        {
-            // SAFETY: LoadFont just opens the file under the hood, which uses the OS encoding
-            let f = unsafe { ffi::LoadFont(filename.as_ptr()) };
-            if !(f.glyphs.is_null() || f.texture.id == 0) {
-                // SAFETY: guaranteed not to have duplicates of what we just created and didnt copy
-                return Self::Strong(unsafe { Font::from_raw(f) });
+        match path {
+            Some(path) => {
+                let path = path.as_ref();
+                // SAFETY: LoadFont just opens the file under the hood, which uses the OS encoding
+                let filename =
+                    unsafe { str::from_utf8_unchecked(path.as_os_str().as_encoded_bytes()) };
+                match rl.load_font(thread, filename) {
+                    Ok(font) => {
+                        logln!(Success, "Font {} loaded.", path.display());
+                        return Self::Strong(font);
+                    }
+                    Err(e) => {
+                        logln!(Warning, "Failed to load font {}: {e}", path.display());
+                        logln!(Info, "Falling back to default font.");
+                    }
+                }
             }
+            None => logln!(Success, "Using default font."),
         }
         Self::Weak(rl.get_font_default())
     }

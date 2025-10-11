@@ -226,14 +226,6 @@ impl Anchoring {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Direction {
-    #[default]
-    Forward,
-    Reverse,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
 pub enum Visibility {
     #[default]
     Expanded,

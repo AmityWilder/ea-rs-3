@@ -1,6 +1,5 @@
 use crate::{
     GRID_SIZE, IVec2, Theme,
-    console::Logger,
     graph::{
         Graph,
         node::{GateInstance, NodeId},
@@ -171,20 +170,14 @@ impl EditorTab {
         unsafe { ffi::GetWorldToScreen2D(world_pos.into(), self.camera().into()) }.into()
     }
 
-    pub fn tick(
-        &mut self,
-        logger: &mut Logger,
-        toolpane: &mut ToolPane,
-        _theme: &Theme,
-        input: &Inputs,
-    ) -> bool {
+    pub fn tick(&mut self, toolpane: &mut ToolPane, _theme: &Theme, input: &Inputs) -> bool {
         let mut is_dirty = false;
 
         if let Some(gate) = input.gate() {
-            toolpane.set_gate(gate, logger);
+            toolpane.set_gate(gate);
         }
         if let Some(tool) = input.tool() {
-            toolpane.set_tool(tool, logger);
+            toolpane.set_tool(tool);
         }
 
         self.zoom_and_pan(input.cursor, input.pan, input.zoom, 5.0);
@@ -206,23 +199,18 @@ impl EditorTab {
                             if let Some(current_node) = *current_node
                                 && current_node != id
                             {
-                                _ = graph.create_wire(toolpane.elbow, current_node, id, logger);
+                                _ = graph.create_wire(toolpane.elbow, current_node, id);
                             }
                             *current_node = Some(id);
                         } else {
                             // new node
                             let gate = toolpane.gate.with_ntd(toolpane.ntd);
                             let new_node = graph
-                                .create_node(gate, pos, logger)
+                                .create_node(gate, pos)
                                 .expect("this branch implies the position is available");
                             let new_node_id = *new_node.id();
                             if let Some(current_node) = current_node.as_ref() {
-                                _ = graph.create_wire(
-                                    toolpane.elbow,
-                                    *current_node,
-                                    new_node_id,
-                                    logger,
-                                );
+                                _ = graph.create_wire(toolpane.elbow, *current_node, new_node_id);
                             }
                             *current_node = Some(new_node_id);
                         }
@@ -238,7 +226,7 @@ impl EditorTab {
                         && let Some(&id) = graph.find_node_at(pos)
                     {
                         graph
-                            .destroy_node(&id, false, logger)
+                            .destroy_node(&id, false)
                             .expect("cannot reach this branch if graph did not contain the node");
                         is_dirty = true;
                     }
@@ -270,7 +258,7 @@ impl EditorTab {
                             .as_ivec2()
                             .snap(GRID_SIZE.into());
                         graph
-                            .translate_node(&id, new_position, logger)
+                            .translate_node(&id, new_position)
                             .expect("edit mode target node should be valid");
                     }
 

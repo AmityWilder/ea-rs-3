@@ -7,7 +7,6 @@ use crate::{
     },
     input::Inputs,
     ivec::{AsIVec2, IBounds, IRect, IVec2},
-    rich_text::{ColorAct, ColorRef, RichStr, RichString},
     tab::TabList,
     theme::{ColorId, Theme},
     tool::ToolId,
@@ -15,10 +14,13 @@ use crate::{
     ui::{Panel, PanelContent},
 };
 use raylib::prelude::*;
+use rich_text::{ColorAct, ColorRef, RichStr, RichString};
 use std::sync::{
-    Arc, Mutex, RwLock, RwLockReadGuard,
-    mpsc::{Receiver, Sender, channel},
+    Arc, Mutex, PoisonError, RwLock, RwLockReadGuard,
+    mpsc::{Receiver, SendError, Sender, channel},
 };
+
+pub mod rich_text;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum LogType {
@@ -471,31 +473,21 @@ impl HyperRef {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct ConsoleAnchoring {
-    pub left: bool,
-    pub top: bool,
-    pub right: bool,
-    pub bottom: bool,
-}
-
 #[derive(Debug, Clone)]
 pub struct Logger(Sender<String>);
 
-impl std::fmt::Write for Logger {
-    fn write_str(&mut self, s: &str) -> std::fmt::Result {
-        self.0.send(s.to_string()).map_err(|_| std::fmt::Error)
-    }
-
-    fn write_fmt(&mut self, args: std::fmt::Arguments<'_>) -> std::fmt::Result {
-        self.0.send(args.to_string()).map_err(|_| std::fmt::Error)
-    }
-}
-
 impl Logger {
     #[inline]
-    pub const fn by_ref(&mut self) -> &mut Self {
-        self
+    pub fn push_log(
+        &mut self,
+        level: LogType,
+        args: std::fmt::Arguments<'_>,
+    ) -> Result<(), SendError<String>> {
+        self.0.send(format!(
+            "{}[{level}]: {args}{}\n",
+            ColorAct::Push(level.into()),
+            ColorAct::Pop,
+        ))
     }
 }
 
@@ -578,21 +570,6 @@ impl Console {
         ((self.panel.content_bounds(theme).height()
             + /* Off by one otherwise */ theme.console_font.line_spacing)
             / theme.console_font.line_height()) as usize
-    }
-
-    pub fn content(&self) -> impl Iterator<Item = (ColorRef, &str)> {
-        let mut last_color = ColorRef::Theme(ColorId::Foreground);
-        RichStr::new(self.content.as_str())
-            .iter()
-            .map(move |item| match item {
-                Ok((color, text)) => {
-                    if let Some(color) = color {
-                        last_color = color;
-                    }
-                    (last_color, text)
-                }
-                Err(e) => panic!("{e}"),
-            })
     }
 
     pub fn visible_content(&self, theme: &Theme) -> impl Iterator<Item = (ColorRef, &str)> {
@@ -744,39 +721,74 @@ impl Console {
     }
 }
 
-#[macro_export]
-macro_rules! logln {
-    ($logger:expr, $ty:expr, $($args:tt)+) => {
-        <$crate::console::Logger as std::fmt::Write>::write_fmt(
-            $logger.by_ref(),
-            format_args!("{}[{}]: {}{}\n",
-                $crate::rich_text::ColorAct::Push(<$crate::rich_text::ColorRef as From<LogType>>::from($ty)),
-                $ty,
-                format_args!($($args)+),
-                $crate::rich_text::ColorAct::Pop,
-            ),
-        ).unwrap()
-    };
-}
+static G_LOGGER: Mutex<Option<Logger>> = Mutex::new(None);
 
-static RL_LOGGER: Mutex<Option<Logger>> = Mutex::new(None);
+/// Global logger handle
+///
+/// Initializes the global [`Logger`] with [`Self::init`] and
+/// releases it when the handle [`drop`]s.
+pub struct GLoggerHandle(());
 
-pub struct RlLoggerHandle(());
-
-impl RlLoggerHandle {
+impl GLoggerHandle {
     pub fn init(logger: Logger) -> Self {
-        *RL_LOGGER.lock().unwrap() = Some(logger);
+        *G_LOGGER.lock().unwrap() = Some(logger);
         Self(())
     }
 }
 
-impl Drop for RlLoggerHandle {
+impl Drop for GLoggerHandle {
     fn drop(&mut self) {
         // Raylib will create extra messages when it closes.
         // Even if we never see them, its logger needs to still be valid or
         // the program will crash instead of closing successfully.
         // All resources must go out of scope before dropping the Raylib logger.
-        RL_LOGGER.lock().unwrap().take();
+        G_LOGGER.lock().unwrap().take();
+    }
+}
+
+#[derive(Debug)]
+pub enum GLogError {
+    Unset,
+    Poison(PoisonError<Option<Logger>>),
+    Send(SendError<String>),
+}
+
+impl From<PoisonError<Option<Logger>>> for GLogError {
+    fn from(e: PoisonError<Option<Logger>>) -> Self {
+        Self::Poison(e)
+    }
+}
+
+impl From<PoisonError<std::sync::MutexGuard<'_, Option<Logger>>>> for GLogError {
+    fn from(e: PoisonError<std::sync::MutexGuard<'_, Option<Logger>>>) -> Self {
+        Self::Poison(PoisonError::new(e.into_inner().clone()))
+    }
+}
+
+impl From<SendError<String>> for GLogError {
+    fn from(e: SendError<String>) -> Self {
+        Self::Send(e)
+    }
+}
+
+impl std::fmt::Display for GLogError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GLogError::Unset => "G_LOGGER is None",
+            GLogError::Poison(_) => "G_LOGGER is poisoned",
+            GLogError::Send(_) => "formatting error",
+        }
+        .fmt(f)
+    }
+}
+
+impl std::error::Error for GLogError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            GLogError::Unset => None,
+            GLogError::Poison(e) => Some(e),
+            GLogError::Send(e) => Some(e),
+        }
     }
 }
 
@@ -793,30 +805,51 @@ impl Drop for RlLoggerHandle {
     clippy::arithmetic_side_effects,
     reason = "RlLoggerHandle callback(s) will be executed in ffi, which cannot unwind"
 )]
-impl RlLoggerHandle {
-    pub fn trace_log_callback(level: TraceLogLevel, msg: &str) {
-        // important messages should be printed to stdout in case of crash
-        if matches!(level, TraceLogLevel::LOG_ERROR | TraceLogLevel::LOG_FATAL) {
-            eprintln!("{msg}");
-        }
+impl GLoggerHandle {
+    pub fn try_log_str(level: LogType, msg: &str) -> Result<(), GLogError> {
+        Self::try_log_fmt(level, format_args!("{msg}"))
+    }
 
-        if let Ok(mut lock) = RL_LOGGER.lock()
-            && let Some(rl_logger) = lock.as_mut()
-        {
-            logln!(
-                rl_logger,
-                match level {
-                    TraceLogLevel::LOG_DEBUG => LogType::Debug,
-                    TraceLogLevel::LOG_TRACE | TraceLogLevel::LOG_INFO => LogType::Info,
-                    TraceLogLevel::LOG_WARNING => LogType::Warning,
-                    TraceLogLevel::LOG_ERROR | TraceLogLevel::LOG_FATAL => LogType::Error,
-                    // not actual log levels; only exist for min log level
-                    TraceLogLevel::LOG_NONE | TraceLogLevel::LOG_ALL => return,
-                },
-                "Raylib: {msg}",
-            );
-        } else {
-            eprintln!("error: failed to lock RL_LOGGER; args: {level:?} {msg}");
+    pub fn try_log_fmt(level: LogType, args: std::fmt::Arguments<'_>) -> Result<(), GLogError> {
+        G_LOGGER.lock().map_err(Into::into).and_then(|mut lock| {
+            lock.as_mut().ok_or(GLogError::Unset).and_then(|g_logger| {
+                // important messages should be duplicatively printed to stderr in case of crash
+                if level >= LogType::Warning {
+                    eprintln!("{args}");
+                }
+                g_logger.push_log(level, args).map_err(Into::into)
+            })
+        })
+    }
+
+    pub fn trace_log_callback(level: TraceLogLevel, msg: &str) {
+        if let Err(e) = Self::try_log_str(
+            match level {
+                TraceLogLevel::LOG_DEBUG => LogType::Debug,
+                TraceLogLevel::LOG_TRACE | TraceLogLevel::LOG_INFO => LogType::Info,
+                TraceLogLevel::LOG_WARNING => LogType::Warning,
+                TraceLogLevel::LOG_ERROR | TraceLogLevel::LOG_FATAL => LogType::Error,
+                // not actual log levels; only exist for min log level
+                TraceLogLevel::LOG_NONE | TraceLogLevel::LOG_ALL => return,
+            },
+            msg,
+        ) {
+            eprintln!("error: {e}; level: {level:?}, msg: {msg}");
         }
     }
+}
+
+/// Print to the global [`Logger`]
+#[macro_export]
+macro_rules! logln {
+    ($level:expr, $($args:tt)+) => {{
+        let level = {
+            #[allow(unused_imports, clippy::enum_glob_use)]
+            use $crate::console::LogType::*;
+            $level
+        };
+        if let Err(e) = $crate::console::GLoggerHandle::try_log_fmt(level, format_args!($($args)+)) {
+            eprintln!("logger error: {e}");
+        }
+    }};
 }

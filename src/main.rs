@@ -1,9 +1,10 @@
+#![feature(never_type)]
 #![deny(clippy::missing_safety_doc, clippy::undocumented_unsafe_blocks)]
-#![allow(dead_code, reason = "for future use")]
+// #![allow(dead_code, reason = "for future use")]
 
 use crate::{
     config::Config,
-    console::{Console, LogType},
+    console::Console,
     graph::{GraphList, node::Gate, wire::Elbow},
     ivec::{Bounds, IVec2},
     properties::PropertiesPanel,
@@ -13,7 +14,7 @@ use crate::{
     toolpane::ToolPane,
     ui::{Anchoring, ExactSizing, NcSizing, Padding, Panel, PanelContent, Sizing},
 };
-use console::RlLoggerHandle;
+use console::GLoggerHandle;
 use raylib::prelude::*;
 use std::{
     io::Write,
@@ -28,7 +29,6 @@ mod icon_sheets;
 mod input;
 mod ivec;
 mod properties;
-mod rich_text;
 mod tab;
 mod theme;
 mod tool;
@@ -38,7 +38,7 @@ mod ui;
 pub const GRID_SIZE: u8 = 8;
 
 fn main() {
-    let (mut console, mut logger) = Console::new(
+    let (mut console, logger) = Console::new(
         Panel::new(
             "Log",
             Anchoring::Bottom {
@@ -59,15 +59,11 @@ fn main() {
         4096 * 80,
     );
 
-    let _rl_logger = RlLoggerHandle::init(logger.clone());
+    let _logger = GLoggerHandle::init(logger);
 
     // setup raylib logging
-    if let Err(e) = set_trace_log_callback(RlLoggerHandle::trace_log_callback) {
-        logln!(
-            logger,
-            LogType::Error,
-            "failed to set Raylib tracelog callback: {e}"
-        )
+    if let Err(e) = set_trace_log_callback(GLoggerHandle::trace_log_callback) {
+        logln!(Error, "failed to set Raylib tracelog callback: {e}");
     }
 
     let program_icon =
@@ -92,53 +88,57 @@ fn main() {
     }
 
     const CONFIG_PATH: &str = "config.toml";
-    logln!(
-        logger,
-        LogType::Attempt,
-        "Loading config from {CONFIG_PATH}..."
-    );
+    logln!(Attempt, "Loading config from {CONFIG_PATH}...");
 
     // load preferences
     let Config {
         mut theme,
         mut binds,
     } = {
+        logln!(Attempt, "Loading config...");
         match std::fs::read_to_string(CONFIG_PATH) {
-            Ok(s) => match toml::from_str(&s) {
-                Ok(config) => {
-                    logln!(logger, LogType::Success, "Config loaded.");
-                    config
+            Ok(s) => {
+                logln!(Attempt, "Parsing config...");
+                match toml::from_str(&s) {
+                    Ok(v) => {
+                        logln!(Success, "Config loaded.");
+                        v
+                    }
+                    Err(e) => {
+                        logln!(Error, "Failed to read config: {e}");
+                        Config::default()
+                    }
                 }
-                Err(e) => {
-                    logln!(logger, LogType::Error, "Failed to read config: {e}");
-                    Config::default()
-                }
-            },
+            }
+
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                logln!(
-                    logger,
-                    LogType::Warning,
-                    "Config does not exist. Generating default."
-                );
+                logln!(Warning, "Config does not exist.");
                 let config = Config::default();
-                if let Err(e) = std::fs::File::create(CONFIG_PATH).and_then(|mut file| {
+                logln!(Attempt, "Generating default file...");
+                match std::fs::File::create(CONFIG_PATH).and_then(|mut file| {
                     file.write_all(
                         toml::to_string_pretty(&config)
                             .expect("default config should be serializeable")
                             .as_bytes(),
                     )
                 }) {
-                    logln!(logger, LogType::Error, "Failed to generate file: {e}");
+                    Ok(_) => logln!(Success, "Default config file {CONFIG_PATH} generated."),
+                    Err(e) => logln!(Error, "Failed to generate file: {e}"),
                 }
                 config
             }
+
             Err(e) => {
-                logln!(logger, LogType::Error, "Failed to open config file: {e}");
+                logln!(Error, "Failed to open config file: {e}");
                 Config::default()
             }
         }
     };
-    theme.reload_assets(&mut rl, &thread).unwrap();
+    logln!(Attempt, "Loading theme assets...");
+    match theme.reload_assets(&mut rl, &thread) {
+        Ok(()) => logln!(Success, "Theme assets loaded."),
+        Err(e) => logln!(Error, "Critical theme assets could not be loaded: {e}"),
+    }
 
     let mut graphs = GraphList::new();
 
@@ -227,7 +227,7 @@ fn main() {
         _ = container;
     }
 
-    logln!(logger, LogType::Success, "initialized");
+    logln!(Success, "initialized");
 
     while !rl.window_should_close() {
         // Tick
@@ -278,7 +278,7 @@ fn main() {
         };
 
         if std::ptr::eq(focused_panel, &toolpane.panel) {
-            toolpane.tick(&mut logger, &theme, &input);
+            toolpane.tick(&theme, &input);
         } else if std::ptr::eq(focused_panel, &properties.panel) {
             properties.tick(&theme, |properties, bounds, theme| {
                 let mut y = bounds.min.y;
@@ -302,7 +302,7 @@ fn main() {
             if let Some(tab) = tabs.focused_tab_mut() {
                 match tab {
                     Tab::Editor(tab) => {
-                        let is_dirty = tab.tick(&mut logger, &mut toolpane, &theme, &input);
+                        let is_dirty = tab.tick(&mut toolpane, &theme, &input);
                         if is_dirty {
                             // refresh immediately on change
                             next_eval_tick = Instant::now();
@@ -344,7 +344,7 @@ fn main() {
             }),
         );
 
-        for mut graph in graphs.iter_mut().filter_map(|g| g.try_write().ok()) {
+        for mut graph in graphs.values().filter_map(|g| g.try_write().ok()) {
             if graph.is_eval_order_dirty() {
                 graph.refresh_eval_order();
             }
