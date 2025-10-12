@@ -1,6 +1,6 @@
 use crate::{
     GRID_SIZE,
-    console::{GateRef, GraphRef, NodeRef, PositionRef},
+    console::{GateRef, GraphRef, NodeRef, PositionRef, attempt::*},
     graph::{
         node::{Gate, Node, NodeId},
         wire::{Elbow, Flow, Wire, WireId},
@@ -13,7 +13,7 @@ use serde_derive::Deserialize;
 use std::{
     collections::VecDeque,
     marker::PhantomData,
-    sync::{Arc, RwLock},
+    sync::{Arc, nonpoison::RwLock},
 };
 
 pub mod eag;
@@ -233,6 +233,58 @@ pub struct Graph {
     is_eval_order_dirty: bool,
 }
 
+/// Intended only for when the id was given BY the graph, just now
+impl std::ops::Index<&NodeId> for Graph {
+    type Output = Node;
+
+    #[inline]
+    fn index(&self, id: &NodeId) -> &Self::Output {
+        let g = *self.id();
+        self.node(id).fatal(format_args!(
+            "node {id} is not in graph {g}; graph functions that return an ID should \
+            always return an ID that is valid until the graph is mutated"
+        ))
+    }
+}
+
+/// Intended only for when the id was given BY the graph, just now
+impl std::ops::IndexMut<&NodeId> for Graph {
+    #[inline]
+    fn index_mut(&mut self, id: &NodeId) -> &mut Self::Output {
+        let g = *self.id();
+        self.node_mut(id).fatal(format_args!(
+            "node {id} is not in graph {g}; graph functions that return an ID should \
+            always return an ID that is valid until the graph is mutated"
+        ))
+    }
+}
+
+/// Intended only for when the id was given BY the graph, just now
+impl std::ops::Index<&WireId> for Graph {
+    type Output = Wire;
+
+    #[inline]
+    fn index(&self, id: &WireId) -> &Self::Output {
+        let g = *self.id();
+        self.wire(id).fatal(format_args!(
+            "wire {id} is not in graph {g}; graph functions that return an ID should \
+            always return an ID that is valid until the graph is mutated"
+        ))
+    }
+}
+
+/// Intended only for when the id was given BY the graph, just now
+impl std::ops::IndexMut<&WireId> for Graph {
+    #[inline]
+    fn index_mut(&mut self, id: &WireId) -> &mut Self::Output {
+        let g = *self.id();
+        self.wire_mut(id).fatal(format_args!(
+            "wire {id} is not in graph {g}; graph functions that return an ID should \
+            always return an ID that is valid until the graph is mutated"
+        ))
+    }
+}
+
 type IOLessNodeIter<'a, F> =
     std::iter::Filter<std::iter::Copied<std::collections::hash_map::Keys<'a, NodeId, Node>>, F>;
 type NodesIter<'a> = std::collections::hash_map::Values<'a, NodeId, Node>;
@@ -292,7 +344,7 @@ impl Graph {
 
     /// Returns [`Err`] containing the existing node's ID if the position is already occupied.
     pub fn create_node(&mut self, gate: Gate, position: IVec2) -> Result<&mut Node, NodeId> {
-        let id = self.next_node_id.step().expect("out of IDs");
+        let id = self.next_node_id.step().fatal("out of IDs");
         let grid_pos = Self::world_to_grid(position);
         if let Some(&existing) = self.node_grid.get(&grid_pos) {
             logln!(
@@ -328,20 +380,19 @@ impl Graph {
             let old_grid_position = Self::world_to_grid(node.position);
             let new_grid_position = Self::world_to_grid(new_position);
             if old_grid_position != new_grid_position {
-                let id = self
-                    .node_grid
+                self.node_grid
                     .remove(&old_grid_position)
                     .filter(|x| x == id)
-                    .expect(
+                    .error(
                         "nodes should not be moved without updating their position in node_grid",
                     );
-                self.node_grid.insert(new_grid_position, id);
+                self.node_grid.insert(new_grid_position, *id);
 
                 let old_position = std::mem::replace(&mut node.position, new_position);
                 logln!(
                     Info,
                     "move node {} from {} to {}",
-                    NodeRef(self.id, id),
+                    NodeRef(self.id, *id),
                     PositionRef(old_position),
                     PositionRef(new_position),
                 );
@@ -353,12 +404,13 @@ impl Graph {
     #[must_use]
     pub fn destroy_node(&mut self, id: &NodeId, soft: bool) -> Option<Node> {
         self.nodes.remove(id).inspect(|node| {
-            self.node_grid
+            _ = self
+                .node_grid
                 .remove(&Self::world_to_grid(node.position))
                 .filter(|x| x == id)
-                .expect("nodes should not be moved without updating their position in node_grid");
+                .error("nodes should not be moved without updating their position in node_grid");
             if soft {
-                todo!()
+                logln!(Error, "not yet implemented");
             } else {
                 self.wires
                     .retain(|_, wire| &wire.src != id && &wire.dst != id);
@@ -397,7 +449,7 @@ impl Graph {
             Err(existing)
         } else {
             let graph_ref = GraphRef(self.id);
-            let id = self.next_wire_id.step().expect("out of IDs");
+            let id = self.next_wire_id.step().fatal("out of IDs");
             let wire = self
                 .wires
                 .entry(id)
@@ -582,13 +634,13 @@ impl Graph {
             input_buf.extend(adj.get(id).into_iter().flatten().map(|id| {
                 self.nodes
                     .get(id)
-                    .expect("all nodes in adj should be valid")
+                    .fatal("all nodes in adj should be valid")
                     .state
             }));
             let node = self
                 .nodes
                 .get_mut(id)
-                .expect("all nodes in eval_order should be valid");
+                .fatal("all nodes in eval_order should be valid");
             node.state = node.gate.evaluate(input_buf.iter().copied());
         }
     }
@@ -633,10 +685,10 @@ impl GraphList {
 
     #[inline]
     pub fn create_graph(&mut self) -> &mut Arc<RwLock<Graph>> {
-        let id = self.next_graph_id.step().expect("out of IDs");
+        let id = self.next_graph_id.step().fatal("out of IDs");
         self.graphs
             .insert(id, Arc::new(RwLock::new(Graph::new(id))));
-        self.graphs.get_mut(&id).expect("just inserted")
+        self.graphs.get_mut(&id).fatal("just inserted")
     }
 
     #[inline]

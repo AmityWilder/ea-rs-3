@@ -1,10 +1,17 @@
-#![feature(never_type)]
+#![feature(nonpoison_mutex, sync_nonpoison, nonpoison_rwlock, push_mut)]
 #![deny(clippy::missing_safety_doc, clippy::undocumented_unsafe_blocks)]
-// #![allow(dead_code, reason = "for future use")]
+#![cfg_attr(
+    not(test),
+    warn(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        reason = "consider using log_* instead"
+    )
+)]
 
 use crate::{
     config::Config,
-    console::Console,
+    console::{Console, attempt::*},
     graph::{GraphList, node::Gate, wire::Elbow},
     ivec::{Bounds, IVec2},
     properties::PropertiesPanel,
@@ -61,13 +68,16 @@ fn main() {
 
     let _logger = GLoggerHandle::init(logger);
 
+    attempt!("initializing");
+
     // setup raylib logging
-    if let Err(e) = set_trace_log_callback(GLoggerHandle::trace_log_callback) {
-        logln!(Error, "failed to set Raylib tracelog callback: {e}");
-    }
+    set_trace_log_callback(GLoggerHandle::trace_log_callback)
+        .or_warn("failed to set Raylib tracelog callback", ());
 
     let program_icon =
-        Image::load_image_from_mem(".png", include_bytes!("../assets/program_icon32x.png")).ok();
+        Image::load_image_from_mem(".png", include_bytes!("../assets/program_icon32x.png"))
+            .warn("failed to load program icon")
+            .ok();
 
     let (mut rl, thread) = init()
         .title("Electron Architect")
@@ -78,7 +88,8 @@ fn main() {
     rl.set_target_fps(
         get_monitor_refresh_rate(get_current_monitor())
             .try_into()
-            .unwrap(),
+            .error("monitor refresh rate cannot be negative")
+            .unwrap_or(60),
     );
 
     rl.set_exit_key(None);
@@ -87,73 +98,64 @@ fn main() {
         rl.set_window_icon(icon);
     }
 
-    const CONFIG_PATH: &str = "config.toml";
-    logln!(Attempt, "Loading config from {CONFIG_PATH}...");
-
     // load preferences
     let Config {
         mut theme,
         mut binds,
     } = {
-        logln!(Attempt, "Loading config...");
+        const CONFIG_PATH: &str = "config.toml";
+        attempt!("loading config from {CONFIG_PATH}");
         match std::fs::read_to_string(CONFIG_PATH) {
             Ok(s) => {
-                logln!(Attempt, "Parsing config...");
-                match toml::from_str(&s) {
-                    Ok(v) => {
-                        logln!(Success, "Config loaded.");
-                        v
-                    }
-                    Err(e) => {
-                        logln!(Error, "Failed to read config: {e}");
-                        Config::default()
-                    }
-                }
+                attempt!("parsing config");
+                toml::from_str(&s)
+                    .success("config loaded")
+                    .or_warn_with("failed to read config", |_| Config::default())
             }
 
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                logln!(Warning, "Config does not exist.");
+                logln!(Warning, "config does not exist.");
                 let config = Config::default();
-                logln!(Attempt, "Generating default file...");
-                match std::fs::File::create(CONFIG_PATH).and_then(|mut file| {
-                    file.write_all(
-                        toml::to_string_pretty(&config)
-                            .expect("default config should be serializeable")
-                            .as_bytes(),
-                    )
-                }) {
-                    Ok(_) => logln!(Success, "Default config file {CONFIG_PATH} generated."),
-                    Err(e) => logln!(Error, "Failed to generate file: {e}"),
-                }
+                attempt!("generating default file");
+                std::fs::File::create(CONFIG_PATH)
+                    .and_then(|mut file| {
+                        file.write_all(
+                            toml::to_string_pretty(&config)
+                                .fatal("default config should be serializeable")
+                                .as_bytes(),
+                        )
+                    })
+                    .success(format_args!("default config file {CONFIG_PATH} generated"))
+                    .or_warn("failed to generate file", ());
                 config
             }
 
             Err(e) => {
-                logln!(Error, "Failed to open config file: {e}");
+                logln!(Warning, "failed to open config file: {e}");
                 Config::default()
             }
         }
     };
-    logln!(Attempt, "Loading theme assets...");
-    match theme.reload_assets(&mut rl, &thread) {
-        Ok(()) => logln!(Success, "Theme assets loaded."),
-        Err(e) => logln!(Error, "Critical theme assets could not be loaded: {e}"),
-    }
+
+    attempt!("loading theme assets");
+    _ = theme
+        .reload_assets(&mut rl, &thread)
+        .success("theme assets loaded")
+        .error("failed to load theme assets");
 
     let mut graphs = GraphList::new();
 
     let mut tabs = TabList::with_tabs(
         Panel::new("Editor", Anchoring::Fill, |_| Padding::amount(0.0)),
-        [Tab::Editor(
-            EditorTab::new(
-                &mut rl,
-                &thread,
-                1280,
-                720,
-                Arc::downgrade(graphs.create_graph()),
-            )
-            .unwrap(),
-        )],
+        EditorTab::new(
+            &mut rl,
+            &thread,
+            1280,
+            720,
+            Arc::downgrade(graphs.create_graph()),
+        )
+        .error("failed to create editor tab")
+        .map(Tab::Editor),
     );
 
     let mut toolpane = ToolPane::new(
@@ -197,8 +199,9 @@ fn main() {
             rvec2(rl.get_screen_width(), rl.get_screen_height()),
         );
 
-        tabs.update_bounds(&mut rl, &thread, &theme, &container)
-            .unwrap();
+        _ = tabs
+            .update_bounds(&mut rl, &thread, &theme, &container)
+            .error("failed to update tab bounds");
 
         if let Some(new_container) =
             properties
@@ -237,13 +240,14 @@ fn main() {
         if rl.is_window_resized() {
             let window_width = rl.get_screen_width();
             let window_height = rl.get_screen_height();
-            tabs.update_bounds(
-                &mut rl,
-                &thread,
-                &theme,
-                &Bounds::new(Vector2::zero(), rvec2(window_width, window_height)),
-            )
-            .unwrap();
+            _ = tabs
+                .update_bounds(
+                    &mut rl,
+                    &thread,
+                    &theme,
+                    &Bounds::new(Vector2::zero(), rvec2(window_width, window_height)),
+                )
+                .error("failed to update tab bounds");
             // TODO: refresh bounds on other panels
         }
 
@@ -287,10 +291,14 @@ fn main() {
                 } = &toolpane.tool
                     && let Some(Tab::Editor(tab)) = tabs.focused_tab()
                     && let Some(graph) = tab.graph.upgrade()
-                    && let Ok(mut borrow) = graph.write()
                 {
-                    let node = borrow.node_mut(id).expect("edit target should be valid");
-                    y = properties.tick_section(&mut rl, &thread, theme, &input, y, node);
+                    let mut borrow = graph.write();
+                    if let Some(node) = borrow
+                        .node_mut(id)
+                        .error("edit target should always be valid")
+                    {
+                        y = properties.tick_section(&mut rl, &thread, theme, &input, y, node);
+                    }
                 }
                 y = properties.tick_section(&mut rl, &thread, theme, &input, y, &mut toolpane.tool);
                 y = properties.tick_section(&mut rl, &thread, theme, &input, y, &mut toolpane.gate);
@@ -392,10 +400,11 @@ fn main() {
                 } = &toolpane.tool
                     && let Some(Tab::Editor(tab)) = tabs.focused_tab()
                     && let Some(graph) = tab.graph.upgrade()
-                    && let Ok(borrow) = graph.read()
                 {
-                    let node = borrow.node(id).expect("edit target should be valid");
-                    y = properties.draw_section(d, theme, bounds, y, node);
+                    let borrow = graph.read();
+                    if let Some(node) = borrow.node(id).error("edit target should be valid") {
+                        y = properties.draw_section(d, theme, bounds, y, node);
+                    }
                 }
                 y = properties.draw_section(d, theme, bounds, y, &toolpane.tool);
                 y = properties.draw_section(d, theme, bounds, y, &toolpane.gate);

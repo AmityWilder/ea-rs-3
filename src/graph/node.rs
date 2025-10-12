@@ -147,6 +147,7 @@ impl std::ops::Add for Ntd {
     type Output = Self;
 
     #[inline]
+    #[allow(clippy::expect_used)]
     fn add(self, rhs: Self) -> Self::Output {
         Self::try_from(u8::from(self) + u8::from(rhs)).expect("attempted to add with overflow")
     }

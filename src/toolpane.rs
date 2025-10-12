@@ -1,5 +1,5 @@
 use crate::{
-    console::{GateRef, ToolRef, rich_text::ColorRef},
+    console::{GateRef, ToolRef, attempt::*, rich_text::ColorRef},
     graph::{
         node::{Gate, GateId, Ntd},
         wire::Elbow,
@@ -453,7 +453,8 @@ impl ToolPane {
             .map(|g| g.rows(self.visibility))
             .sum::<usize>();
         let groups = self.button_groups.len();
-        let button_width = usize::try_from(self.scale.icon_width()).unwrap();
+        let button_width =
+            usize::try_from(self.scale.icon_width()).fatal("icon width cannot be negative");
         let group_gap = match self.visibility {
             Visibility::Expanded => theme.toolpane_group_expanded_gap,
             Visibility::Collapsed => theme.toolpane_group_collapsed_gap,

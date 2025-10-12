@@ -1,4 +1,6 @@
 use crate::{
+    attempt,
+    console::attempt::*,
     icon_sheets::{ButtonIconSheetId, ButtonIconSheets, NodeIconSheetSet, NodeIconSheetSets},
     logln,
     ui::{Orientation, Padding, Visibility},
@@ -538,7 +540,7 @@ impl std::ops::Deref for ThemeButtonIcons {
     fn deref(&self) -> &Self::Target {
         self.sheets
             .as_ref()
-            .expect("icons must be reloaded before accessing")
+            .fatal("icons must be reloaded before accessing")
     }
 }
 
@@ -547,7 +549,7 @@ impl std::ops::DerefMut for ThemeButtonIcons {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.sheets
             .as_mut()
-            .expect("icons must be reloaded before accessing")
+            .fatal("icons must be reloaded before accessing")
     }
 }
 
@@ -589,31 +591,31 @@ fn load_sheet<P>(
 where
     P: AsRef<Path>,
 {
-    logln!(Attempt, "Loading node icon sheet {sheet}...");
+    attempt!("loading node icon sheet {sheet}");
     if let Some(path) = path {
         let path = path.as_ref();
-        // SAFETY: ffi::LoadTexture uses the raw string anyway
-        match rl.load_texture(thread, unsafe {
-            str::from_utf8_unchecked(path.as_os_str().as_encoded_bytes())
-        }) {
-            Ok(v) => {
-                logln!(Success, "Icon sheet loaded from {}", path.display());
-                return Ok(v);
-            }
-            Err(e) => logln!(
-                Warning,
-                "Failed to load icon sheet from {}: {e}",
+        if let Ok(sheet) = rl
+            .load_texture(
+                thread,
+                // SAFETY: ffi::LoadTexture uses the raw string anyway
+                unsafe { str::from_utf8_unchecked(path.as_os_str().as_encoded_bytes()) },
+            )
+            .success(format_args!("loaded icon sheet from {}", path.display()))
+            .warn(format_args!(
+                "failed to load icon sheet from {}",
                 path.display()
-            ),
+            ))
+        {
+            return Ok(sheet);
         }
     }
     rl.load_texture_from_image(
         thread,
         &Image::load_image_from_mem(".png", default)
-            .expect("should be able to load internal images from memory"),
+            .error("should be able to load internal images from memory")?,
     )
-    .inspect(|_| logln!(Success, "Default icon sheet loaded"))
-    .inspect_err(|e| logln!(Error, "Failed to load default icon sheet: {e}"))
+    .success("default icon sheet loaded")
+    .error("failed to load default icon sheet")
 }
 
 impl ThemeButtonIcons {
@@ -622,7 +624,7 @@ impl ThemeButtonIcons {
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
     ) -> Result<(), raylib::error::Error> {
-        logln!(Attempt, "Loading button icon sheets...");
+        attempt!("Loading button icon sheets");
         self.sheets = Some(ButtonIconSheets {
             x16: load_sheet(
                 rl,
@@ -682,7 +684,7 @@ impl std::ops::Deref for ThemeNodeIcons {
     fn deref(&self) -> &Self::Target {
         self.sheetsets
             .as_ref()
-            .expect("icons must be reloaded before accessing")
+            .fatal("icons must be reloaded before accessing")
     }
 }
 
@@ -691,7 +693,7 @@ impl std::ops::DerefMut for ThemeNodeIcons {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.sheetsets
             .as_mut()
-            .expect("icons must be reloaded before accessing")
+            .fatal("icons must be reloaded before accessing")
     }
 }
 
@@ -739,7 +741,7 @@ impl ThemeNodeIcons {
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
     ) -> Result<(), raylib::error::Error> {
-        logln!(Attempt, "Loading node icon sheets...");
+        attempt!("Loading node icon sheets");
         self.sheetsets = Some(NodeIconSheetSets {
             x8: NodeIconSheetSet {
                 basic: load_sheet(
@@ -1093,33 +1095,33 @@ impl Theme {
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
     ) -> Result<(), raylib::error::Error> {
-        logln!(Attempt, "Loading general font...");
+        attempt!("loading general font");
         self.general_font.reload(rl, thread);
-        logln!(Success, "General font loaded.");
+        logln!(Success, "general font loaded");
 
-        logln!(Attempt, "Loading title font...");
+        attempt!("loading title font");
         self.title_font.reload(rl, thread);
-        logln!(Success, "Title font loaded.");
+        logln!(Success, "title font loaded");
 
-        logln!(Attempt, "Loading properties header font...");
+        attempt!("loading properties header font");
         self.properties_header_font.reload(rl, thread);
-        logln!(Success, "Properties header font loaded.");
+        logln!(Success, "properties header font loaded");
 
-        logln!(Attempt, "Loading console font...");
+        attempt!("loading console font");
         self.console_font.reload(rl, thread);
-        logln!(Success, "Console font loaded.");
+        logln!(Success, "console font loaded");
 
-        logln!(Attempt, "Loading node icon sheets...");
+        attempt!("loading node icon sheets");
         self.node_icons
             .reload(rl, thread)
-            .inspect_err(|e| logln!(Error, "Failed to load node icon sheets: {e}"))?;
-        logln!(Success, "Loaded node icon sheets.");
+            .error("failed to load node icon sheets")?;
+        logln!(Success, "node icon sheets loaded");
 
-        logln!(Attempt, "Loading button icon sheet...");
+        attempt!("loading button icon sheet");
         self.button_icons
             .reload(rl, thread)
-            .inspect_err(|e| logln!(Error, "Failed to load button icon sheet: {e}"))?;
-        logln!(Success, "Loaded button icon sheet.");
+            .error("failed to load button icon sheet")?;
+        logln!(Success, "button icon sheet loaded");
 
         Ok(())
     }
@@ -1426,25 +1428,19 @@ impl OptionalFont {
     where
         P: AsRef<Path>,
     {
-        match path {
-            Some(path) => {
-                let path = path.as_ref();
-                // SAFETY: LoadFont just opens the file under the hood, which uses the OS encoding
-                let filename =
-                    unsafe { str::from_utf8_unchecked(path.as_os_str().as_encoded_bytes()) };
-                match rl.load_font(thread, filename) {
-                    Ok(font) => {
-                        logln!(Success, "Font {} loaded.", path.display());
-                        return Self::Strong(font);
-                    }
-                    Err(e) => {
-                        logln!(Warning, "Failed to load font {}: {e}", path.display());
-                        logln!(Info, "Falling back to default font.");
-                    }
-                }
+        if let Some(path) = path {
+            let path = path.as_ref();
+            // SAFETY: LoadFont just opens the file under the hood, which uses the OS encoding
+            let filename = unsafe { str::from_utf8_unchecked(path.as_os_str().as_encoded_bytes()) };
+            if let Ok(font) = rl
+                .load_font(thread, filename)
+                .success(format_args!("font {} loaded", path.display()))
+                .warn(format_args!("failed to load font {}", path.display()))
+            {
+                return Self::Strong(font);
             }
-            None => logln!(Success, "Using default font."),
         }
+        logln!(Info, "using default font");
         Self::Weak(rl.get_font_default())
     }
 }
@@ -1453,10 +1449,11 @@ impl AsRef<ffi::Font> for OptionalFont {
     #[inline]
     fn as_ref(&self) -> &ffi::Font {
         match self {
-            Self::Unloaded => panic!("font must be loaded before using"),
-            Self::Strong(font) => font.as_ref(),
-            Self::Weak(font) => font.as_ref(),
+            Self::Unloaded => None,
+            Self::Strong(font) => Some(font.as_ref()),
+            Self::Weak(font) => Some(font.as_ref()),
         }
+        .fatal("font must be loaded before using")
     }
 }
 
@@ -1464,10 +1461,11 @@ impl AsMut<ffi::Font> for OptionalFont {
     #[inline]
     fn as_mut(&mut self) -> &mut ffi::Font {
         match self {
-            Self::Unloaded => panic!("font must be loaded before using"),
-            Self::Strong(font) => font.as_mut(),
-            Self::Weak(font) => font.as_mut(),
+            Self::Unloaded => None,
+            Self::Strong(font) => Some(font.as_mut()),
+            Self::Weak(font) => Some(font.as_mut()),
         }
+        .fatal("font must be loaded before using")
     }
 }
 

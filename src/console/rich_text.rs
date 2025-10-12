@@ -337,6 +337,7 @@ impl AsMut<RichStr> for RichString {
 }
 
 impl RichString {
+    #[allow(dead_code)]
     pub const fn new() -> Self {
         Self(String::new())
     }

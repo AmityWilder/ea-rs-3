@@ -1,5 +1,6 @@
 use crate::{
     GRID_SIZE,
+    console::attempt::*,
     graph::{
         Graph, GraphId, GraphList,
         node::{Gate, Node, NodeId},
@@ -16,10 +17,13 @@ use crate::{
 use raylib::prelude::*;
 use rich_text::{ColorAct, ColorRef, RichStr, RichString};
 use std::sync::{
-    Arc, Mutex, PoisonError, RwLock, RwLockReadGuard,
+    Arc,
     mpsc::{Receiver, SendError, Sender, channel},
+    nonpoison::{Mutex, RwLock, RwLockReadGuard},
 };
 
+/// UNDER CONSTRUCTION
+pub mod attempt;
 pub mod rich_text;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -29,8 +33,12 @@ pub enum LogType {
     Debug,
     Attempt,
     Success,
+    /// Failed, but was optional or can resort to a default
     Warning,
+    /// Failed, must cancel action
     Error,
+    /// Failed, application cannot continue
+    Fatal,
 }
 
 impl std::fmt::Display for LogType {
@@ -43,6 +51,7 @@ impl std::fmt::Display for LogType {
             LogType::Success => "success",
             LogType::Warning => "warning",
             LogType::Error => "error",
+            LogType::Fatal => "fatal",
         }
         .fmt(f)
     }
@@ -61,10 +70,11 @@ impl LogType {
         match self {
             LogType::Info => ColorRef::Theme(ColorId::Foreground3),
             LogType::Debug => ColorRef::Exact(Color::MAGENTA),
-            LogType::Attempt => ColorRef::Theme(ColorId::Special),
+            LogType::Attempt => ColorRef::Theme(ColorId::Foreground2),
             LogType::Success => ColorRef::Theme(ColorId::Foreground1),
             LogType::Warning => ColorRef::Theme(ColorId::Caution),
             LogType::Error => ColorRef::Theme(ColorId::Error),
+            LogType::Fatal => ColorRef::Theme(ColorId::Destructive),
         }
     }
 }
@@ -461,7 +471,7 @@ impl HyperRef {
                     for tab in tabs.editors_of_graph(&Arc::downgrade(g)) {
                         let (start, end) = borrow
                             .get_wire_nodes(wire)
-                            .expect("all wires should be valid");
+                            .fatal("all wires should be valid");
                         let start_pos = start.position().as_vec2() + GRID_CENTER_OFFSET;
                         let end_pos = end.position().as_vec2() + GRID_CENTER_OFFSET;
                         let pos = tab.world_to_screen(wire.elbow.calculate(start_pos, end_pos));
@@ -731,7 +741,7 @@ pub struct GLoggerHandle(());
 
 impl GLoggerHandle {
     pub fn init(logger: Logger) -> Self {
-        *G_LOGGER.lock().unwrap() = Some(logger);
+        *G_LOGGER.lock() = Some(logger);
         Self(())
     }
 }
@@ -742,27 +752,14 @@ impl Drop for GLoggerHandle {
         // Even if we never see them, its logger needs to still be valid or
         // the program will crash instead of closing successfully.
         // All resources must go out of scope before dropping the Raylib logger.
-        G_LOGGER.lock().unwrap().take();
+        G_LOGGER.lock().take();
     }
 }
 
 #[derive(Debug)]
 pub enum GLogError {
     Unset,
-    Poison(PoisonError<Option<Logger>>),
     Send(SendError<String>),
-}
-
-impl From<PoisonError<Option<Logger>>> for GLogError {
-    fn from(e: PoisonError<Option<Logger>>) -> Self {
-        Self::Poison(e)
-    }
-}
-
-impl From<PoisonError<std::sync::MutexGuard<'_, Option<Logger>>>> for GLogError {
-    fn from(e: PoisonError<std::sync::MutexGuard<'_, Option<Logger>>>) -> Self {
-        Self::Poison(PoisonError::new(e.into_inner().clone()))
-    }
 }
 
 impl From<SendError<String>> for GLogError {
@@ -775,7 +772,6 @@ impl std::fmt::Display for GLogError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             GLogError::Unset => "G_LOGGER is None",
-            GLogError::Poison(_) => "G_LOGGER is poisoned",
             GLogError::Send(_) => "formatting error",
         }
         .fmt(f)
@@ -786,7 +782,6 @@ impl std::error::Error for GLogError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             GLogError::Unset => None,
-            GLogError::Poison(e) => Some(e),
             GLogError::Send(e) => Some(e),
         }
     }
@@ -811,14 +806,13 @@ impl GLoggerHandle {
     }
 
     pub fn try_log_fmt(level: LogType, args: std::fmt::Arguments<'_>) -> Result<(), GLogError> {
-        G_LOGGER.lock().map_err(Into::into).and_then(|mut lock| {
-            lock.as_mut().ok_or(GLogError::Unset).and_then(|g_logger| {
-                // important messages should be duplicatively printed to stderr in case of crash
-                if level >= LogType::Warning {
-                    eprintln!("{args}");
-                }
-                g_logger.push_log(level, args).map_err(Into::into)
-            })
+        let mut lock = G_LOGGER.lock();
+        lock.as_mut().ok_or(GLogError::Unset).and_then(|g_logger| {
+            // important messages should be duplicatively printed to stderr in case of crash
+            if level >= LogType::Warning {
+                eprintln!("{args}");
+            }
+            g_logger.push_log(level, args).map_err(Into::into)
         })
     }
 

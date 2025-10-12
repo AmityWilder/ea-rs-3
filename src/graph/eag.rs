@@ -1,4 +1,5 @@
 use crate::{
+    console::attempt::*,
     graph::{
         Graph, GraphId, GraphList,
         node::{Node, NodeId},
@@ -12,7 +13,7 @@ use serde::{
     ser::{Serialize, SerializeSeq, SerializeStruct, Serializer},
 };
 use serde_derive::Deserialize;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, nonpoison::RwLock};
 
 impl Serialize for Graph {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -51,10 +52,10 @@ impl Serialize for Graph {
                         wire.elbow,
                         self.1
                             .get(&wire.src)
-                            .expect("wire src should always be valid"),
+                            .fatal("wire src should always be valid"),
                         self.1
                             .get(&wire.dst)
-                            .expect("wire dst should always be valid"),
+                            .fatal("wire dst should always be valid"),
                     ))?;
                 }
                 seq.end()
@@ -106,7 +107,7 @@ impl<'de> Deserialize<'de> for Nodes {
 
                 let mut next_node_id = NodeId(0);
                 while let Some((gate, (x, y), state)) = seq.next_element()? {
-                    let id = next_node_id.step().unwrap();
+                    let id = next_node_id.step().fatal("out of node IDs");
                     value.insert(id, Node::new(id, gate, IVec2 { x, y }, state));
                 }
                 Ok(Nodes(value, next_node_id))
@@ -145,7 +146,7 @@ impl<'de> Deserialize<'de> for Wires {
 
                 let mut next_wire_id = WireId(0);
                 while let Some((elbow, src, dst)) = seq.next_element()? {
-                    let id = next_wire_id.step().unwrap();
+                    let id = next_wire_id.step().fatal("out of wire IDs");
                     value.insert(id, Wire::new(id, elbow, NodeId(src), NodeId(dst)));
                 }
                 Ok(Wires(value, next_wire_id))
@@ -192,7 +193,7 @@ impl Serialize for GraphList {
     {
         let mut seq = serializer.serialize_seq(Some(self.graphs.len()))?;
         for graph in self.graphs.values() {
-            seq.serialize_element(&*graph.read().unwrap())?;
+            seq.serialize_element(&*graph.read())?;
         }
         seq.end()
     }
@@ -222,7 +223,7 @@ impl<'de> Deserialize<'de> for GraphList {
                     .unwrap_or_default();
                 let mut next_graph_id = GraphId(0);
                 while let Some(mut value) = seq.next_element::<Graph>()? {
-                    value.id = next_graph_id.step().unwrap();
+                    value.id = next_graph_id.step().fatal("out of graph IDs");
                     graphs.insert(value.id, Arc::new(RwLock::new(value)));
                 }
                 Ok(GraphList {

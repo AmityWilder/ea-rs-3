@@ -1,5 +1,6 @@
 use crate::{
     GRID_SIZE, IVec2, Theme,
+    console::attempt::*,
     graph::{
         Graph,
         node::{GateInstance, NodeId},
@@ -14,7 +15,7 @@ use crate::{
 };
 use raylib::prelude::*;
 use rustc_hash::FxHashSet;
-use std::sync::{RwLock, Weak};
+use std::sync::{Weak, nonpoison::RwLock};
 
 #[derive(Debug)]
 pub struct EditorTab {
@@ -101,8 +102,12 @@ impl EditorTab {
         if new_width != self.grid.width() || new_height != self.grid.height() {
             self.grid = rl.load_render_texture(
                 thread,
-                new_width.try_into().unwrap(),
-                new_height.try_into().unwrap(),
+                new_width
+                    .try_into()
+                    .fatal("window width cannot be negative"),
+                new_height
+                    .try_into()
+                    .fatal("window width cannot be negative"),
             )?;
             self.dirty = true;
         }
@@ -194,26 +199,30 @@ impl EditorTab {
             match &mut toolpane.tool {
                 Tool::Create { current_node } => {
                     if input.primary.is_starting() {
-                        if let Some(&id) = graph.find_node_at(pos) {
-                            // existing node
-                            if let Some(current_node) = *current_node
-                                && current_node != id
-                            {
-                                _ = graph.create_wire(toolpane.elbow, current_node, id);
+                        match graph.create_node(toolpane.gate, pos) {
+                            Ok(new_node) => {
+                                // new node
+                                let new_node_id = *new_node.id();
+                                if let Some(current_node) = current_node.as_ref() {
+                                    _ = graph.create_wire(
+                                        toolpane.elbow,
+                                        *current_node,
+                                        new_node_id,
+                                    );
+                                }
+                                *current_node = Some(new_node_id);
                             }
-                            *current_node = Some(id);
-                        } else {
-                            // new node
-                            let gate = toolpane.gate.with_ntd(toolpane.ntd);
-                            let new_node = graph
-                                .create_node(gate, pos)
-                                .expect("this branch implies the position is available");
-                            let new_node_id = *new_node.id();
-                            if let Some(current_node) = current_node.as_ref() {
-                                _ = graph.create_wire(toolpane.elbow, *current_node, new_node_id);
+                            Err(id) => {
+                                // existing node
+                                if let Some(current_node) = *current_node
+                                    && current_node != id
+                                {
+                                    _ = graph.create_wire(toolpane.elbow, current_node, id);
+                                }
+                                *current_node = Some(id);
                             }
-                            *current_node = Some(new_node_id);
                         }
+
                         is_dirty = true;
                     }
                     if input.secondary.is_starting() {
@@ -227,7 +236,7 @@ impl EditorTab {
                     {
                         graph
                             .destroy_node(&id, false)
-                            .expect("cannot reach this branch if graph did not contain the node");
+                            .error("cannot reach this branch if graph did not contain the node");
                         is_dirty = true;
                     }
                 }
@@ -235,11 +244,10 @@ impl EditorTab {
                 Tool::Edit { target } => {
                     if input.secondary.is_starting()
                         && let Some(&id) = graph.find_node_at(pos)
+                        && let Some(node) =
+                            graph.node_mut(&id).error("hovered node should be valid")
                     {
-                        *graph
-                            .node_mut(&id)
-                            .expect("hovered node should be valid")
-                            .gate_mut() = GateInstance::from_gate(toolpane.gate);
+                        *node.gate_mut() = GateInstance::from_gate(toolpane.gate);
                     }
 
                     if input.primary.is_starting()
@@ -259,7 +267,7 @@ impl EditorTab {
                             .snap(GRID_SIZE.into());
                         graph
                             .translate_node(&id, new_position)
-                            .expect("edit mode target node should be valid");
+                            .error("edit mode target node should be valid");
                     }
 
                     if let Some(EditDragging { temp_pos, id: _ }) = target.as_mut() {
@@ -273,7 +281,7 @@ impl EditorTab {
                         && let Some(&id) = graph.find_node_at(pos)
                         && graph.is_inputless(&id)
                     {
-                        let node = graph.node_mut(&id).expect("all nodes should be valid");
+                        let node = &mut graph[&id];
                         match node.gate_mut() {
                             gate @ GateInstance::Or => {
                                 *gate = GateInstance::Nor;
@@ -319,9 +327,9 @@ impl EditorTab {
         let zoom_exp = self.zoom_exp().ceil() as i32;
         let scale_and_width =
             NodeIconSheetSetId::from_zoom_exp(zoom_exp).map(|scale| (scale, scale.icon_width()));
-        if let Some(graph) = self.graph.upgrade() {
-            let graph = graph.try_read().unwrap();
-
+        if let Some(graph) = self.graph.upgrade()
+            && let Ok(graph) = graph.try_read().error("failed to access graph")
+        {
             // tool - background layer
             match &toolpane.tool {
                 Tool::Create { current_node: _ } => {}
@@ -334,7 +342,7 @@ impl EditorTab {
             for wire in graph.wires_iter() {
                 let state = graph
                     .node(wire.src())
-                    .expect("every wire src should be valid")
+                    .fatal("every wire src should be valid")
                     .state();
                 wire.draw(
                     &mut d,
@@ -346,7 +354,7 @@ impl EditorTab {
                         theme.foreground
                     },
                 )
-                .expect("all wires should be valid");
+                .fatal("all wires should be valid");
             }
 
             // tool - wire layer
@@ -357,7 +365,7 @@ impl EditorTab {
                             &mut d,
                             graph
                                 .node(&current_node)
-                                .expect("current node should always be valid")
+                                .fatal("current node should always be valid")
                                 .position()
                                 .as_vec2()
                                 + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
@@ -377,7 +385,7 @@ impl EditorTab {
                                 Flow::Input => (
                                     graph
                                         .node(wire.src())
-                                        .expect("all wires should be valid")
+                                        .fatal("wire src should always be valid")
                                         .position()
                                         .as_vec2()
                                         + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
@@ -387,7 +395,7 @@ impl EditorTab {
                                     *temp_pos + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
                                     graph
                                         .node(wire.dst())
-                                        .expect("all wires should be valid")
+                                        .fatal("wire dst should always be valid")
                                         .position()
                                         .as_vec2()
                                         + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
@@ -404,7 +412,7 @@ impl EditorTab {
                                 theme.special,
                             );
                         }
-                        let node = graph.node(id).expect("node being dragged should be valid");
+                        let node = graph.node(id).fatal("node being dragged should be valid");
                         let rec = Rectangle {
                             x: temp_pos.x,
                             y: temp_pos.y,
@@ -452,7 +460,7 @@ impl EditorTab {
                                     |(n, acc), (_, wire)| {
                                         let state = graph
                                             .node(wire.src())
-                                            .expect("all wires should be valid")
+                                            .fatal("wire src should always be valid")
                                             .state();
                                         (n + 1, acc + usize::from(state))
                                     },
@@ -589,7 +597,7 @@ impl EditorTab {
                                         .resistance
                                         .get(n as usize)
                                         .copied()
-                                        .expect("gate should never contain invalid NT data"),
+                                        .fatal("gate should never contain invalid NT data"),
                                 ),
 
                                 GateInstance::Capacitor { capacity, stored } => Some(
@@ -628,9 +636,7 @@ impl EditorTab {
                     .snap(GRID_SIZE.into()),
             ) && (!matches!(toolpane.tool, Tool::Interact { .. }) || graph.is_inputless(id))
             {
-                let node = graph
-                    .node(id)
-                    .expect("find_node_at should never return an invalid node");
+                let node = &graph[id];
                 let node_position = node.position().as_vec2();
                 let rec = Rectangle {
                     x: node_position.x,
