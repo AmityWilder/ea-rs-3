@@ -154,6 +154,14 @@ impl Wire {
     ) {
         let elbow_pos = elbow.calculate(start_pos, end_pos);
         d.draw_line_strip(&[start_pos, elbow_pos, end_pos], color);
+        // let [arrow_pos1, arrow_pos2] = {
+        //     let dir = (elbow_pos - start_pos).normalized();
+        //     [
+        //         elbow_pos + dir.rotated(3.5 * std::f32::consts::FRAC_PI_4) * f32::from(crate::GRID_SIZE),
+        //         elbow_pos + dir.rotated(3.5 * -std::f32::consts::FRAC_PI_4) * f32::from(crate::GRID_SIZE),
+        //     ]
+        // };
+        // d.draw_line_strip(&[arrow_pos1, elbow_pos, arrow_pos2], color);
     }
 
     /// Returns [`None`] if wire is not valid for the graph

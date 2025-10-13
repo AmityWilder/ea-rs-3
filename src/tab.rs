@@ -620,6 +620,20 @@ impl EditorTab {
                         } else {
                             d.draw_rectangle_rec(rec, color);
                         }
+                        if input.show_details {
+                            let order = graph
+                                .eval_order()
+                                .iter()
+                                .position(|id| id == node.id())
+                                .fatal("every node should have an order");
+                            theme.general_font.draw_text(
+                                &mut d,
+                                order.to_string().as_str(),
+                                node.position().as_vec2()
+                                    + Vector2::new(f32::from(GRID_SIZE), -f32::from(GRID_SIZE)),
+                                color,
+                            );
+                        }
                     }
                 }
             }

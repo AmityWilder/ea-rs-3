@@ -367,8 +367,8 @@ impl EventSource {
             Self::Constant(event) => event.is_active(),
             Self::Keyboard(key) => rl.is_key_down(*key),
             Self::Mouse(button) => rl.is_mouse_button_down(*button),
-            Self::Combo(EventCombo::All(items)) => items.iter_mut().any(|x| x.is_active(rl)),
-            Self::Combo(EventCombo::Any(items)) => items.iter_mut().all(|x| x.is_active(rl)),
+            Self::Combo(EventCombo::All(items)) => items.iter_mut().all(|x| x.is_active(rl)),
+            Self::Combo(EventCombo::Any(items)) => items.iter_mut().any(|x| x.is_active(rl)),
             Self::Combo(EventCombo::Not(item)) => !item.is_active(rl),
         }
     }
@@ -379,11 +379,11 @@ impl EventSource {
             Self::Constant(event) => event.is_starting(),
             Self::Keyboard(key) => rl.is_key_pressed(*key),
             Self::Mouse(button) => rl.is_mouse_button_pressed(*button),
-            Self::Combo(EventCombo::All(items)) => items.iter_mut().any(|x| x.is_starting(rl)),
-            Self::Combo(EventCombo::Any(items)) => {
+            Self::Combo(EventCombo::All(items)) => {
                 items.iter_mut().any(|x| x.is_starting(rl))
                     && items.iter_mut().all(|x| x.is_active(rl))
             }
+            Self::Combo(EventCombo::Any(items)) => items.iter_mut().any(|x| x.is_starting(rl)),
             Self::Combo(EventCombo::Not(item)) => !item.is_starting(rl),
         }
     }
@@ -396,13 +396,13 @@ impl EventSource {
             Self::Mouse(button) => rl.is_mouse_button_released(*button),
             Self::Combo(EventCombo::All(items)) => {
                 items.iter_mut().any(|x| x.is_ending(rl))
-                    && items.iter_mut().all(
-                        |x| !x.is_active(rl), // assumes that if an item is ending, it is also inactive
-                    )
+                    && items.iter_mut().all(|x| x.is_active(rl) || x.is_ending(rl))
             }
             Self::Combo(EventCombo::Any(items)) => {
                 items.iter_mut().any(|x| x.is_ending(rl))
-                    && items.iter_mut().all(|x| x.is_active(rl) || x.is_ending(rl))
+                    && items.iter_mut().all(
+                        |x| !x.is_active(rl), // assumes that if an item is ending, it is also inactive
+                    )
             }
             Self::Combo(EventCombo::Not(item)) => !item.is_ending(rl),
         }

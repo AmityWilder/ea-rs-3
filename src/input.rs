@@ -32,6 +32,7 @@ pub struct Inputs {
     pub hide_toolpane: Event,
     pub collapse_toolpane: Event,
     pub expand_toolpane: Event,
+    pub show_details: bool,
 }
 
 impl Inputs {
@@ -102,6 +103,7 @@ pub struct Bindings {
     pub hide_toolpane: EventSource,
     pub collapse_toolpane: EventSource,
     pub expand_toolpane: EventSource,
+    pub show_details: BoolSource,
 }
 
 impl Default for Bindings {
@@ -180,6 +182,13 @@ impl Default for Bindings {
                 ]))),
                 EventSource::Keyboard(KEY_B),
             ]))),
+            show_details: BoolSource::Event {
+                what: EventSource::Combo(EventCombo::Any(Box::from([
+                    EventSource::Keyboard(KEY_LEFT_ALT),
+                    EventSource::Keyboard(KEY_RIGHT_ALT),
+                ]))),
+                when: Event::Active,
+            },
         }
     }
 }
@@ -211,6 +220,7 @@ impl Bindings {
             hide_toolpane: self.hide_toolpane.get(rl),
             collapse_toolpane: self.collapse_toolpane.get(rl),
             expand_toolpane: self.expand_toolpane.get(rl),
+            show_details: self.show_details.get(rl),
         }
     }
 }
