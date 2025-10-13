@@ -14,29 +14,20 @@ pub enum NodeIconSheetId {
     Ntd,
 }
 
-#[derive(Debug)]
-pub struct NodeIconSheetSet {
-    pub basic: Texture2D,
-    pub background: Texture2D,
-    pub highlight: Texture2D,
-    pub ntd: Texture2D,
-}
-
-impl std::ops::Index<NodeIconSheetId> for NodeIconSheetSet {
-    type Output = Texture2D;
-
+impl NodeIconSheetId {
     #[inline]
-    fn index(&self, index: NodeIconSheetId) -> &Self::Output {
-        match index {
-            NodeIconSheetId::Basic => &self.basic,
-            NodeIconSheetId::Background => &self.background,
-            NodeIconSheetId::Highlight => &self.highlight,
-            NodeIconSheetId::Ntd => &self.ntd,
+    pub const fn sheet_cell(self) -> IVec2 {
+        match self {
+            NodeIconSheetId::Background => IVec2::new(0, 0),
+            NodeIconSheetId::Basic => IVec2::new(4, 0),
+            NodeIconSheetId::Highlight => IVec2::new(0, 4),
+            NodeIconSheetId::Ntd => IVec2::new(4, 4),
         }
     }
 }
 
 impl GateId {
+    #[inline]
     pub const fn icon_cell(self) -> IVec2 {
         match self {
             GateId::Or => IVec2::new(0, 0),
@@ -52,11 +43,12 @@ impl GateId {
     }
 
     #[inline]
-    pub const fn icon_cell_irec(self, icon_width: i32) -> IRect {
-        let cell = self.icon_cell();
+    pub const fn icon_cell_irec(self, sheet: NodeIconSheetId, icon_width: i32) -> IRect {
+        let IVec2 { x: ix, y: iy } = self.icon_cell();
+        let IVec2 { x: gx, y: gy } = sheet.sheet_cell();
         IRect::new(
-            cell.x * icon_width,
-            cell.y * icon_width,
+            (gx + ix) * icon_width,
+            (gy + iy) * icon_width,
             icon_width,
             icon_width,
         )
@@ -93,13 +85,13 @@ impl NodeIconSheetSetId {
 
 #[derive(Debug)]
 pub struct NodeIconSheetSets {
-    pub x8: NodeIconSheetSet,
-    pub x16: NodeIconSheetSet,
-    pub x32: NodeIconSheetSet,
+    pub x8: Texture2D,
+    pub x16: Texture2D,
+    pub x32: Texture2D,
 }
 
 impl std::ops::Index<NodeIconSheetSetId> for NodeIconSheetSets {
-    type Output = NodeIconSheetSet;
+    type Output = Texture2D;
 
     #[inline]
     fn index(&self, index: NodeIconSheetSetId) -> &Self::Output {

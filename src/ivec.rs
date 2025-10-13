@@ -75,6 +75,158 @@ pub struct IVec2 {
     pub y: i32,
 }
 
+impl std::ops::Add for IVec2 {
+    type Output = Self;
+
+    #[inline]
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
+    }
+}
+
+impl std::ops::AddAssign for IVec2 {
+    #[inline]
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs
+    }
+}
+
+impl std::ops::Sub for IVec2 {
+    type Output = Self;
+
+    #[inline]
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+        }
+    }
+}
+
+impl std::ops::SubAssign for IVec2 {
+    #[inline]
+    fn sub_assign(&mut self, rhs: Self) {
+        *self = *self - rhs
+    }
+}
+
+impl std::ops::Mul for IVec2 {
+    type Output = Self;
+
+    #[inline]
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x * rhs.x,
+            y: self.y * rhs.y,
+        }
+    }
+}
+
+impl std::ops::MulAssign for IVec2 {
+    #[inline]
+    fn mul_assign(&mut self, rhs: Self) {
+        *self = *self * rhs
+    }
+}
+
+impl std::ops::Div for IVec2 {
+    type Output = Self;
+
+    #[inline]
+    fn div(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x / rhs.x,
+            y: self.y / rhs.y,
+        }
+    }
+}
+
+impl std::ops::DivAssign for IVec2 {
+    #[inline]
+    fn div_assign(&mut self, rhs: Self) {
+        *self = *self / rhs
+    }
+}
+
+impl std::ops::Rem for IVec2 {
+    type Output = Self;
+
+    #[inline]
+    fn rem(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x % rhs.x,
+            y: self.y % rhs.y,
+        }
+    }
+}
+
+impl std::ops::RemAssign for IVec2 {
+    #[inline]
+    fn rem_assign(&mut self, rhs: Self) {
+        *self = *self % rhs
+    }
+}
+
+impl std::ops::Mul<i32> for IVec2 {
+    type Output = Self;
+
+    #[inline]
+    fn mul(self, rhs: i32) -> Self::Output {
+        Self {
+            x: self.x * rhs,
+            y: self.y * rhs,
+        }
+    }
+}
+
+impl std::ops::MulAssign<i32> for IVec2 {
+    #[inline]
+    fn mul_assign(&mut self, rhs: i32) {
+        *self = *self * rhs
+    }
+}
+
+impl std::ops::Div<i32> for IVec2 {
+    type Output = Self;
+
+    #[inline]
+    fn div(self, rhs: i32) -> Self::Output {
+        Self {
+            x: self.x / rhs,
+            y: self.y / rhs,
+        }
+    }
+}
+
+impl std::ops::DivAssign<i32> for IVec2 {
+    #[inline]
+    fn div_assign(&mut self, rhs: i32) {
+        *self = *self / rhs
+    }
+}
+
+impl std::ops::Rem<i32> for IVec2 {
+    type Output = Self;
+
+    #[inline]
+    fn rem(self, rhs: i32) -> Self::Output {
+        Self {
+            x: self.x % rhs,
+            y: self.y % rhs,
+        }
+    }
+}
+
+impl std::ops::RemAssign<i32> for IVec2 {
+    #[inline]
+    fn rem_assign(&mut self, rhs: i32) {
+        *self = *self % rhs
+    }
+}
+
 impl std::hash::Hash for IVec2 {
     #[inline]
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {

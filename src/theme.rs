@@ -1,7 +1,7 @@
 use crate::{
     attempt,
     console::attempt::*,
-    icon_sheets::{ButtonIconSheetId, ButtonIconSheets, NodeIconSheetSet, NodeIconSheetSets},
+    icon_sheets::{ButtonIconSheetId, ButtonIconSheets, NodeIconSheetSets},
     logln,
     ui::{Orientation, Padding, Visibility},
 };
@@ -741,100 +741,31 @@ impl ThemeNodeIcons {
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
     ) -> Result<(), raylib::error::Error> {
-        attempt!("Loading node icon sheets");
+        attempt!("loading node icon sheets");
         self.sheetsets = Some(NodeIconSheetSets {
-            x8: NodeIconSheetSet {
-                basic: load_sheet(
-                    rl,
-                    thread,
-                    self.basic8x_path.as_ref(),
-                    "basic8x",
-                    include_bytes!("../assets/nodeicons/basic8x.png"),
-                )?,
-                background: load_sheet(
-                    rl,
-                    thread,
-                    self.background8x_path.as_ref(),
-                    "background8x",
-                    include_bytes!("../assets/nodeicons/background8x.png"),
-                )?,
-                highlight: load_sheet(
-                    rl,
-                    thread,
-                    self.highlight8x_path.as_ref(),
-                    "highlight8x",
-                    include_bytes!("../assets/nodeicons/highlight8x.png"),
-                )?,
-                ntd: load_sheet(
-                    rl,
-                    thread,
-                    self.ntd8x_path.as_ref(),
-                    "ntd8x",
-                    include_bytes!("../assets/nodeicons/ntd8x.png"),
-                )?,
-            },
-            x16: NodeIconSheetSet {
-                basic: load_sheet(
-                    rl,
-                    thread,
-                    self.basic16x_path.as_ref(),
-                    "basic16x",
-                    include_bytes!("../assets/nodeicons/basic16x.png"),
-                )?,
-                background: load_sheet(
-                    rl,
-                    thread,
-                    self.background16x_path.as_ref(),
-                    "background16x",
-                    include_bytes!("../assets/nodeicons/background16x.png"),
-                )?,
-                highlight: load_sheet(
-                    rl,
-                    thread,
-                    self.highlight16x_path.as_ref(),
-                    "highlight16x",
-                    include_bytes!("../assets/nodeicons/highlight16x.png"),
-                )?,
-                ntd: load_sheet(
-                    rl,
-                    thread,
-                    self.ntd16x_path.as_ref(),
-                    "ntd16x",
-                    include_bytes!("../assets/nodeicons/ntd16x.png"),
-                )?,
-            },
-            x32: NodeIconSheetSet {
-                basic: load_sheet(
-                    rl,
-                    thread,
-                    self.basic32x_path.as_ref(),
-                    "basic32x",
-                    include_bytes!("../assets/nodeicons/basic32x.png"),
-                )?,
-                background: load_sheet(
-                    rl,
-                    thread,
-                    self.background32x_path.as_ref(),
-                    "background32x",
-                    include_bytes!("../assets/nodeicons/background32x.png"),
-                )?,
-                highlight: load_sheet(
-                    rl,
-                    thread,
-                    self.highlight32x_path.as_ref(),
-                    "highlight32x",
-                    include_bytes!("../assets/nodeicons/highlight32x.png"),
-                )?,
-                ntd: load_sheet(
-                    rl,
-                    thread,
-                    self.ntd32x_path.as_ref(),
-                    "ntd32x",
-                    include_bytes!("../assets/nodeicons/ntd32x.png"),
-                )?,
-            },
-        });
-        logln!(Success, "Node icon sheets loaded.");
+            x8: load_sheet(
+                rl,
+                thread,
+                self.basic8x_path.as_ref(),
+                "8x",
+                include_bytes!("../assets/nodeicons/8x.png"),
+            )?,
+            x16: load_sheet(
+                rl,
+                thread,
+                self.basic16x_path.as_ref(),
+                "16x",
+                include_bytes!("../assets/nodeicons/16x.png"),
+            )?,
+            x32: load_sheet(
+                rl,
+                thread,
+                self.basic32x_path.as_ref(),
+                "32x",
+                include_bytes!("../assets/nodeicons/32x.png"),
+            )?,
+        })
+        .success("node icon sheets loaded");
         Ok(())
     }
 }

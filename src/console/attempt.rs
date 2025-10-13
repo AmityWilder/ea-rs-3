@@ -4,7 +4,7 @@ use std::fmt::Display;
 #[macro_export]
 macro_rules! attempt {
     ($($args:tt)+) => {
-        logln!(Attempt, "{}...", format_args!($($args)+))
+        $crate::logln!(Attempt, "{}...", format_args!($($args)+))
     };
 }
 
@@ -65,12 +65,12 @@ impl<T, E: Display> AttemptResult for Result<T, E> {
 
     #[inline]
     fn info(self, pass_msg: impl Display) -> Self {
-        self.inspect(|_| logln!(Info, "{pass_msg}"))
+        self.inspect(|_| logln!(Info, "{pass_msg}."))
     }
 
     #[inline]
     fn success(self, pass_msg: impl Display) -> Self {
-        self.inspect(|_| logln!(Success, "{pass_msg}"))
+        self.inspect(|_| logln!(Success, "{pass_msg}."))
     }
 
     #[inline]
@@ -131,18 +131,18 @@ pub trait AttemptOption: Passable {
 impl<T> AttemptOption for Option<T> {
     #[inline]
     fn info(self, pass_msg: impl Display) -> Self {
-        self.inspect(|_| logln!(Info, "{pass_msg}"))
+        self.inspect(|_| logln!(Info, "{pass_msg}."))
     }
 
     #[inline]
     fn success(self, pass_msg: impl Display) -> Self {
-        self.inspect(|_| logln!(Success, "{pass_msg}"))
+        self.inspect(|_| logln!(Success, "{pass_msg}."))
     }
 
     #[inline]
     fn warn(self, fail_msg: impl Display) -> Self {
         if self.is_none() {
-            logln!(Warning, "{fail_msg}")
+            logln!(Warning, "{fail_msg}.")
         }
         self
     }
@@ -164,7 +164,7 @@ impl<T> AttemptOption for Option<T> {
     #[inline]
     fn error(self, fail_msg: impl Display) -> Self {
         if self.is_none() {
-            logln!(Error, "{fail_msg}")
+            logln!(Error, "{fail_msg}.")
         }
         self
     }
@@ -172,8 +172,8 @@ impl<T> AttemptOption for Option<T> {
     #[inline]
     fn fatal(self, fail_msg: impl Display) -> Self::Pass {
         self.unwrap_or_else(|| {
-            logln!(Error, "{fail_msg}");
-            panic!("fatal error: {fail_msg}")
+            logln!(Error, "{fail_msg}.");
+            panic!("fatal error: {fail_msg}.")
         })
     }
 }
@@ -189,11 +189,11 @@ pub trait AttemptUnit: Passable<Pass = ()> {
 impl AttemptUnit for () {
     #[inline]
     fn success(self, pass_msg: impl Display) {
-        logln!(Success, "{pass_msg}");
+        logln!(Success, "{pass_msg}.");
     }
 
     #[inline]
     fn info(self, pass_msg: impl Display) {
-        logln!(Info, "{pass_msg}");
+        logln!(Info, "{pass_msg}.");
     }
 }

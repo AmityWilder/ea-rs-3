@@ -422,11 +422,11 @@ impl EditorTab {
                         let color = theme.special;
                         if let Some((scale, icon_width)) = scale_and_width {
                             d.draw_texture_pro(
-                                &theme.node_icons[scale][NodeIconSheetId::Basic],
+                                &theme.node_icons[scale],
                                 node.gate()
                                     .as_gate()
                                     .id()
-                                    .icon_cell_irec(icon_width)
+                                    .icon_cell_irec(NodeIconSheetId::Basic, icon_width)
                                     .as_rec(),
                                 rec,
                                 Vector2::zero(),
@@ -490,23 +490,22 @@ impl EditorTab {
                                 };
                                 let color = theme.available;
                                 if let Some((scale, icon_width)) = scale_and_width {
-                                    let src_rec = node
-                                        .gate()
-                                        .as_gate()
-                                        .id()
-                                        .icon_cell_irec(icon_width)
-                                        .as_rec();
+                                    let gate_id = node.gate().as_gate().id();
                                     d.draw_texture_pro(
-                                        &theme.node_icons[scale][NodeIconSheetId::Background],
-                                        src_rec,
+                                        &theme.node_icons[scale],
+                                        gate_id
+                                            .icon_cell_irec(NodeIconSheetId::Background, icon_width)
+                                            .as_rec(),
                                         rec,
                                         Vector2::zero(),
                                         0.0,
                                         theme.background,
                                     );
                                     d.draw_texture_pro(
-                                        &theme.node_icons[scale][NodeIconSheetId::Basic],
-                                        src_rec,
+                                        &theme.node_icons[scale],
+                                        gate_id
+                                            .icon_cell_irec(NodeIconSheetId::Basic, icon_width)
+                                            .as_rec(),
                                         rec,
                                         Vector2::zero(),
                                         0.0,
@@ -551,15 +550,12 @@ impl EditorTab {
                             theme.foreground
                         };
                         if let Some((scale, icon_width)) = scale_and_width {
-                            let src_rec = node
-                                .gate()
-                                .as_gate()
-                                .id()
-                                .icon_cell_irec(icon_width)
-                                .as_rec();
+                            let gate_id = node.gate().as_gate().id();
                             d.draw_texture_pro(
-                                &theme.node_icons[scale][NodeIconSheetId::Background],
-                                src_rec,
+                                &theme.node_icons[scale],
+                                gate_id
+                                    .icon_cell_irec(NodeIconSheetId::Background, icon_width)
+                                    .as_rec(),
                                 rec,
                                 Vector2::zero(),
                                 0.0,
@@ -567,8 +563,10 @@ impl EditorTab {
                             );
                             if self.selection.contains(node.id()) {
                                 d.draw_texture_pro(
-                                    &theme.node_icons[scale][NodeIconSheetId::Highlight],
-                                    src_rec,
+                                    &theme.node_icons[scale],
+                                    gate_id
+                                        .icon_cell_irec(NodeIconSheetId::Highlight, icon_width)
+                                        .as_rec(),
                                     rec,
                                     Vector2::zero(),
                                     0.0,
@@ -576,8 +574,10 @@ impl EditorTab {
                                 );
                             }
                             d.draw_texture_pro(
-                                &theme.node_icons[scale][NodeIconSheetId::Basic],
-                                src_rec,
+                                &theme.node_icons[scale],
+                                gate_id
+                                    .icon_cell_irec(NodeIconSheetId::Basic, icon_width)
+                                    .as_rec(),
                                 rec,
                                 Vector2::zero(),
                                 0.0,
@@ -607,8 +607,10 @@ impl EditorTab {
                                 ),
                             } {
                                 d.draw_texture_pro(
-                                    &theme.node_icons[scale][NodeIconSheetId::Ntd],
-                                    src_rec,
+                                    &theme.node_icons[scale],
+                                    gate_id
+                                        .icon_cell_irec(NodeIconSheetId::Ntd, icon_width)
+                                        .as_rec(),
                                     rec,
                                     Vector2::zero(),
                                     0.0,
@@ -647,11 +649,11 @@ impl EditorTab {
                 let color = theme.interact;
                 if let Some((scale, icon_width)) = scale_and_width {
                     d.draw_texture_pro(
-                        &theme.node_icons[scale][NodeIconSheetId::Highlight],
+                        &theme.node_icons[scale],
                         node.gate()
                             .as_gate()
                             .id()
-                            .icon_cell_irec(icon_width)
+                            .icon_cell_irec(NodeIconSheetId::Highlight, icon_width)
                             .as_rec(),
                         rec,
                         Vector2::zero(),
