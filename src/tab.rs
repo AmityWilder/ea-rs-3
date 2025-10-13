@@ -232,18 +232,18 @@ impl EditorTab {
 
                 Tool::Erase {} => {
                     if input.primary.is_starting()
-                        && let Some(&id) = graph.find_node_at(pos)
+                        && let Some(&id) = graph.find_node_at(Graph::world_to_grid(pos))
                     {
-                        graph
-                            .destroy_node(&id, false)
-                            .error("cannot reach this branch if graph did not contain the node");
+                        graph.destroy_node(&id, false).issue_error(
+                            "cannot reach this branch if graph did not contain the node",
+                        );
                         is_dirty = true;
                     }
                 }
 
                 Tool::Edit { target } => {
                     if input.secondary.is_starting()
-                        && let Some(&id) = graph.find_node_at(pos)
+                        && let Some(&id) = graph.find_node_at(Graph::world_to_grid(pos))
                         && let Some(node) =
                             graph.node_mut(&id).error("hovered node should be valid")
                     {
@@ -251,7 +251,7 @@ impl EditorTab {
                     }
 
                     if input.primary.is_starting()
-                        && let Some(&id) = graph.find_node_at(pos)
+                        && let Some(&id) = graph.find_node_at(Graph::world_to_grid(pos))
                     {
                         *target = Some(EditDragging {
                             temp_pos: Vector2::default(),
@@ -278,7 +278,7 @@ impl EditorTab {
 
                 Tool::Interact {} => {
                     if input.primary.is_starting()
-                        && let Some(&id) = graph.find_node_at(pos)
+                        && let Some(&id) = graph.find_node_at(Graph::world_to_grid(pos))
                         && graph.is_inputless(&id)
                     {
                         let node = &mut graph[&id];
@@ -435,6 +435,22 @@ impl EditorTab {
                             );
                         } else {
                             d.draw_rectangle_rec(rec, color);
+                        }
+                    } else if let Some(hovered) =
+                        graph.find_node_at(Graph::world_to_grid(input.cursor.as_ivec2()))
+                    {
+                        for (_, wire, flow) in graph.wires_of(hovered) {
+                            wire.draw(
+                                &mut d,
+                                &graph,
+                                Vector2::zero(),
+                                match flow {
+                                    Flow::Input => theme.input,
+                                    Flow::Output => theme.output,
+                                    Flow::Loop => todo!(),
+                                },
+                            )
+                            .fatal("all wires should be valid");
                         }
                     }
                 }
@@ -622,10 +638,8 @@ impl EditorTab {
                         }
                         if input.show_details {
                             let order = graph
-                                .eval_order()
-                                .iter()
-                                .position(|id| id == node.id())
-                                .fatal("every node should have an order");
+                                .eval_order_of(node.id())
+                                .fatal("all nodes returned by node_iter() should be of the graph the iterator borrows");
                             theme.general_font.draw_text(
                                 &mut d,
                                 order.to_string().as_str(),
@@ -646,11 +660,11 @@ impl EditorTab {
                 Tool::Interact {} => {}
             }
 
-            if let Some(id) = graph.find_node_at(
+            if let Some(id) = graph.find_node_at(Graph::world_to_grid(
                 self.screen_to_world(input.cursor)
                     .as_ivec2()
                     .snap(GRID_SIZE.into()),
-            ) && (!matches!(toolpane.tool, Tool::Interact { .. }) || graph.is_inputless(id))
+            )) && (!matches!(toolpane.tool, Tool::Interact { .. }) || graph.is_inputless(id))
             {
                 let node = &graph[id];
                 let node_position = node.position().as_vec2();

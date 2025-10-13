@@ -230,6 +230,7 @@ pub struct Graph {
     wires: FxHashMap<WireId, Wire>,
     node_grid: FxHashMap<IVec2, NodeId>,
     eval_order: Vec<NodeId>,
+    eval_order_dict: FxHashMap<NodeId, usize>,
     is_eval_order_dirty: bool,
 }
 
@@ -290,6 +291,17 @@ type IOLessNodeIter<'a, F> =
 type NodesIter<'a> = std::collections::hash_map::Values<'a, NodeId, Node>;
 type WiresIter<'a> = std::collections::hash_map::Values<'a, WireId, Wire>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NotOfGraphError(());
+
+impl std::fmt::Display for NotOfGraphError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        "the given ID is not an element of this graph; it may belong to another graph, or may have been removed".fmt(f)
+    }
+}
+
+impl std::error::Error for NotOfGraphError {}
+
 impl Graph {
     pub fn new(id: GraphId) -> Self {
         Self {
@@ -300,16 +312,22 @@ impl Graph {
             wires: FxHashMap::default(),
             node_grid: FxHashMap::default(),
             eval_order: Vec::new(),
+            eval_order_dict: FxHashMap::default(),
             is_eval_order_dirty: false,
         }
     }
 
     #[inline]
-    fn world_to_grid(world_pos: IVec2) -> IVec2 {
+    pub const fn world_to_grid(world_pos: IVec2) -> IVec2 {
         IVec2::new(
-            world_pos.x / i32::from(GRID_SIZE),
-            world_pos.y / i32::from(GRID_SIZE),
+            world_pos.x / GRID_SIZE as i32,
+            world_pos.y / GRID_SIZE as i32,
         )
+    }
+
+    #[inline]
+    pub const fn grid_to_world(grid_pos: IVec2) -> IVec2 {
+        IVec2::new(grid_pos.x * GRID_SIZE as i32, grid_pos.y * GRID_SIZE as i32)
     }
 
     #[inline]
@@ -317,9 +335,10 @@ impl Graph {
         &self.id
     }
 
+    /// Position is expected to be in worldspace, but not gridspace
     #[inline]
-    pub fn find_node_at(&self, pos: IVec2) -> Option<&NodeId> {
-        self.node_grid.get(&Self::world_to_grid(pos))
+    pub fn find_node_at(&self, grid_pos: IVec2) -> Option<&NodeId> {
+        self.node_grid.get(&grid_pos)
     }
 
     #[inline]
@@ -400,24 +419,27 @@ impl Graph {
         })
     }
 
-    /// Returns [`None`] if `id` is not a node in this graph.
-    #[must_use]
-    pub fn destroy_node(&mut self, id: &NodeId, soft: bool) -> Option<Node> {
-        self.nodes.remove(id).inspect(|node| {
-            _ = self
-                .node_grid
-                .remove(&Self::world_to_grid(node.position))
-                .filter(|x| x == id)
-                .error("nodes should not be moved without updating their position in node_grid");
-            if soft {
-                logln!(Error, "not yet implemented");
-            } else {
-                self.wires
-                    .retain(|_, wire| &wire.src != id && &wire.dst != id);
-            }
-            self.is_eval_order_dirty = true;
-            logln!(Info, "destroy node {}", NodeRef(self.id, *id));
-        })
+    pub fn destroy_node(&mut self, id: &NodeId, soft: bool) -> Result<Node, NotOfGraphError> {
+        self.nodes
+            .remove(id)
+            .inspect(|node| {
+                _ = self
+                    .node_grid
+                    .remove(&Self::world_to_grid(node.position))
+                    .filter(|x| x == id)
+                    .error(
+                        "nodes should not be moved without updating their position in node_grid",
+                    );
+                if soft {
+                    logln!(Error, "not yet implemented");
+                } else {
+                    self.wires
+                        .retain(|_, wire| &wire.src != id && &wire.dst != id);
+                }
+                self.is_eval_order_dirty = true;
+            })
+            .info(format_args!("destroy node {}", NodeRef(self.id, *id)))
+            .ok_or(NotOfGraphError(()))
     }
 
     /// # Errors
@@ -603,6 +625,9 @@ impl Graph {
             eval_order.extend(self.rev_eval_order_iter());
             eval_order.reverse();
             self.eval_order = eval_order;
+            self.eval_order_dict.clear();
+            self.eval_order_dict
+                .extend(self.eval_order.iter().enumerate().map(|(n, &id)| (id, n)));
             self.is_eval_order_dirty = false;
             assert_eq!(
                 self.eval_order.len(),
@@ -615,6 +640,11 @@ impl Graph {
     #[inline]
     pub const fn eval_order(&self) -> &[NodeId] {
         self.eval_order.as_slice()
+    }
+
+    #[inline]
+    pub fn eval_order_of(&self, id: &NodeId) -> Option<usize> {
+        self.eval_order_dict.get(id).copied()
     }
 
     pub fn evaluate(&mut self) {
@@ -733,6 +763,7 @@ mod tests {
             next_node_id,
             next_wire_id,
             eval_order: Vec::new(),
+            eval_order_dict: FxHashMap::default(),
             is_eval_order_dirty: true,
         }
     }

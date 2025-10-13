@@ -181,6 +181,7 @@ impl From<GraphTemplate> for Graph {
             nodes,
             wires,
             eval_order: Vec::default(),
+            eval_order_dict: FxHashMap::default(),
             is_eval_order_dirty: true,
         }
     }
