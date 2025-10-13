@@ -1,9 +1,15 @@
-use super::{Graph, node::NodeId};
+use super::{
+    Graph, NotOfGraphError,
+    node::{Node, NodeId},
+};
 use raylib::prelude::*;
 use serde_derive::{Deserialize, Serialize};
+use std::sync::nonpoison::Mutex;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WireId(pub(super) u128);
+
+static NEXT_WIRE_ID: Mutex<WireId> = Mutex::new(WireId(0));
 
 /// Defaults to [`Self::INVALID`]
 impl Default for WireId {
@@ -46,6 +52,16 @@ impl WireId {
                 Some(id)
             }
         }
+    }
+
+    #[inline]
+    pub fn next() -> Option<Self> {
+        NEXT_WIRE_ID.lock().step()
+    }
+
+    #[inline]
+    pub fn iter() -> std::iter::FromFn<fn() -> Option<Self>> {
+        std::iter::from_fn(Self::next)
     }
 }
 
@@ -145,6 +161,24 @@ impl Wire {
         &self.dst
     }
 
+    #[inline]
+    pub fn nodes<'a>(&self, graph: &'a Graph) -> Result<(&'a Node, &'a Node), NotOfGraphError> {
+        graph
+            .nodes
+            .get(&self.src)
+            .zip(graph.nodes.get(&self.dst))
+            .ok_or(NotOfGraphError)
+    }
+
+    #[inline]
+    pub fn nodes_mut<'a: 'b, 'b>(
+        &'b mut self,
+        graph: &'a mut Graph,
+    ) -> Result<(&'a mut Node, &'a mut Node), NotOfGraphError> {
+        let [src, dst] = graph.nodes.get_disjoint_mut([&self.src, &self.dst]);
+        src.zip(dst).ok_or(NotOfGraphError)
+    }
+
     pub fn draw_immediate<D: RaylibDraw>(
         d: &mut D,
         start_pos: Vector2,
@@ -165,14 +199,13 @@ impl Wire {
     }
 
     /// Returns [`None`] if wire is not valid for the graph
-    #[must_use]
     pub fn draw<D: RaylibDraw>(
         &self,
         d: &mut D,
         graph: &Graph,
         offset: Vector2,
         color: Color,
-    ) -> Option<()> {
+    ) -> Result<(), NotOfGraphError> {
         let (start, end) = graph.get_wire_nodes(self)?;
         Self::draw_immediate(
             d,
@@ -181,6 +214,6 @@ impl Wire {
             self.elbow,
             color,
         );
-        Some(())
+        Ok(())
     }
 }

@@ -1,6 +1,6 @@
 use crate::{
     GRID_SIZE,
-    console::{GateRef, GraphRef, NodeRef, PositionRef, attempt::*},
+    console::{GateRef, NodeRef, PositionRef, WireRef, attempt::*},
     graph::{
         node::{Gate, Node, NodeId},
         wire::{Elbow, Flow, Wire, WireId},
@@ -12,8 +12,10 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use serde_derive::Deserialize;
 use std::{
     collections::VecDeque,
-    marker::PhantomData,
-    sync::{Arc, nonpoison::RwLock},
+    sync::{
+        Arc,
+        nonpoison::{Mutex, RwLock},
+    },
 };
 
 pub mod eag;
@@ -22,6 +24,8 @@ pub mod wire;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GraphId(u32);
+
+static NEXT_GRAPH_ID: Mutex<GraphId> = Mutex::new(GraphId(0));
 
 /// Defaults to [`Self::INVALID`]
 impl Default for GraphId {
@@ -65,6 +69,16 @@ impl GraphId {
             }
         }
     }
+
+    #[inline]
+    pub fn next() -> Option<Self> {
+        NEXT_GRAPH_ID.lock().step()
+    }
+
+    #[inline]
+    pub fn iter() -> std::iter::FromFn<fn() -> Option<Self>> {
+        std::iter::from_fn(Self::next)
+    }
 }
 
 macro_rules! dbg_ord_prinln {
@@ -84,147 +98,9 @@ macro_rules! dbg_ord_prinln {
     }};
 }
 
-#[derive(Debug, Clone)]
-struct RevEvalOrderIter<'a> {
-    adj_in: FxHashMap<NodeId, FxHashSet<NodeId>>,
-    adj_out: FxHashMap<NodeId, FxHashSet<NodeId>>,
-    queue: VecDeque<NodeId>,
-    discovered: FxHashSet<NodeId>,
-    inputless: FxHashSet<NodeId>,
-    all_nodes: FxHashSet<NodeId>,
-    _marker: PhantomData<&'a Graph>,
-}
-
-impl<'a> RevEvalOrderIter<'a> {
-    fn new(g: &'a Graph) -> Self {
-        let (adj_in, adj_out) = g.adjacent();
-        dbg_ord_prinln!("  adj_in: {adj_in:?}");
-        dbg_ord_prinln!("  adj_out: {adj_out:?}");
-        let inputless = g.inputless_nodes().collect();
-        dbg_ord_prinln!("  inputless: {inputless:?}");
-        let queue: VecDeque<_> = g.outputless_nodes().collect();
-        dbg_ord_prinln!("  queue (outputless): {queue:?}");
-        let discovered = queue.iter().copied().collect();
-        dbg_ord_prinln!("  discovered: {discovered:?}");
-        Self {
-            adj_in,
-            adj_out,
-            queue,
-            discovered,
-            inputless,
-            all_nodes: g.nodes.keys().copied().collect(),
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl Iterator for RevEvalOrderIter<'_> {
-    type Item = NodeId;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            dbg_ord_prinln!("  loop");
-            dbg_ord_prinln!("    bfs...");
-            dbg_ord_prinln!("      queue: {:?}", self.queue);
-            // traverse with BFS starting at the end.
-            if let Some(v) = self
-                .queue
-                .pop_front()
-                .inspect(dbg_ord_prinln!(v => "      v: {v:?}"))
-            {
-                self.queue.extend(
-                    self.adj_in
-                        .get(&v)
-                        .into_iter()
-                        .flatten()
-                        .copied()
-                        .filter(|&w| self.discovered.insert(w))
-                        .inspect(dbg_ord_prinln!(w => "        w: {w:?}")),
-                );
-                dbg_ord_prinln!("      queue: {:?}", self.queue);
-                return Some(v);
-            }
-
-            // some subgraphs may end in a cycle. find furthest nodes with DFS and use those as endpoints.
-            dbg_ord_prinln!("    dfs...");
-            let root_discovered = self.discovered.clone();
-            for root in self.inputless.difference(&root_discovered).copied() {
-                let mut dfs_discovered = root_discovered.clone();
-                let mut stack = vec![root];
-                dbg_ord_prinln!("      stack (undiscovered inputless): {:?}", self.stack);
-                if !stack.is_empty() {
-                    while let Some(v) = stack.pop().inspect(dbg_ord_prinln!(v => "      v: {v:?}"))
-                    {
-                        if dfs_discovered.insert(v) {
-                            stack.extend(
-                                self.adj_out
-                                    .get(&v)
-                                    .into_iter()
-                                    .flatten()
-                                    .copied()
-                                    .inspect(dbg_ord_prinln!(w => "        w: {w:?}")),
-                            );
-                            dbg_ord_prinln!("      stack: {:?}", self.stack);
-                            let all_discovered = self
-                                .adj_out
-                                .get(&v)
-                                .is_some_and(|ws| ws.difference(&dfs_discovered).next().is_none());
-                            if all_discovered {
-                                dbg_ord_prinln!("      all w are already discovered; dead end");
-                                // end of path
-                                self.discovered.insert(v);
-                                self.queue.push_back(v);
-                                dbg_ord_prinln!("      queue: {:?}", self.queue);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // some subgraphs both start and end in a cycle. choose an endpoint arbitrarily.
-            if self.queue.is_empty() {
-                dbg_ord_prinln!("    arbitrary...");
-                if let Some(arbitrary) = self
-                    .all_nodes
-                    .difference(&self.discovered)
-                    .next()
-                    .copied()
-                    .inspect(dbg_ord_prinln!(v => "      v: {v:?}"))
-                {
-                    self.discovered.insert(arbitrary);
-                    self.queue.push_back(arbitrary);
-                    dbg_ord_prinln!("      queue: {:?}", self.queue);
-                } else {
-                    dbg_ord_prinln!("  no nodes remain");
-                    break;
-                }
-            }
-        }
-        None
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let n = self.len();
-        (n, Some(n))
-    }
-}
-
-impl ExactSizeIterator for RevEvalOrderIter<'_> {
-    #[inline]
-    fn len(&self) -> usize {
-        self.all_nodes.len()
-    }
-}
-
-impl std::iter::FusedIterator for RevEvalOrderIter<'_> {}
-
 #[derive(Debug, Deserialize)]
 #[serde(from = "eag::GraphTemplate")]
 pub struct Graph {
-    next_node_id: NodeId,
-    next_wire_id: WireId,
     id: GraphId,
     nodes: FxHashMap<NodeId, Node>,
     wires: FxHashMap<WireId, Wire>,
@@ -292,7 +168,7 @@ type NodesIter<'a> = std::collections::hash_map::Values<'a, NodeId, Node>;
 type WiresIter<'a> = std::collections::hash_map::Values<'a, WireId, Wire>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NotOfGraphError(());
+pub struct NotOfGraphError;
 
 impl std::fmt::Display for NotOfGraphError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -302,11 +178,37 @@ impl std::fmt::Display for NotOfGraphError {
 
 impl std::error::Error for NotOfGraphError {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct AlreadyExistsError<T: ?Sized>(pub T);
+
+impl<T> std::ops::Deref for AlreadyExistsError<T> {
+    type Target = T;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> std::ops::DerefMut for AlreadyExistsError<T> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T> std::fmt::Display for AlreadyExistsError<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        "the graph already contains a matching element".fmt(f)
+    }
+}
+
+impl<T: std::fmt::Debug> std::error::Error for AlreadyExistsError<T> {}
+
 impl Graph {
     pub fn new(id: GraphId) -> Self {
         Self {
-            next_node_id: NodeId(0),
-            next_wire_id: WireId(0),
             id,
             nodes: FxHashMap::default(),
             wires: FxHashMap::default(),
@@ -335,44 +237,55 @@ impl Graph {
         &self.id
     }
 
-    /// Position is expected to be in worldspace, but not gridspace
     #[inline]
-    pub fn find_node_at(&self, grid_pos: IVec2) -> Option<&NodeId> {
-        self.node_grid.get(&grid_pos)
+    pub fn node_at(&self, grid_pos: IVec2) -> Option<&Node> {
+        self.node_grid.get(&grid_pos).map(|id| &self[id])
     }
 
     #[inline]
-    pub fn node(&self, id: &NodeId) -> Option<&Node> {
-        self.nodes.get(id)
+    pub fn node_mut_at(&mut self, grid_pos: IVec2) -> Option<&mut Node> {
+        match self.node_grid.get(&grid_pos) {
+            Some(&id) => Some(&mut self[&id]),
+            None => None,
+        }
     }
 
     #[inline]
-    pub fn node_mut(&mut self, id: &NodeId) -> Option<&mut Node> {
-        self.nodes.get_mut(id)
+    pub fn node(&self, id: &NodeId) -> Result<&Node, NotOfGraphError> {
+        self.nodes.get(id).ok_or(NotOfGraphError)
     }
 
     #[inline]
-    pub fn wire(&self, id: &WireId) -> Option<&Wire> {
-        self.wires.get(id)
+    pub fn node_mut(&mut self, id: &NodeId) -> Result<&mut Node, NotOfGraphError> {
+        self.nodes.get_mut(id).ok_or(NotOfGraphError)
     }
 
     #[inline]
-    pub fn wire_mut(&mut self, id: &WireId) -> Option<&mut Wire> {
-        self.wires.get_mut(id)
+    pub fn wire(&self, id: &WireId) -> Result<&Wire, NotOfGraphError> {
+        self.wires.get(id).ok_or(NotOfGraphError)
+    }
+
+    #[inline]
+    pub fn wire_mut(&mut self, id: &WireId) -> Result<&mut Wire, NotOfGraphError> {
+        self.wires.get_mut(id).ok_or(NotOfGraphError)
     }
 
     /// Returns [`Err`] containing the existing node's ID if the position is already occupied.
-    pub fn create_node(&mut self, gate: Gate, position: IVec2) -> Result<&mut Node, NodeId> {
-        let id = self.next_node_id.step().fatal("out of IDs");
+    pub fn create_node(
+        &mut self,
+        gate: Gate,
+        position: IVec2,
+    ) -> Result<&mut Node, AlreadyExistsError<&mut Node>> {
+        let id = NodeId::next().fatal("out of IDs");
         let grid_pos = Self::world_to_grid(position);
         if let Some(&existing) = self.node_grid.get(&grid_pos) {
             logln!(
                 Info,
                 "node at {} already exists: {}",
                 PositionRef(position),
-                NodeRef(self.id, existing),
+                NodeRef(existing),
             );
-            Err(existing)
+            Err(AlreadyExistsError(&mut self[&existing]))
         } else {
             self.node_grid.insert(grid_pos, id);
             let node = self
@@ -386,37 +299,43 @@ impl Graph {
                 Info,
                 "create {} node {} at {}",
                 GateRef(gate),
-                NodeRef(self.id, *node.id()),
+                NodeRef(*node.id()),
                 PositionRef(position),
             );
             Ok(node)
         }
     }
 
-    /// Returns [`None`] if `id` is not a node in this graph.
-    pub fn translate_node(&mut self, id: &NodeId, new_position: IVec2) -> Option<()> {
-        self.nodes.get_mut(id).map(|node| {
-            let old_grid_position = Self::world_to_grid(node.position);
-            let new_grid_position = Self::world_to_grid(new_position);
-            if old_grid_position != new_grid_position {
-                self.node_grid
+    pub fn translate_node(
+        &mut self,
+        id: &NodeId,
+        new_position: IVec2,
+    ) -> Result<(), NotOfGraphError> {
+        self.nodes
+            .get_mut(id)
+            .map(|node| {
+                let old_grid_position = Self::world_to_grid(node.position);
+                let new_grid_position = Self::world_to_grid(new_position);
+                if old_grid_position != new_grid_position {
+                    self.node_grid
                     .remove(&old_grid_position)
                     .filter(|x| x == id)
                     .error(
                         "nodes should not be moved without updating their position in node_grid",
                     );
-                self.node_grid.insert(new_grid_position, *id);
+                    self.node_grid.insert(new_grid_position, *id);
 
-                let old_position = std::mem::replace(&mut node.position, new_position);
-                logln!(
-                    Info,
-                    "move node {} from {} to {}",
-                    NodeRef(self.id, *id),
-                    PositionRef(old_position),
-                    PositionRef(new_position),
-                );
-            }
-        })
+                    let old_position = std::mem::replace(&mut node.position, new_position);
+                    logln!(
+                        Info,
+                        "move node {} from {} to {}",
+                        NodeRef(*id),
+                        PositionRef(old_position),
+                        PositionRef(new_position),
+                    );
+                }
+            })
+            .ok_or(NotOfGraphError)
     }
 
     pub fn destroy_node(&mut self, id: &NodeId, soft: bool) -> Result<Node, NotOfGraphError> {
@@ -438,8 +357,8 @@ impl Graph {
                 }
                 self.is_eval_order_dirty = true;
             })
-            .info(format_args!("destroy node {}", NodeRef(self.id, *id)))
-            .ok_or(NotOfGraphError(()))
+            .some_info(format_args!("destroy node {}", NodeRef(*id)))
+            .ok_or(NotOfGraphError)
     }
 
     /// # Errors
@@ -452,26 +371,16 @@ impl Graph {
         elbow: Elbow,
         src: NodeId,
         dst: NodeId,
-    ) -> Result<&mut Wire, WireId> {
+    ) -> Result<&mut Wire, AlreadyExistsError<&mut Wire>> {
         assert_ne!(src, dst, "cannot wire a node directly to itself");
-        if let Some(existing) = self
+        if let Some((&existing, _)) = self
             .wires
             .iter()
             .find(|(_, wire)| wire.src == src && wire.dst == dst)
-            .map(|(id, _)| *id)
         {
-            let graph_ref = GraphRef(self.id);
-            logln!(
-                Info,
-                "wire from {} to {} already exists: wire {}",
-                graph_ref.node(src),
-                graph_ref.node(dst),
-                graph_ref.wire(existing),
-            );
-            Err(existing)
+            Err(AlreadyExistsError(&mut self[&existing]))
         } else {
-            let graph_ref = GraphRef(self.id);
-            let id = self.next_wire_id.step().fatal("out of IDs");
+            let id = WireId::next().fatal("out of IDs");
             let wire = self
                 .wires
                 .entry(id)
@@ -481,21 +390,23 @@ impl Graph {
             logln!(
                 Info,
                 "create wire {} from {} to {}",
-                graph_ref.wire(*wire.id()),
-                graph_ref.node(src),
-                graph_ref.node(dst),
+                WireRef(*wire.id()),
+                NodeRef(src),
+                NodeRef(dst),
             );
             Ok(wire)
         }
     }
 
     /// Returns [`None`] if `id` is not a wire in this graph.
-    #[must_use]
     #[inline]
-    pub fn destroy_wire(&mut self, id: &WireId) -> Option<Wire> {
-        self.wires.remove(id).inspect(|_| {
-            self.is_eval_order_dirty = true;
-        })
+    pub fn destroy_wire(&mut self, id: &WireId) -> Result<Wire, NotOfGraphError> {
+        self.wires
+            .remove(id)
+            .inspect(|_| {
+                self.is_eval_order_dirty = true;
+            })
+            .ok_or(NotOfGraphError)
     }
 
     #[inline]
@@ -509,50 +420,57 @@ impl Graph {
     }
 
     #[inline]
-    pub fn wires_to<'a: 'b, 'b>(
-        &'a self,
-        node: &'b NodeId,
-    ) -> impl Iterator<Item = (&'a WireId, &'a Wire)> {
-        self.wires.iter().filter(move |(_, wire)| &wire.dst == node)
+    pub fn inputs_to<'a>(&'a self, node: &NodeId) -> impl Iterator<Item = &'a Wire> {
+        self.wires.values().filter(move |wire| &wire.dst == node)
     }
 
     #[inline]
-    pub fn wires_from<'a: 'b, 'b>(
-        &'a self,
-        node: &'b NodeId,
-    ) -> impl Iterator<Item = (&'a WireId, &'a Wire)> {
-        self.wires.iter().filter(move |(_, wire)| &wire.src == node)
+    pub fn outputs_from<'a>(&'a self, node: &NodeId) -> impl Iterator<Item = &'a Wire> {
+        self.wires.values().filter(move |wire| &wire.src == node)
     }
 
     #[inline]
-    pub fn wires_of<'a: 'b, 'b>(
-        &'a self,
-        node: &'b NodeId,
-    ) -> impl Iterator<Item = (&'a WireId, &'a Wire, Flow)> {
-        self.wires.iter().filter_map(move |(id, wire)| {
-            match (&wire.src == node, &wire.dst == node) {
-                (true, true) => Some((id, wire, Flow::Loop)),
-                (true, false) => Some((id, wire, Flow::Output)),
-                (false, true) => Some((id, wire, Flow::Input)),
+    pub fn wires_of<'a>(&'a self, node: &NodeId) -> impl Iterator<Item = (&'a Wire, Flow)> {
+        self.wires
+            .values()
+            .filter_map(move |wire| match (&wire.src == node, &wire.dst == node) {
+                (true, true) => Some((wire, Flow::Loop)),
+                (true, false) => Some((wire, Flow::Output)),
+                (false, true) => Some((wire, Flow::Input)),
                 (false, false) => None,
-            }
-        })
+            })
     }
 
     /// Returns [`None`] if the start or end of the wire is not in the graph.
     #[inline]
-    pub fn get_wire_nodes<'a>(&'a self, wire: &Wire) -> Option<(&'a Node, &'a Node)> {
-        self.nodes.get(&wire.src).zip(self.nodes.get(&wire.dst))
+    pub fn get_wire_nodes<'a>(
+        &'a self,
+        wire: &Wire,
+    ) -> Result<(&'a Node, &'a Node), NotOfGraphError> {
+        self.nodes
+            .get(&wire.src)
+            .zip(self.nodes.get(&wire.dst))
+            .ok_or(NotOfGraphError)
+    }
+
+    /// Returns [`None`] if the start or end of the wire is not in the graph.
+    #[inline]
+    pub fn get_wire_nodes_mut<'a: 'b, 'b>(
+        &'a mut self,
+        wire: &'b Wire,
+    ) -> Result<(&'a mut Node, &'a mut Node), NotOfGraphError> {
+        let [src, dst] = self.nodes.get_disjoint_mut([&wire.src, &wire.dst]);
+        src.zip(dst).ok_or(NotOfGraphError)
     }
 
     #[inline]
     pub fn is_inputless(&self, node: &NodeId) -> bool {
-        self.wires_to(node).next().is_none()
+        self.inputs_to(node).next().is_none()
     }
 
     #[inline]
     pub fn is_outputless(&self, node: &NodeId) -> bool {
-        self.wires_from(node).next().is_none()
+        self.outputs_from(node).next().is_none()
     }
 
     #[inline]
@@ -612,22 +530,104 @@ impl Graph {
         self.is_eval_order_dirty
     }
 
-    #[inline]
-    fn rev_eval_order_iter(&self) -> RevEvalOrderIter<'_> {
-        RevEvalOrderIter::new(self)
-    }
-
     pub fn refresh_eval_order(&mut self) {
         if self.is_eval_order_dirty {
             dbg_ord_prinln!("refreshing...");
-            let mut eval_order = std::mem::take(&mut self.eval_order);
-            eval_order.clear();
-            eval_order.extend(self.rev_eval_order_iter());
-            eval_order.reverse();
-            self.eval_order = eval_order;
             self.eval_order_dict.clear();
-            self.eval_order_dict
-                .extend(self.eval_order.iter().enumerate().map(|(n, &id)| (id, n)));
+            self.eval_order.clear();
+            self.eval_order.reserve(self.nodes.len());
+
+            let (adj_in, adj_out) = self.adjacent();
+            dbg_ord_prinln!("  adj_in: {adj_in:?}");
+            dbg_ord_prinln!("  adj_out: {adj_out:?}");
+            let inputless: FxHashSet<_> = self.inputless_nodes().collect();
+            dbg_ord_prinln!("  inputless: {inputless:?}");
+            let mut queue: VecDeque<_> = self.outputless_nodes().map(|x| (0, x)).collect();
+            dbg_ord_prinln!("  queue (outputless): {queue:?}");
+            let mut discovered: FxHashSet<_> = queue.iter().map(|(_, x)| x).copied().collect();
+            dbg_ord_prinln!("  discovered: {discovered:?}");
+            let all_nodes: FxHashSet<_> = self.nodes.keys().copied().collect();
+
+            loop {
+                dbg_ord_prinln!("  loop");
+                dbg_ord_prinln!("    bfs...");
+                dbg_ord_prinln!("      queue: {queue:?}");
+                // traverse with BFS starting at the end.
+                while let Some((n, v)) = queue
+                    .pop_front()
+                    .inspect(dbg_ord_prinln!(v => "      v: {v:?}"))
+                {
+                    queue.extend(
+                        adj_in
+                            .get(&v)
+                            .into_iter()
+                            .flatten()
+                            .copied()
+                            .filter(|&w| discovered.insert(w))
+                            .map(|w| (n + 1, w))
+                            .inspect(dbg_ord_prinln!(w => "        w: {w:?}")),
+                    );
+                    dbg_ord_prinln!("      queue: {queue:?}");
+                    self.eval_order.push(v);
+                    self.eval_order_dict.insert(v, n);
+                }
+
+                // some subgraphs may end in a cycle. find furthest nodes with DFS and use those as endpoints.
+                dbg_ord_prinln!("    dfs...");
+                let root_discovered = discovered.clone();
+                for root in inputless.difference(&root_discovered).copied() {
+                    let mut dfs_discovered = root_discovered.clone();
+                    let mut stack = vec![root];
+                    dbg_ord_prinln!("      stack (undiscovered inputless): {stack:?}");
+                    if !stack.is_empty() {
+                        while let Some(v) =
+                            stack.pop().inspect(dbg_ord_prinln!(v => "      v: {v:?}"))
+                        {
+                            if dfs_discovered.insert(v) {
+                                stack.extend(
+                                    adj_out
+                                        .get(&v)
+                                        .into_iter()
+                                        .flatten()
+                                        .copied()
+                                        .inspect(dbg_ord_prinln!(w => "        w: {w:?}")),
+                                );
+                                dbg_ord_prinln!("      stack: {stack:?}");
+                                let all_discovered = adj_out.get(&v).is_some_and(|ws| {
+                                    ws.difference(&dfs_discovered).next().is_none()
+                                });
+                                if all_discovered {
+                                    dbg_ord_prinln!("      all w are already discovered; dead end");
+                                    // end of path
+                                    discovered.insert(v);
+                                    queue.push_back((0, v));
+                                    dbg_ord_prinln!("      queue: {queue:?}");
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // some subgraphs both start and end in a cycle. choose an endpoint arbitrarily.
+                if queue.is_empty() {
+                    dbg_ord_prinln!("    arbitrary...");
+                    if let Some(arbitrary) = all_nodes
+                        .difference(&discovered)
+                        .next()
+                        .copied()
+                        .inspect(dbg_ord_prinln!(v => "      v: {v:?}"))
+                    {
+                        discovered.insert(arbitrary);
+                        queue.push_back((0, arbitrary));
+                        dbg_ord_prinln!("      queue: {queue:?}");
+                    } else {
+                        dbg_ord_prinln!("  no nodes remain");
+                        break;
+                    }
+                }
+            }
+
+            self.eval_order.reverse();
             self.is_eval_order_dirty = false;
             assert_eq!(
                 self.eval_order.len(),
@@ -643,8 +643,8 @@ impl Graph {
     }
 
     #[inline]
-    pub fn eval_order_of(&self, id: &NodeId) -> Option<usize> {
-        self.eval_order_dict.get(id).copied()
+    pub fn eval_order_of(&self, id: &NodeId) -> Result<usize, NotOfGraphError> {
+        self.eval_order_dict.get(id).ok_or(NotOfGraphError).copied()
     }
 
     pub fn evaluate(&mut self) {
@@ -760,8 +760,6 @@ mod tests {
             nodes,
             wires,
             node_grid: FxHashMap::default(),
-            next_node_id,
-            next_wire_id,
             eval_order: Vec::new(),
             eval_order_dict: FxHashMap::default(),
             is_eval_order_dirty: true,

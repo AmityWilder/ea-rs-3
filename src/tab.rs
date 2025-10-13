@@ -2,7 +2,7 @@ use crate::{
     GRID_SIZE, IVec2, Theme,
     console::attempt::*,
     graph::{
-        Graph,
+        AlreadyExistsError, Graph,
         node::{GateInstance, NodeId},
         wire::{Flow, Wire},
     },
@@ -204,22 +204,41 @@ impl EditorTab {
                                 // new node
                                 let new_node_id = *new_node.id();
                                 if let Some(current_node) = current_node.as_ref() {
-                                    _ = graph.create_wire(
-                                        toolpane.elbow,
-                                        *current_node,
-                                        new_node_id,
+                                    let src = *current_node;
+                                    let dst = new_node_id;
+                                    _ = graph.create_wire(toolpane.elbow, src, dst).err_info(
+                                        |existing: &AlreadyExistsError<&mut Wire>| {
+                                            format!(
+                                                "wire from {} to {} already exists: wire {}",
+                                                src.node_ref(),
+                                                dst.node_ref(),
+                                                existing.wire_ref(),
+                                            )
+                                        },
                                     );
                                 }
                                 *current_node = Some(new_node_id);
                             }
-                            Err(id) => {
+                            Err(node) => {
+                                let next_node = *node.id();
                                 // existing node
                                 if let Some(current_node) = *current_node
-                                    && current_node != id
+                                    && current_node != next_node
                                 {
-                                    _ = graph.create_wire(toolpane.elbow, current_node, id);
+                                    let src = current_node;
+                                    let dst = next_node;
+                                    _ = graph.create_wire(toolpane.elbow, src, dst).err_info(
+                                        |wire: &AlreadyExistsError<&mut Wire>| {
+                                            format!(
+                                                "wire from {} to {} already exists: wire {}",
+                                                src.node_ref(),
+                                                dst.node_ref(),
+                                                wire.wire_ref(),
+                                            )
+                                        },
+                                    );
                                 }
-                                *current_node = Some(id);
+                                *current_node = Some(next_node);
                             }
                         }
 
@@ -232,9 +251,10 @@ impl EditorTab {
 
                 Tool::Erase {} => {
                     if input.primary.is_starting()
-                        && let Some(&id) = graph.find_node_at(Graph::world_to_grid(pos))
+                        && let Some(node) = graph.node_at(Graph::world_to_grid(pos))
                     {
-                        graph.destroy_node(&id, false).issue_error(
+                        let to_remove = *node.id();
+                        graph.destroy_node(&to_remove, false).issue_error(
                             "cannot reach this branch if graph did not contain the node",
                         );
                         is_dirty = true;
@@ -243,19 +263,17 @@ impl EditorTab {
 
                 Tool::Edit { target } => {
                     if input.secondary.is_starting()
-                        && let Some(&id) = graph.find_node_at(Graph::world_to_grid(pos))
-                        && let Some(node) =
-                            graph.node_mut(&id).error("hovered node should be valid")
+                        && let Some(node) = graph.node_mut_at(Graph::world_to_grid(pos))
                     {
                         *node.gate_mut() = GateInstance::from_gate(toolpane.gate);
                     }
 
                     if input.primary.is_starting()
-                        && let Some(&id) = graph.find_node_at(Graph::world_to_grid(pos))
+                        && let Some(node) = graph.node_at(Graph::world_to_grid(pos))
                     {
                         *target = Some(EditDragging {
                             temp_pos: Vector2::default(),
-                            id,
+                            id: *node.id(),
                         });
                     }
                     if input.primary.is_ending()
@@ -267,7 +285,7 @@ impl EditorTab {
                             .snap(GRID_SIZE.into());
                         graph
                             .translate_node(&id, new_position)
-                            .error("edit mode target node should be valid");
+                            .issue_error("edit mode target node should be valid");
                     }
 
                     if let Some(EditDragging { temp_pos, id: _ }) = target.as_mut() {
@@ -278,10 +296,12 @@ impl EditorTab {
 
                 Tool::Interact {} => {
                     if input.primary.is_starting()
-                        && let Some(&id) = graph.find_node_at(Graph::world_to_grid(pos))
+                        && let Some(&id) = graph
+                            .node_mut_at(Graph::world_to_grid(pos))
+                            .map(|node| node.id())
                         && graph.is_inputless(&id)
                     {
-                        let node = &mut graph[&id];
+                        let node = graph.node_mut(&id).unwrap();
                         match node.gate_mut() {
                             gate @ GateInstance::Or => {
                                 *gate = GateInstance::Nor;
@@ -380,7 +400,7 @@ impl EditorTab {
 
                 Tool::Edit { target } => {
                     if let Some(EditDragging { temp_pos, id }) = target {
-                        for (_, wire, flow) in graph.wires_of(id) {
+                        for (wire, flow) in graph.wires_of(id) {
                             let (start_pos, end_pos) = match flow {
                                 Flow::Input => (
                                     graph
@@ -436,14 +456,16 @@ impl EditorTab {
                         } else {
                             d.draw_rectangle_rec(rec, color);
                         }
-                    } else if let Some(hovered) =
-                        graph.find_node_at(Graph::world_to_grid(input.cursor.as_ivec2()))
-                    {
-                        for (_, wire, flow) in graph.wires_of(hovered) {
+                    } else if let Some(hovered) = graph.node_at(Graph::world_to_grid(
+                        self.screen_to_world(input.cursor)
+                            .as_ivec2()
+                            .snap(GRID_SIZE.into()),
+                    )) {
+                        for (wire, flow) in graph.wires_of(hovered.id()) {
                             wire.draw(
                                 &mut d,
                                 &graph,
-                                Vector2::zero(),
+                                rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
                                 match flow {
                                     Flow::Input => theme.input,
                                     Flow::Output => theme.output,
@@ -471,16 +493,14 @@ impl EditorTab {
                                     width: GRID_SIZE.into(),
                                     height: GRID_SIZE.into(),
                                 };
-                                let (count, sum) = graph.wires_to(node.id()).fold(
-                                    (0, 0),
-                                    |(n, acc), (_, wire)| {
+                                let (count, sum) =
+                                    graph.inputs_to(node.id()).fold((0, 0), |(n, acc), wire| {
                                         let state = graph
                                             .node(wire.src())
                                             .fatal("wire src should always be valid")
                                             .state();
                                         (n + 1, acc + usize::from(state))
-                                    },
-                                );
+                                    });
                                 let alpha = if count == 0 {
                                     0.0
                                 } else {
@@ -660,13 +680,13 @@ impl EditorTab {
                 Tool::Interact {} => {}
             }
 
-            if let Some(id) = graph.find_node_at(Graph::world_to_grid(
+            if let Some(node) = graph.node_at(Graph::world_to_grid(
                 self.screen_to_world(input.cursor)
                     .as_ivec2()
                     .snap(GRID_SIZE.into()),
-            )) && (!matches!(toolpane.tool, Tool::Interact { .. }) || graph.is_inputless(id))
+            )) && (!matches!(toolpane.tool, Tool::Interact { .. })
+                || graph.is_inputless(node.id()))
             {
-                let node = &graph[id];
                 let node_position = node.position().as_vec2();
                 let rec = Rectangle {
                     x: node_position.x,

@@ -1,13 +1,5 @@
 #![feature(nonpoison_mutex, sync_nonpoison, nonpoison_rwlock, push_mut)]
 #![deny(clippy::missing_safety_doc, clippy::undocumented_unsafe_blocks)]
-#![cfg_attr(
-    not(test),
-    warn(
-        clippy::unwrap_used,
-        clippy::expect_used,
-        reason = "consider using log_* instead"
-    )
-)]
 
 use crate::{
     config::Config,
@@ -293,7 +285,7 @@ fn main() {
                     && let Some(graph) = tab.graph.upgrade()
                 {
                     let mut borrow = graph.write();
-                    if let Some(node) = borrow
+                    if let Ok(node) = borrow
                         .node_mut(id)
                         .error("edit target should always be valid")
                     {
@@ -402,7 +394,7 @@ fn main() {
                     && let Some(graph) = tab.graph.upgrade()
                 {
                     let borrow = graph.read();
-                    if let Some(node) = borrow.node(id).error("edit target should be valid") {
+                    if let Ok(node) = borrow.node(id).error("edit target should be valid") {
                         y = properties.draw_section(d, theme, bounds, y, node);
                     }
                 }

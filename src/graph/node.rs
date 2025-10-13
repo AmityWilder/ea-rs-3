@@ -1,8 +1,11 @@
 use crate::ivec::IVec2;
 use serde_derive::{Deserialize, Serialize};
+use std::sync::nonpoison::Mutex;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub(super) u128);
+
+static NEXT_NODE_ID: Mutex<NodeId> = Mutex::new(NodeId(0));
 
 /// Defaults to [`Self::INVALID`].
 impl Default for NodeId {
@@ -53,6 +56,16 @@ impl NodeId {
                 Some(id)
             }
         }
+    }
+
+    #[inline]
+    pub fn next() -> Option<Self> {
+        NEXT_NODE_ID.lock().step()
+    }
+
+    #[inline]
+    pub fn iter() -> std::iter::FromFn<fn() -> Option<Self>> {
+        std::iter::from_fn(Self::next)
     }
 }
 

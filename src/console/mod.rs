@@ -16,10 +16,13 @@ use crate::{
 };
 use raylib::prelude::*;
 use rich_text::{ColorAct, ColorRef, RichStr, RichString};
-use std::sync::{
-    Arc,
-    mpsc::{Receiver, SendError, Sender, channel},
-    nonpoison::{Mutex, RwLock, RwLockReadGuard},
+use std::{
+    str::FromStr,
+    sync::{
+        Arc,
+        mpsc::{Receiver, SendError, Sender, channel},
+        nonpoison::{Mutex, RwLock, RwLockReadGuard},
+    },
 };
 
 /// UNDER CONSTRUCTION
@@ -110,7 +113,7 @@ impl std::fmt::Display for GateRef {
     }
 }
 
-impl std::str::FromStr for GateRef {
+impl FromStr for GateRef {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -153,7 +156,7 @@ impl std::fmt::Display for ToolRef {
     }
 }
 
-impl std::str::FromStr for ToolRef {
+impl FromStr for ToolRef {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -196,7 +199,7 @@ impl std::fmt::Display for PositionRef {
     }
 }
 
-impl std::str::FromStr for PositionRef {
+impl FromStr for PositionRef {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -212,6 +215,20 @@ impl std::str::FromStr for PositionRef {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GraphRef(pub GraphId);
 
+impl GraphId {
+    #[inline]
+    pub const fn graph_ref(&self) -> GraphRef {
+        GraphRef(*self)
+    }
+}
+
+impl Graph {
+    #[inline]
+    pub const fn graph_ref(&self) -> GraphRef {
+        self.id().graph_ref()
+    }
+}
+
 impl std::fmt::Display for GraphRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let &Self(id) = self;
@@ -224,12 +241,12 @@ impl std::fmt::Display for GraphRef {
     }
 }
 
-impl std::str::FromStr for GraphRef {
-    type Err = ();
+impl FromStr for GraphRef {
+    type Err = <GraphId as FromStr>::Err;
 
     #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse().map_err(|_| ()).map(Self)
+        s.parse().map(Self)
     }
 }
 
@@ -246,99 +263,115 @@ impl GraphRef {
             None
         }
     }
-
-    #[inline]
-    pub fn node(&self, node_id: NodeId) -> NodeRef {
-        NodeRef(self.0, node_id)
-    }
-
-    #[inline]
-    pub fn wire(&self, wire_id: WireId) -> WireRef {
-        WireRef(self.0, wire_id)
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NodeRef(pub GraphId, pub NodeId);
+pub struct NodeRef(pub NodeId);
+
+impl NodeId {
+    #[inline]
+    pub const fn node_ref(&self) -> NodeRef {
+        NodeRef(*self)
+    }
+}
+
+impl Node {
+    #[inline]
+    pub const fn node_ref(&self) -> NodeRef {
+        self.id().node_ref()
+    }
+}
 
 impl std::fmt::Display for NodeRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let &Self(g, n) = self;
+        let &Self(n) = self;
         write!(
             f,
-            "{}{g}-{n}{}",
+            "{}{n}{}",
             ColorAct::Push(ColorRef::Theme(ColorId::HyperRef)),
             ColorAct::Pop
         )
     }
 }
 
-impl std::str::FromStr for NodeRef {
-    type Err = ();
+impl FromStr for NodeRef {
+    type Err = <NodeId as FromStr>::Err;
 
+    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.split_once('-')
-            .and_then(|(g, n)| g.parse().ok().zip(n.parse().ok()))
-            .map(|(g, n)| Self(g, n))
-            .ok_or(())
+        s.parse().map(Self)
     }
 }
 
 impl NodeRef {
+    #[inline]
     pub fn deref_with<T, F>(self, graphs: &GraphList, f: F) -> Option<T>
     where
         F: for<'a> FnOnce(&'a Arc<RwLock<Graph>>, &RwLockReadGuard<'a, Graph>, &'a Node) -> T,
     {
-        if let Some(graph) = graphs.get(&self.0)
-            && let Ok(borrow) = graph.try_read()
-            && let Some(node) = borrow.node(&self.1)
-        {
-            Some(f(graph, &borrow, node))
-        } else {
-            None
+        for graph in graphs.values() {
+            if let Ok(borrow) = graph.try_read()
+                && let Ok(node) = borrow.node(&self.0)
+            {
+                return Some(f(graph, &borrow, node));
+            }
         }
+        None
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct WireRef(pub GraphId, pub WireId);
+pub struct WireRef(pub WireId);
+
+impl WireId {
+    #[inline]
+    pub const fn wire_ref(&self) -> WireRef {
+        WireRef(*self)
+    }
+}
+
+impl Wire {
+    #[inline]
+    pub const fn wire_ref(&self) -> WireRef {
+        self.id().wire_ref()
+    }
+}
 
 impl std::fmt::Display for WireRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let &Self(g, w) = self;
+        let &Self(w) = self;
         write!(
             f,
-            "{}{g}-{w}{}",
+            "{}{w}{}",
             ColorAct::Push(ColorRef::Theme(ColorId::HyperRef)),
             ColorAct::Pop
         )
     }
 }
 
-impl std::str::FromStr for WireRef {
-    type Err = ();
+impl FromStr for WireRef {
+    type Err = <WireId as FromStr>::Err;
 
+    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.split_once('-')
-            .and_then(|(g, w)| g.parse().ok().zip(w.parse().ok()))
-            .map(|(g, n)| Self(g, n))
-            .ok_or(())
+        s.parse().map(Self)
     }
 }
 
 impl WireRef {
+    #[inline]
     pub fn deref_with<T, F>(self, graphs: &GraphList, f: F) -> Option<T>
     where
         F: for<'a> FnOnce(&'a Arc<RwLock<Graph>>, &RwLockReadGuard<'a, Graph>, &'a Wire) -> T,
     {
-        if let Some(graph) = graphs.get(&self.0)
-            && let Ok(borrow) = graph.try_read()
-            && let Some(wire) = borrow.wire(&self.1)
-        {
-            Some(f(graph, &borrow, wire))
-        } else {
-            None
+        for graph in graphs.values() {
+            if let Ok(borrow) = graph.try_read()
+                && let Ok(wire) = borrow.wire(&self.0)
+            {
+                return Some(f(graph, &borrow, wire));
+            }
         }
+        None
     }
 }
 
@@ -366,7 +399,7 @@ impl std::fmt::Display for HyperRef {
     }
 }
 
-impl std::str::FromStr for HyperRef {
+impl FromStr for HyperRef {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {

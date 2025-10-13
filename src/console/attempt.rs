@@ -1,3 +1,4 @@
+#![allow(dead_code, reason = "library-like")]
 use crate::logln;
 use std::fmt::Display;
 
@@ -8,9 +9,14 @@ macro_rules! attempt {
     };
 }
 
-pub trait Passable: Sized {
+pub trait Passable {
     type Pass;
     fn passing(value: Self::Pass) -> Self;
+}
+
+pub trait Failable {
+    type Fail;
+    fn failing(value: Self::Fail) -> Self;
 }
 
 impl<T, E> Passable for Result<T, E> {
@@ -19,6 +25,15 @@ impl<T, E> Passable for Result<T, E> {
     #[inline]
     fn passing(value: Self::Pass) -> Self {
         Ok(value)
+    }
+}
+
+impl<T, E> Failable for Result<T, E> {
+    type Fail = E;
+
+    #[inline]
+    fn failing(value: Self::Fail) -> Self {
+        Err(value)
     }
 }
 
@@ -38,28 +53,74 @@ impl Passable for () {
     fn passing((): Self::Pass) {}
 }
 
-pub trait AttemptResult: Passable {
-    type Fail;
+pub trait Loggable<T: ?Sized = ()> {
+    type Proxy: Display;
 
+    fn display(self, ctx: &T) -> Self::Proxy;
+}
+
+impl<T: ?Sized> Loggable<T> for &str {
+    type Proxy = Self;
+
+    #[inline]
+    fn display(self, _: &T) -> Self::Proxy {
+        self
+    }
+}
+
+impl<T: ?Sized> Loggable<T> for String {
+    type Proxy = Self;
+
+    #[inline]
+    fn display(self, _: &T) -> Self::Proxy {
+        self
+    }
+}
+
+impl<T: ?Sized> Loggable<T> for std::fmt::Arguments<'_> {
+    type Proxy = Self;
+
+    #[inline]
+    fn display(self, _: &T) -> Self::Proxy {
+        self
+    }
+}
+
+impl<T: ?Sized, U: Display, F: FnOnce(&T) -> U> Loggable<T> for F {
+    type Proxy = U;
+
+    #[inline]
+    fn display(self, ctx: &T) -> Self::Proxy {
+        self(ctx)
+    }
+}
+
+pub trait AttemptResult: Passable + Failable {
     /// If `self` is [`Ok`], print `pass_msg` to the global logger as [`super::LogType::Info`]
-    fn info(self, pass_msg: impl Display) -> Self;
+    fn ok_info(self, pass_msg: impl Loggable<Self::Pass>) -> Self;
+
+    /// If `self` is [`Err`], print `pass_msg` to the global logger as [`super::LogType::Info`]
+    fn err_info(self, fail_msg: impl Loggable<Self::Fail>) -> Self;
+
+    /// Print `msg` to the global logger as [`super::LogType::Info`], regardless of `self`
+    fn info(self, msg: impl Loggable<Self>) -> Self;
 
     /// If `self` is [`Ok`], print `pass_msg` to the global logger as a [`super::LogType::Success`]
-    fn success(self, pass_msg: impl Display) -> Self;
+    fn success(self, pass_msg: impl Loggable<Self::Pass>) -> Self;
 
     /// If `self` is [`Err`], print `fail_msg` and the error to the global logger
     /// as a [`super::LogType::Warning`]
-    fn warn(self, fail_msg: impl Display) -> Self;
+    fn warn(self, fail_msg: impl Loggable<Self::Fail>) -> Self;
 
     /// If `self` is [`Err`], print `fail_msg` and the error to the global logger
     /// as a [`super::LogType::Warning`], consuming `self`
-    fn issue_warning(self, fail_msg: impl Display);
+    fn issue_warning(self, fail_msg: impl Loggable<Self::Fail>);
 
     /// If `self` is [`Err`], print `fail_msg` and the error to the global logger
     /// as a [`super::LogType::Warning`]
     ///
     /// Returns `self` if [`Ok`], or `default` if [`Err`]
-    fn or_warn(self, fail_msg: impl Display, default: Self::Pass) -> Self::Pass;
+    fn or_warn(self, fail_msg: impl Loggable<Self::Fail>, default: Self::Pass) -> Self::Pass;
 
     /// If `self` is [`Err`], print `fail_msg` and the error to the global logger
     /// as a [`super::LogType::Warning`]
@@ -67,43 +128,49 @@ pub trait AttemptResult: Passable {
     /// Returns `self` if [`Ok`], or evaluates and returns `default` if [`Err`]
     fn or_warn_with(
         self,
-        fail_msg: impl Display,
+        fail_msg: impl Loggable<Self::Fail>,
         default: impl FnOnce(Self::Fail) -> Self::Pass,
     ) -> Self::Pass;
 
     /// If `self` is [`Err`], print `fail_msg` and the error to the global logger
     /// as an [`super::LogType::Error`]
-    fn error(self, fail_msg: impl Display) -> Self;
+    fn error(self, fail_msg: impl Loggable<Self::Fail>) -> Self;
 
     /// If `self` is [`Err`], print `fail_msg` and the error to the global logger
     /// as an [`super::LogType::Error`], consuming `self`
-    fn issue_error(self, fail_msg: impl Display);
+    fn issue_error(self, fail_msg: impl Loggable<Self::Fail>);
 
     /// If `self` is [`Err`], print `fail_msg` and the error to the global logger
     /// as [`super::LogType::Fatal`] and panic
-    fn fatal(self, fail_msg: impl Display) -> Self::Pass;
+    fn fatal(self, fail_msg: impl Loggable<Self::Fail>) -> Self::Pass;
 }
 
 pub trait AttemptOption: Passable {
     /// If `self` is [`Some`], print `pass_msg` to the global logger as [`super::LogType::Info`]
-    fn info(self, pass_msg: impl Display) -> Self;
+    fn some_info(self, pass_msg: impl Loggable<Self::Pass>) -> Self;
+
+    /// If `self` is [`None`], print `pass_msg` to the global logger as [`super::LogType::Info`]
+    fn none_info(self, pass_msg: impl Loggable<()>) -> Self;
+
+    /// Print `pass_msg` to the global logger as [`super::LogType::Info`], regardless of `self`
+    fn info(self, msg: impl Loggable<Self>) -> Self;
 
     /// If `self` is [`Some`], print `pass_msg` to the global logger as a [`super::LogType::Success`]
-    fn success(self, pass_msg: impl Display) -> Self;
+    fn success(self, pass_msg: impl Loggable<Self::Pass>) -> Self;
 
     /// If `self` is [`None`], print `fail_msg` and the error to the global logger
     /// as a [`super::LogType::Warning`]
-    fn warn(self, fail_msg: impl Display) -> Self;
+    fn warn(self, fail_msg: impl Loggable<()>) -> Self;
 
     /// If `self` is [`None`], print `fail_msg` and the error to the global logger
     /// as a [`super::LogType::Warning`], consuming `self`
-    fn issue_warning(self, fail_msg: impl Display);
+    fn issue_warning(self, fail_msg: impl Loggable<()>);
 
     /// If `self` is [`None`] print `fail_msg` and the error to the global logger
     /// as a [`super::LogType::Warning`]
     ///
     /// Returns `self` if [`Some`], or `default` if [`None`]
-    fn or_warn(self, fail_msg: impl Display, default: Self::Pass) -> Self::Pass;
+    fn or_warn(self, fail_msg: impl Loggable<()>, default: Self::Pass) -> Self::Pass;
 
     /// If `self` is [`None`], print `fail_msg` and the error to the global logger
     /// as a [`super::LogType::Warning`]
@@ -111,145 +178,170 @@ pub trait AttemptOption: Passable {
     /// Returns `self` if [`Some`], or evaluates and returns `default` if [`None`]
     fn or_warn_with(
         self,
-        fail_msg: impl Display,
+        fail_msg: impl Loggable<()>,
         default: impl FnOnce() -> Self::Pass,
     ) -> Self::Pass;
 
     /// If `self` is [`None`], print `fail_msg` and the error to the global logger
     /// as an [`super::LogType::Error`]
-    fn error(self, fail_msg: impl Display) -> Self;
+    fn error(self, fail_msg: impl Loggable<()>) -> Self;
 
     /// If `self` is [`None`], print `fail_msg` and the error to the global logger
     /// as an [`super::LogType::Error`], consuming `self`
-    fn issue_error(self, fail_msg: impl Display);
+    fn issue_error(self, fail_msg: impl Loggable<()>);
 
     /// If `self` is [`None`], print `fail_msg` and the error to the global logger
     /// as [`super::LogType::Fatal`] and panic,
-    fn fatal(self, fail_msg: impl Display) -> Self::Pass;
+    fn fatal(self, fail_msg: impl Loggable<()>) -> Self::Pass;
 }
 
 impl<T, E: Display> AttemptResult for Result<T, E> {
-    type Fail = E;
-
     #[inline]
-    fn info(self, pass_msg: impl Display) -> Self {
-        self.inspect(|_| logln!(Info, "{pass_msg}."))
+    fn ok_info(self, pass_msg: impl Loggable<Self::Pass>) -> Self {
+        self.inspect(|v| logln!(Info, "{}.", pass_msg.display(v)))
     }
 
     #[inline]
-    fn success(self, pass_msg: impl Display) -> Self {
-        self.inspect(|_| logln!(Success, "{pass_msg}."))
+    fn err_info(self, fail_msg: impl Loggable<Self::Fail>) -> Self {
+        self.inspect_err(|e| logln!(Info, "{}.", fail_msg.display(e)))
     }
 
     #[inline]
-    fn warn(self, fail_msg: impl Display) -> Self {
-        self.inspect_err(|e| logln!(Warning, "{fail_msg}: {e}"))
+    fn info(self, msg: impl Loggable<Self>) -> Self {
+        logln!(Info, "{}.", msg.display(&self));
+        self
     }
 
     #[inline]
-    fn issue_warning(self, fail_msg: impl Display) {
+    fn success(self, pass_msg: impl Loggable<Self::Pass>) -> Self {
+        self.inspect(|v| logln!(Success, "{}.", pass_msg.display(v)))
+    }
+
+    #[inline]
+    fn warn(self, fail_msg: impl Loggable<Self::Fail>) -> Self {
+        self.inspect_err(|e| logln!(Warning, "{}: {e}", fail_msg.display(e)))
+    }
+
+    #[inline]
+    fn issue_warning(self, fail_msg: impl Loggable<Self::Fail>) {
         if let Err(e) = self {
-            logln!(Warning, "{fail_msg}: {e}");
+            logln!(Warning, "{}: {e}", fail_msg.display(&e));
         }
     }
 
     #[inline]
-    fn or_warn(self, fail_msg: impl Display, default: Self::Pass) -> Self::Pass {
-        self.inspect_err(|e| logln!(Warning, "{fail_msg}: {e}"))
+    fn or_warn(self, fail_msg: impl Loggable<Self::Fail>, default: Self::Pass) -> Self::Pass {
+        self.inspect_err(|e| logln!(Warning, "{}: {e}", fail_msg.display(e)))
             .unwrap_or(default)
     }
 
     #[inline]
     fn or_warn_with(
         self,
-        fail_msg: impl Display,
+        fail_msg: impl Loggable<Self::Fail>,
         default: impl FnOnce(Self::Fail) -> Self::Pass,
     ) -> Self::Pass {
-        self.inspect_err(|e| logln!(Warning, "{fail_msg}: {e}"))
+        self.inspect_err(|e| logln!(Warning, "{}: {e}", fail_msg.display(e)))
             .unwrap_or_else(default)
     }
 
     #[inline]
-    fn error(self, fail_msg: impl Display) -> Self {
-        self.inspect_err(|e| logln!(Error, "{fail_msg}: {e}"))
+    fn error(self, fail_msg: impl Loggable<Self::Fail>) -> Self {
+        self.inspect_err(|e| logln!(Error, "{}: {e}", fail_msg.display(e)))
     }
 
     #[inline]
-    fn issue_error(self, fail_msg: impl Display) {
+    fn issue_error(self, fail_msg: impl Loggable<Self::Fail>) {
         if let Err(e) = self {
-            logln!(Error, "{fail_msg}: {e}");
+            logln!(Error, "{}: {e}", fail_msg.display(&e));
         }
     }
 
     #[inline]
-    fn fatal(self, fail_msg: impl Display) -> Self::Pass {
+    fn fatal(self, fail_msg: impl Loggable<Self::Fail>) -> Self::Pass {
         self.unwrap_or_else(|e| {
-            logln!(Error, "{fail_msg}: {e}");
-            panic!("fatal error: {fail_msg}: {e}")
+            let msg = fail_msg.display(&e);
+            logln!(Error, "{msg}: {e}");
+            panic!("fatal error: {msg}: {e}");
         })
     }
 }
 
 impl<T> AttemptOption for Option<T> {
     #[inline]
-    fn info(self, pass_msg: impl Display) -> Self {
-        self.inspect(|_| logln!(Info, "{pass_msg}."))
+    fn some_info(self, pass_msg: impl Loggable<Self::Pass>) -> Self {
+        self.inspect(|v| logln!(Info, "{}.", pass_msg.display(v)))
     }
 
     #[inline]
-    fn success(self, pass_msg: impl Display) -> Self {
-        self.inspect(|_| logln!(Success, "{pass_msg}."))
-    }
-
-    #[inline]
-    fn warn(self, fail_msg: impl Display) -> Self {
+    fn none_info(self, pass_msg: impl Loggable<()>) -> Self {
         if self.is_none() {
-            logln!(Warning, "{fail_msg}.")
+            logln!(Info, "{}.", pass_msg.display(&()));
         }
         self
     }
 
     #[inline]
-    fn issue_warning(self, fail_msg: impl Display) {
+    fn info(self, msg: impl Loggable<Self>) -> Self {
+        logln!(Info, "{}", msg.display(&self));
+        self
+    }
+
+    #[inline]
+    fn success(self, pass_msg: impl Loggable<Self::Pass>) -> Self {
+        self.inspect(|v| logln!(Success, "{}.", pass_msg.display(v)))
+    }
+
+    #[inline]
+    fn warn(self, fail_msg: impl Loggable<()>) -> Self {
         if self.is_none() {
-            logln!(Warning, "{fail_msg}.")
+            logln!(Warning, "{}.", fail_msg.display(&()));
+        }
+        self
+    }
+
+    #[inline]
+    fn issue_warning(self, fail_msg: impl Loggable<()>) {
+        if self.is_none() {
+            logln!(Warning, "{}.", fail_msg.display(&()));
         }
     }
 
     #[inline]
-    fn or_warn(self, fail_msg: impl Display, default: Self::Pass) -> Self::Pass {
+    fn or_warn(self, fail_msg: impl Loggable<()>, default: Self::Pass) -> Self::Pass {
         self.warn(fail_msg).unwrap_or(default)
     }
 
     #[inline]
     fn or_warn_with(
         self,
-        fail_msg: impl Display,
+        fail_msg: impl Loggable<()>,
         default: impl FnOnce() -> Self::Pass,
     ) -> Self::Pass {
         self.warn(fail_msg).unwrap_or_else(default)
     }
 
     #[inline]
-    fn error(self, fail_msg: impl Display) -> Self {
+    fn error(self, fail_msg: impl Loggable<()>) -> Self {
         if self.is_none() {
-            logln!(Error, "{fail_msg}.")
+            logln!(Error, "{}.", fail_msg.display(&()));
         }
         self
     }
 
     #[inline]
-    fn issue_error(self, fail_msg: impl Display) {
+    fn issue_error(self, fail_msg: impl Loggable<()>) {
         if self.is_none() {
-            logln!(Error, "{fail_msg}.")
+            logln!(Error, "{}.", fail_msg.display(&()));
         }
     }
 
     #[inline]
-    fn fatal(self, fail_msg: impl Display) -> Self::Pass {
+    fn fatal(self, fail_msg: impl Loggable<()>) -> Self::Pass {
         self.unwrap_or_else(|| {
-            logln!(Error, "{fail_msg}.");
-            panic!("fatal error: {fail_msg}.")
+            let msg = fail_msg.display(&());
+            logln!(Error, "{msg}.");
+            panic!("fatal error: {msg}.");
         })
     }
 }

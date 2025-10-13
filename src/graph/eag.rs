@@ -80,7 +80,7 @@ impl Serialize for Graph {
 }
 
 #[derive(Debug)]
-struct Nodes(FxHashMap<NodeId, Node>, NodeId);
+struct Nodes(FxHashMap<NodeId, Node>);
 
 impl<'de> Deserialize<'de> for Nodes {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -105,12 +105,11 @@ impl<'de> Deserialize<'de> for Nodes {
                     .map(|n| FxHashMap::with_capacity_and_hasher(n, FxBuildHasher))
                     .unwrap_or_default();
 
-                let mut next_node_id = NodeId(0);
                 while let Some((gate, (x, y), state)) = seq.next_element()? {
-                    let id = next_node_id.step().fatal("out of node IDs");
+                    let id = NodeId::next().fatal("out of node IDs");
                     value.insert(id, Node::new(id, gate, IVec2 { x, y }, state));
                 }
-                Ok(Nodes(value, next_node_id))
+                Ok(Nodes(value))
             }
         }
 
@@ -119,7 +118,7 @@ impl<'de> Deserialize<'de> for Nodes {
 }
 
 #[derive(Debug)]
-struct Wires(FxHashMap<WireId, Wire>, WireId);
+struct Wires(FxHashMap<WireId, Wire>);
 
 impl<'de> Deserialize<'de> for Wires {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -144,12 +143,11 @@ impl<'de> Deserialize<'de> for Wires {
                     .map(|n| FxHashMap::with_capacity_and_hasher(n, FxBuildHasher))
                     .unwrap_or_default();
 
-                let mut next_wire_id = WireId(0);
                 while let Some((elbow, src, dst)) = seq.next_element()? {
-                    let id = next_wire_id.step().fatal("out of wire IDs");
+                    let id = WireId::next().fatal("out of wire IDs");
                     value.insert(id, Wire::new(id, elbow, NodeId(src), NodeId(dst)));
                 }
-                Ok(Wires(value, next_wire_id))
+                Ok(Wires(value))
             }
         }
 
@@ -166,13 +164,11 @@ pub struct GraphTemplate {
 impl From<GraphTemplate> for Graph {
     fn from(
         GraphTemplate {
-            nodes: Nodes(nodes, next_node_id),
-            wires: Wires(wires, next_wire_id),
+            nodes: Nodes(nodes),
+            wires: Wires(wires),
         }: GraphTemplate,
     ) -> Self {
         Self {
-            next_node_id,
-            next_wire_id,
             id: GraphId(0),
             node_grid: nodes
                 .values()
