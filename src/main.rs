@@ -35,6 +35,7 @@ mod toolpane;
 mod ui;
 
 pub const GRID_SIZE: u8 = 8;
+pub const GRID_EXTENT: Vector2 = Vector2::new(0.5 * GRID_SIZE as f32, 0.5 * GRID_SIZE as f32);
 
 fn main() {
     let (mut console, logger) = Console::new(
@@ -64,7 +65,7 @@ fn main() {
 
     // setup raylib logging
     set_trace_log_callback(GLoggerHandle::trace_log_callback)
-        .or_warn("failed to set Raylib tracelog callback", ());
+        .warn_or("failed to set Raylib tracelog callback", ());
 
     let program_icon =
         Image::load_image_from_mem(".png", include_bytes!("../assets/program_icon32x.png"))
@@ -102,7 +103,7 @@ fn main() {
                 attempt!("parsing config");
                 toml::from_str(&s)
                     .success("config loaded")
-                    .or_warn_with("failed to read config", |_| Config::default())
+                    .warn_or_default("failed to read config")
             }
 
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -118,7 +119,7 @@ fn main() {
                         )
                     })
                     .success(format_args!("default config file {CONFIG_PATH} generated"))
-                    .or_warn("failed to generate file", ());
+                    .warn_or("failed to generate file", ());
                 config
             }
 
@@ -278,9 +279,9 @@ fn main() {
         } else if std::ptr::eq(focused_panel, &properties.panel) {
             properties.tick(&theme, |properties, bounds, theme| {
                 let mut y = bounds.min.y;
-                if let Tool::Edit {
+                if let Tool::Edit(tool::Edit {
                     target: Some(tool::EditDragging { id, .. }),
-                } = &toolpane.tool
+                }) = &toolpane.tool
                     && let Some(Tab::Editor(tab)) = tabs.focused_tab()
                     && let Some(graph) = tab.graph.upgrade()
                 {
@@ -302,7 +303,7 @@ fn main() {
             if let Some(tab) = tabs.focused_tab_mut() {
                 match tab {
                     Tab::Editor(tab) => {
-                        let is_dirty = tab.tick(&mut toolpane, &theme, &input);
+                        let is_dirty = tab.tick(&mut toolpane, &input);
                         if is_dirty {
                             // refresh immediately on change
                             next_eval_tick = Instant::now();
@@ -387,9 +388,9 @@ fn main() {
         {
             properties.draw(&mut d, &theme, |properties, d, bounds, theme| {
                 let mut y = bounds.min.y;
-                if let Tool::Edit {
+                if let Tool::Edit(tool::Edit {
                     target: Some(tool::EditDragging { id, .. }),
-                } = &toolpane.tool
+                }) = &toolpane.tool
                     && let Some(Tab::Editor(tab)) = tabs.focused_tab()
                     && let Some(graph) = tab.graph.upgrade()
                 {

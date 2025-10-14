@@ -1,15 +1,10 @@
 use crate::{
     GRID_SIZE, IVec2, Theme,
     console::attempt::*,
-    graph::{
-        AlreadyExistsError, Graph,
-        node::{GateInstance, NodeId},
-        wire::{Flow, Wire},
-    },
-    icon_sheets::{NodeIconSheetId, NodeIconSheetSetId},
+    graph::{Graph, node::NodeId},
+    icon_sheets::NodeIconSheetSetId,
     input::Inputs,
     ivec::{AsIVec2, Bounds},
-    tool::{EditDragging, Tool},
     toolpane::ToolPane,
     ui::Panel,
 };
@@ -175,7 +170,7 @@ impl EditorTab {
         unsafe { ffi::GetWorldToScreen2D(world_pos.into(), self.camera().into()) }.into()
     }
 
-    pub fn tick(&mut self, toolpane: &mut ToolPane, _theme: &Theme, input: &Inputs) -> bool {
+    pub fn tick(&mut self, toolpane: &mut ToolPane, input: &Inputs) -> bool {
         let mut is_dirty = false;
 
         if let Some(gate) = input.gate() {
@@ -191,131 +186,17 @@ impl EditorTab {
         if let Some(graph) = self.graph.upgrade()
             && let Ok(mut graph) = graph.try_write()
         {
-            let pos = self
-                .screen_to_world(input.cursor)
-                .as_ivec2()
-                .snap(GRID_SIZE.into());
+            let cursor_world_pos = self.screen_to_world(input.cursor);
+            let snapped_cursor_world_pos = cursor_world_pos.as_ivec2().snap(GRID_SIZE.into());
 
-            match &mut toolpane.tool {
-                Tool::Create { current_node } => {
-                    if input.primary.is_starting() {
-                        match graph.create_node(toolpane.gate, pos) {
-                            Ok(new_node) => {
-                                // new node
-                                let new_node_id = *new_node.id();
-                                if let Some(current_node) = current_node.as_ref() {
-                                    let src = *current_node;
-                                    let dst = new_node_id;
-                                    _ = graph.create_wire(toolpane.elbow, src, dst).err_info(
-                                        |existing: &AlreadyExistsError<&mut Wire>| {
-                                            format!(
-                                                "wire from {} to {} already exists: wire {}",
-                                                src.node_ref(),
-                                                dst.node_ref(),
-                                                existing.wire_ref(),
-                                            )
-                                        },
-                                    );
-                                }
-                                *current_node = Some(new_node_id);
-                            }
-                            Err(node) => {
-                                let next_node = *node.id();
-                                // existing node
-                                if let Some(current_node) = *current_node
-                                    && current_node != next_node
-                                {
-                                    let src = current_node;
-                                    let dst = next_node;
-                                    _ = graph.create_wire(toolpane.elbow, src, dst).err_info(
-                                        |wire: &AlreadyExistsError<&mut Wire>| {
-                                            format!(
-                                                "wire from {} to {} already exists: wire {}",
-                                                src.node_ref(),
-                                                dst.node_ref(),
-                                                wire.wire_ref(),
-                                            )
-                                        },
-                                    );
-                                }
-                                *current_node = Some(next_node);
-                            }
-                        }
-
-                        is_dirty = true;
-                    }
-                    if input.secondary.is_starting() {
-                        *current_node = None;
-                    }
-                }
-
-                Tool::Erase {} => {
-                    if input.primary.is_starting()
-                        && let Some(node) = graph.node_at(Graph::world_to_grid(pos))
-                    {
-                        let to_remove = *node.id();
-                        graph.destroy_node(&to_remove, false).issue_error(
-                            "cannot reach this branch if graph did not contain the node",
-                        );
-                        is_dirty = true;
-                    }
-                }
-
-                Tool::Edit { target } => {
-                    if input.secondary.is_starting()
-                        && let Some(node) = graph.node_mut_at(Graph::world_to_grid(pos))
-                    {
-                        *node.gate_mut() = GateInstance::from_gate(toolpane.gate);
-                    }
-
-                    if input.primary.is_starting()
-                        && let Some(node) = graph.node_at(Graph::world_to_grid(pos))
-                    {
-                        *target = Some(EditDragging {
-                            temp_pos: Vector2::default(),
-                            id: *node.id(),
-                        });
-                    }
-                    if input.primary.is_ending()
-                        && let Some(EditDragging { temp_pos: _, id }) = target.take()
-                    {
-                        let new_position = self
-                            .screen_to_world(input.cursor)
-                            .as_ivec2()
-                            .snap(GRID_SIZE.into());
-                        graph
-                            .translate_node(&id, new_position)
-                            .issue_error("edit mode target node should be valid");
-                    }
-
-                    if let Some(EditDragging { temp_pos, id: _ }) = target.as_mut() {
-                        *temp_pos = self.screen_to_world(input.cursor)
-                            - rvec2(GRID_SIZE / 2, GRID_SIZE / 2);
-                    }
-                }
-
-                Tool::Interact {} => {
-                    if input.primary.is_starting()
-                        && let Some(&id) = graph
-                            .node_mut_at(Graph::world_to_grid(pos))
-                            .map(|node| node.id())
-                        && graph.is_inputless(&id)
-                    {
-                        let node = graph.node_mut(&id).unwrap();
-                        match node.gate_mut() {
-                            gate @ GateInstance::Or => {
-                                *gate = GateInstance::Nor;
-                                is_dirty = true;
-                            }
-                            gate @ GateInstance::Nor => {
-                                *gate = GateInstance::Or;
-                                is_dirty = true;
-                            }
-                            _ => {}
-                        };
-                    }
-                }
-            }
+            is_dirty |= toolpane.tool.tick(
+                toolpane.gate,
+                toolpane.elbow,
+                input,
+                &mut graph,
+                cursor_world_pos,
+                snapped_cursor_world_pos,
+            );
         }
         is_dirty
     }
@@ -345,373 +226,20 @@ impl EditorTab {
         );
         let mut d = d.begin_mode2D(self.camera());
         let zoom_exp = self.zoom_exp().ceil() as i32;
-        let scale_and_width =
-            NodeIconSheetSetId::from_zoom_exp(zoom_exp).map(|scale| (scale, scale.icon_width()));
+        let sheet_and_width = NodeIconSheetSetId::from_zoom_exp(zoom_exp)
+            .map(|scale| (&theme.node_icons[scale], scale.icon_width()));
         if let Some(graph) = self.graph.upgrade()
             && let Ok(graph) = graph.try_read().error("failed to access graph")
         {
-            // tool - background layer
-            match &toolpane.tool {
-                Tool::Create { current_node: _ } => {}
-                Tool::Erase {} => {}
-                Tool::Edit { target: _ } => {}
-                Tool::Interact {} => {}
-            }
-
-            // wires
-            for wire in graph.wires_iter() {
-                let state = graph
-                    .node(wire.src())
-                    .fatal("every wire src should be valid")
-                    .state();
-                wire.draw(
-                    &mut d,
-                    &graph,
-                    rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                    if state {
-                        theme.active
-                    } else {
-                        theme.foreground
-                    },
-                )
-                .fatal("all wires should be valid");
-            }
-
-            // tool - wire layer
-            match &toolpane.tool {
-                Tool::Create { current_node } => {
-                    if let Some(&current_node) = current_node.as_ref() {
-                        Wire::draw_immediate(
-                            &mut d,
-                            graph
-                                .node(&current_node)
-                                .fatal("current node should always be valid")
-                                .position()
-                                .as_vec2()
-                                + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                            self.screen_to_world(input.cursor),
-                            toolpane.elbow,
-                            theme.foreground,
-                        );
-                    }
-                }
-
-                Tool::Erase {} => {}
-
-                Tool::Edit { target } => {
-                    if let Some(EditDragging { temp_pos, id }) = target {
-                        for (wire, flow) in graph.wires_of(id) {
-                            let (start_pos, end_pos) = match flow {
-                                Flow::Input => (
-                                    graph
-                                        .node(wire.src())
-                                        .fatal("wire src should always be valid")
-                                        .position()
-                                        .as_vec2()
-                                        + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                                    *temp_pos + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                                ),
-                                Flow::Output => (
-                                    *temp_pos + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                                    graph
-                                        .node(wire.dst())
-                                        .fatal("wire dst should always be valid")
-                                        .position()
-                                        .as_vec2()
-                                        + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                                ),
-                                Flow::Loop => {
-                                    todo!()
-                                }
-                            };
-                            Wire::draw_immediate(
-                                &mut d,
-                                start_pos,
-                                end_pos,
-                                wire.elbow,
-                                theme.special,
-                            );
-                        }
-                        let node = graph.node(id).fatal("node being dragged should be valid");
-                        let rec = Rectangle {
-                            x: temp_pos.x,
-                            y: temp_pos.y,
-                            width: GRID_SIZE.into(),
-                            height: GRID_SIZE.into(),
-                        };
-                        let color = theme.special;
-                        if let Some((scale, icon_width)) = scale_and_width {
-                            d.draw_texture_pro(
-                                &theme.node_icons[scale],
-                                node.gate()
-                                    .as_gate()
-                                    .id()
-                                    .icon_cell_irec(NodeIconSheetId::Basic, icon_width)
-                                    .as_rec(),
-                                rec,
-                                Vector2::zero(),
-                                0.0,
-                                color,
-                            );
-                        } else {
-                            d.draw_rectangle_rec(rec, color);
-                        }
-                    } else if let Some(hovered) = graph.node_at(Graph::world_to_grid(
-                        self.screen_to_world(input.cursor)
-                            .as_ivec2()
-                            .snap(GRID_SIZE.into()),
-                    )) {
-                        for (wire, flow) in graph.wires_of(hovered.id()) {
-                            wire.draw(
-                                &mut d,
-                                &graph,
-                                rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                                match flow {
-                                    Flow::Input => theme.input,
-                                    Flow::Output => theme.output,
-                                    Flow::Loop => todo!(),
-                                },
-                            )
-                            .fatal("all wires should be valid");
-                        }
-                    }
-                }
-
-                Tool::Interact {} => {}
-            }
-
-            // nodes
-            match &toolpane.tool {
-                Tool::Interact { .. } => {
-                    for node in graph.nodes_iter() {
-                        match node.gate() {
-                            GateInstance::Led { color } => {
-                                let node_position = node.position().as_vec2();
-                                let rec = Rectangle {
-                                    x: node_position.x,
-                                    y: node_position.y,
-                                    width: GRID_SIZE.into(),
-                                    height: GRID_SIZE.into(),
-                                };
-                                let (count, sum) =
-                                    graph.inputs_to(node.id()).fold((0, 0), |(n, acc), wire| {
-                                        let state = graph
-                                            .node(wire.src())
-                                            .fatal("wire src should always be valid")
-                                            .state();
-                                        (n + 1, acc + usize::from(state))
-                                    });
-                                let alpha = if count == 0 {
-                                    0.0
-                                } else {
-                                    sum as f32 / count as f32
-                                };
-                                d.draw_rectangle_rec(
-                                    rec,
-                                    theme
-                                        .background
-                                        .lerp(theme.resistance[usize::from(*color)], alpha),
-                                );
-                            }
-
-                            GateInstance::Or | GateInstance::Nor
-                                if graph.is_inputless(node.id()) =>
-                            {
-                                let node_position = node.position().as_vec2();
-                                let rec = Rectangle {
-                                    x: node_position.x,
-                                    y: node_position.y,
-                                    width: GRID_SIZE.into(),
-                                    height: GRID_SIZE.into(),
-                                };
-                                let color = theme.available;
-                                if let Some((scale, icon_width)) = scale_and_width {
-                                    let gate_id = node.gate().as_gate().id();
-                                    d.draw_texture_pro(
-                                        &theme.node_icons[scale],
-                                        gate_id
-                                            .icon_cell_irec(NodeIconSheetId::Background, icon_width)
-                                            .as_rec(),
-                                        rec,
-                                        Vector2::zero(),
-                                        0.0,
-                                        theme.background,
-                                    );
-                                    d.draw_texture_pro(
-                                        &theme.node_icons[scale],
-                                        gate_id
-                                            .icon_cell_irec(NodeIconSheetId::Basic, icon_width)
-                                            .as_rec(),
-                                        rec,
-                                        Vector2::zero(),
-                                        0.0,
-                                        color,
-                                    );
-                                } else {
-                                    d.draw_rectangle_rec(rec, color);
-                                }
-                            }
-
-                            _ => {
-                                let node_position = node.position().as_vec2();
-                                let rec = Rectangle {
-                                    x: node_position.x + f32::from(GRID_SIZE) * (0.5 - 0.25 * 0.5),
-                                    y: node_position.y + f32::from(GRID_SIZE) * (0.5 - 0.25 * 0.5),
-                                    width: f32::from(GRID_SIZE) * 0.25,
-                                    height: f32::from(GRID_SIZE) * 0.25,
-                                };
-                                let color = if node.state() {
-                                    theme.active
-                                } else {
-                                    theme.foreground1
-                                };
-                                d.draw_rectangle_rec(rec, color);
-                            }
-                        }
-                    }
-                }
-
-                _ => {
-                    for node in graph.nodes_iter() {
-                        let node_position = node.position().as_vec2();
-                        let rec = Rectangle {
-                            x: node_position.x,
-                            y: node_position.y,
-                            width: GRID_SIZE.into(),
-                            height: GRID_SIZE.into(),
-                        };
-                        let color = if node.state() {
-                            theme.active
-                        } else {
-                            theme.foreground
-                        };
-                        if let Some((scale, icon_width)) = scale_and_width {
-                            let gate_id = node.gate().as_gate().id();
-                            d.draw_texture_pro(
-                                &theme.node_icons[scale],
-                                gate_id
-                                    .icon_cell_irec(NodeIconSheetId::Background, icon_width)
-                                    .as_rec(),
-                                rec,
-                                Vector2::zero(),
-                                0.0,
-                                theme.background,
-                            );
-                            if self.selection.contains(node.id()) {
-                                d.draw_texture_pro(
-                                    &theme.node_icons[scale],
-                                    gate_id
-                                        .icon_cell_irec(NodeIconSheetId::Highlight, icon_width)
-                                        .as_rec(),
-                                    rec,
-                                    Vector2::zero(),
-                                    0.0,
-                                    theme.interact,
-                                );
-                            }
-                            d.draw_texture_pro(
-                                &theme.node_icons[scale],
-                                gate_id
-                                    .icon_cell_irec(NodeIconSheetId::Basic, icon_width)
-                                    .as_rec(),
-                                rec,
-                                Vector2::zero(),
-                                0.0,
-                                color,
-                            );
-                            if let Some(color) = match *node.gate() {
-                                GateInstance::Or
-                                | GateInstance::And
-                                | GateInstance::Nor
-                                | GateInstance::Xor
-                                | GateInstance::Battery
-                                | GateInstance::Delay { .. } => None,
-
-                                GateInstance::Resistor { resistance: n }
-                                | GateInstance::Led { color: n } => Some(
-                                    theme
-                                        .resistance
-                                        .get(n as usize)
-                                        .copied()
-                                        .fatal("gate should never contain invalid NT data"),
-                                ),
-
-                                GateInstance::Capacitor { capacity, stored } => Some(
-                                    theme
-                                        .active
-                                        .alpha(u8::from(stored) as f32 / u8::from(capacity) as f32),
-                                ),
-                            } {
-                                d.draw_texture_pro(
-                                    &theme.node_icons[scale],
-                                    gate_id
-                                        .icon_cell_irec(NodeIconSheetId::Ntd, icon_width)
-                                        .as_rec(),
-                                    rec,
-                                    Vector2::zero(),
-                                    0.0,
-                                    color,
-                                );
-                            }
-                        } else {
-                            d.draw_rectangle_rec(rec, color);
-                        }
-                        if input.show_details {
-                            let order = graph
-                                .eval_order_of(node.id())
-                                .fatal("all nodes returned by node_iter() should be of the graph the iterator borrows");
-                            theme.general_font.draw_text(
-                                &mut d,
-                                order.to_string().as_str(),
-                                node.position().as_vec2()
-                                    + Vector2::new(f32::from(GRID_SIZE), -f32::from(GRID_SIZE)),
-                                color,
-                            );
-                        }
-                    }
-                }
-            }
-
-            // tool - nodes layer
-            match &toolpane.tool {
-                Tool::Create { current_node: _ } => {}
-                Tool::Erase {} => {}
-                Tool::Edit { target: _ } => {}
-                Tool::Interact {} => {}
-            }
-
-            if let Some(node) = graph.node_at(Graph::world_to_grid(
-                self.screen_to_world(input.cursor)
-                    .as_ivec2()
-                    .snap(GRID_SIZE.into()),
-            )) && (!matches!(toolpane.tool, Tool::Interact { .. })
-                || graph.is_inputless(node.id()))
-            {
-                let node_position = node.position().as_vec2();
-                let rec = Rectangle {
-                    x: node_position.x,
-                    y: node_position.y,
-                    width: GRID_SIZE.into(),
-                    height: GRID_SIZE.into(),
-                };
-                let color = theme.interact;
-                if let Some((scale, icon_width)) = scale_and_width {
-                    d.draw_texture_pro(
-                        &theme.node_icons[scale],
-                        node.gate()
-                            .as_gate()
-                            .id()
-                            .icon_cell_irec(NodeIconSheetId::Highlight, icon_width)
-                            .as_rec(),
-                        rec,
-                        Vector2::zero(),
-                        0.0,
-                        color,
-                    );
-                } else {
-                    d.draw_rectangle_rec(rec, color);
-                }
-            }
+            toolpane.tool.draw(
+                &mut d,
+                theme,
+                input,
+                toolpane,
+                &graph,
+                self,
+                sheet_and_width,
+            );
         }
     }
 }

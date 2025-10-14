@@ -11,16 +11,28 @@ use crate::{
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde_derive::Deserialize;
 use std::{
-    collections::VecDeque,
+    collections::{
+        VecDeque,
+        hash_map::{Keys, Values},
+    },
     sync::{
         Arc,
         nonpoison::{Mutex, RwLock},
     },
 };
+use thiserror::Error;
 
 pub mod eag;
 pub mod node;
 pub mod wire;
+
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+#[error("out of IDs")]
+pub struct OutOfIDsError;
+
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+#[error("nodes should not be moved without updating their position in node_grid")]
+pub struct NodeGridDesyncError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GraphId(u32);
@@ -59,25 +71,20 @@ impl GraphId {
     /// Returns [`None`] if [`Self::INVALID`] would have been returned.
     /// Does not increment if `self` is [`Self::INVALID`].
     #[inline]
-    pub const fn step(&mut self) -> Option<Self> {
+    pub const fn step(&mut self) -> Result<Self, OutOfIDsError> {
         const INVALID: GraphId = GraphId::INVALID;
         match *self {
-            INVALID => None,
+            INVALID => Err(OutOfIDsError),
             id => {
                 self.0 += 1;
-                Some(id)
+                Ok(id)
             }
         }
     }
 
     #[inline]
-    pub fn next() -> Option<Self> {
+    pub fn next() -> Result<Self, OutOfIDsError> {
         NEXT_GRAPH_ID.lock().step()
-    }
-
-    #[inline]
-    pub fn iter() -> std::iter::FromFn<fn() -> Option<Self>> {
-        std::iter::from_fn(Self::next)
     }
 }
 
@@ -106,7 +113,7 @@ pub struct Graph {
     wires: FxHashMap<WireId, Wire>,
     node_grid: FxHashMap<IVec2, NodeId>,
     eval_order: Vec<NodeId>,
-    eval_order_dict: FxHashMap<NodeId, usize>,
+    eval_order_dict: FxHashMap<NodeId, (usize, usize)>,
     is_eval_order_dirty: bool,
 }
 
@@ -116,11 +123,10 @@ impl std::ops::Index<&NodeId> for Graph {
 
     #[inline]
     fn index(&self, id: &NodeId) -> &Self::Output {
-        let g = *self.id();
-        self.node(id).fatal(format_args!(
-            "node {id} is not in graph {g}; graph functions that return an ID should \
-            always return an ID that is valid until the graph is mutated"
-        ))
+        self.node(id).fatal(
+            "node is not in graph; graph functions that return an ID should \
+            always return an ID that is valid until the graph is mutated",
+        )
     }
 }
 
@@ -128,11 +134,10 @@ impl std::ops::Index<&NodeId> for Graph {
 impl std::ops::IndexMut<&NodeId> for Graph {
     #[inline]
     fn index_mut(&mut self, id: &NodeId) -> &mut Self::Output {
-        let g = *self.id();
-        self.node_mut(id).fatal(format_args!(
-            "node {id} is not in graph {g}; graph functions that return an ID should \
-            always return an ID that is valid until the graph is mutated"
-        ))
+        self.node_mut(id).fatal(
+            "node is not in graph; graph functions that return an ID should \
+            always return an ID that is valid until the graph is mutated",
+        )
     }
 }
 
@@ -162,23 +167,14 @@ impl std::ops::IndexMut<&WireId> for Graph {
     }
 }
 
-type IOLessNodeIter<'a, F> =
-    std::iter::Filter<std::iter::Copied<std::collections::hash_map::Keys<'a, NodeId, Node>>, F>;
-type NodesIter<'a> = std::collections::hash_map::Values<'a, NodeId, Node>;
-type WiresIter<'a> = std::collections::hash_map::Values<'a, WireId, Wire>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+#[error(
+    "the given ID is not an element of this graph; it may belong to another graph, or may have been removed"
+)]
 pub struct NotOfGraphError;
 
-impl std::fmt::Display for NotOfGraphError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        "the given ID is not an element of this graph; it may belong to another graph, or may have been removed".fmt(f)
-    }
-}
-
-impl std::error::Error for NotOfGraphError {}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+#[error("the graph already contains a matching element")]
 #[repr(transparent)]
 pub struct AlreadyExistsError<T: ?Sized>(pub T);
 
@@ -197,14 +193,6 @@ impl<T> std::ops::DerefMut for AlreadyExistsError<T> {
         &mut self.0
     }
 }
-
-impl<T> std::fmt::Display for AlreadyExistsError<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        "the graph already contains a matching element".fmt(f)
-    }
-}
-
-impl<T: std::fmt::Debug> std::error::Error for AlreadyExistsError<T> {}
 
 impl Graph {
     pub fn new(id: GraphId) -> Self {
@@ -317,12 +305,12 @@ impl Graph {
                 let old_grid_position = Self::world_to_grid(node.position);
                 let new_grid_position = Self::world_to_grid(new_position);
                 if old_grid_position != new_grid_position {
-                    self.node_grid
-                    .remove(&old_grid_position)
-                    .filter(|x| x == id)
-                    .error(
-                        "nodes should not be moved without updating their position in node_grid",
-                    );
+                    _ = self
+                        .node_grid
+                        .remove(&old_grid_position)
+                        .filter(|x| x == id)
+                        .ok_or(NodeGridDesyncError)
+                        .error_unwrap();
                     self.node_grid.insert(new_grid_position, *id);
 
                     let old_position = std::mem::replace(&mut node.position, new_position);
@@ -346,9 +334,8 @@ impl Graph {
                     .node_grid
                     .remove(&Self::world_to_grid(node.position))
                     .filter(|x| x == id)
-                    .error(
-                        "nodes should not be moved without updating their position in node_grid",
-                    );
+                    .ok_or(NodeGridDesyncError)
+                    .error_unwrap();
                 if soft {
                     logln!(Error, "not yet implemented");
                 } else {
@@ -357,8 +344,8 @@ impl Graph {
                 }
                 self.is_eval_order_dirty = true;
             })
-            .some_info(format_args!("destroy node {}", NodeRef(*id)))
             .ok_or(NotOfGraphError)
+            .ok_info(format_args!("destroy node {}", NodeRef(*id)))
     }
 
     /// # Errors
@@ -410,12 +397,12 @@ impl Graph {
     }
 
     #[inline]
-    pub fn nodes_iter(&self) -> NodesIter<'_> {
+    pub fn nodes_iter(&self) -> Values<'_, NodeId, Node> {
         self.nodes.values()
     }
 
     #[inline]
-    pub fn wires_iter(&self) -> WiresIter<'_> {
+    pub fn wires_iter(&self) -> Values<'_, WireId, Wire> {
         self.wires.values()
     }
 
@@ -474,7 +461,10 @@ impl Graph {
     }
 
     #[inline]
-    pub fn inputless_nodes(&self) -> IOLessNodeIter<'_, impl FnMut(&NodeId) -> bool> {
+    pub fn inputless_nodes(
+        &self,
+    ) -> std::iter::Filter<std::iter::Copied<Keys<'_, NodeId, Node>>, impl FnMut(&NodeId) -> bool>
+    {
         let input_taking = FxHashSet::from_iter(self.wires.values().map(|wire| wire.dst));
         self.nodes
             .keys()
@@ -483,7 +473,10 @@ impl Graph {
     }
 
     #[inline]
-    pub fn outputless_nodes(&self) -> IOLessNodeIter<'_, impl FnMut(&NodeId) -> bool> {
+    pub fn outputless_nodes(
+        &self,
+    ) -> std::iter::Filter<std::iter::Copied<Keys<'_, NodeId, Node>>, impl FnMut(&NodeId) -> bool>
+    {
         let output_giving = FxHashSet::from_iter(self.wires.values().map(|wire| wire.src));
         self.nodes
             .keys()
@@ -568,8 +561,8 @@ impl Graph {
                             .inspect(dbg_ord_prinln!(w => "        w: {w:?}")),
                     );
                     dbg_ord_prinln!("      queue: {queue:?}");
+                    self.eval_order_dict.insert(v, (n, self.eval_order.len()));
                     self.eval_order.push(v);
-                    self.eval_order_dict.insert(v, n);
                 }
 
                 // some subgraphs may end in a cycle. find furthest nodes with DFS and use those as endpoints.
@@ -643,7 +636,7 @@ impl Graph {
     }
 
     #[inline]
-    pub fn eval_order_of(&self, id: &NodeId) -> Result<usize, NotOfGraphError> {
+    pub fn eval_order_of(&self, id: &NodeId) -> Result<(usize, usize), NotOfGraphError> {
         self.eval_order_dict.get(id).ok_or(NotOfGraphError).copied()
     }
 
@@ -664,13 +657,13 @@ impl Graph {
             input_buf.extend(adj.get(id).into_iter().flatten().map(|id| {
                 self.nodes
                     .get(id)
-                    .fatal("all nodes in adj should be valid")
+                    .expect("all nodes in adj should be valid")
                     .state
             }));
             let node = self
                 .nodes
                 .get_mut(id)
-                .fatal("all nodes in eval_order should be valid");
+                .expect("all nodes in eval_order should be valid");
             node.state = node.gate.evaluate(input_buf.iter().copied());
         }
     }
@@ -678,7 +671,6 @@ impl Graph {
 
 #[derive(Debug)]
 pub struct GraphList {
-    next_graph_id: GraphId,
     graphs: FxHashMap<GraphId, Arc<RwLock<Graph>>>,
 }
 
@@ -708,17 +700,16 @@ impl Default for GraphList {
 impl GraphList {
     pub fn new() -> Self {
         Self {
-            next_graph_id: GraphId(0),
             graphs: FxHashMap::default(),
         }
     }
 
     #[inline]
     pub fn create_graph(&mut self) -> &mut Arc<RwLock<Graph>> {
-        let id = self.next_graph_id.step().fatal("out of IDs");
+        let id = GraphId::next().fatal_unwrap();
         self.graphs
             .insert(id, Arc::new(RwLock::new(Graph::new(id))));
-        self.graphs.get_mut(&id).fatal("just inserted")
+        self.graphs.get_mut(&id).expect("just inserted")
     }
 
     #[inline]

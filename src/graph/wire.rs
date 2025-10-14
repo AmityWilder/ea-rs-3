@@ -1,5 +1,5 @@
 use super::{
-    Graph, NotOfGraphError,
+    Graph, NotOfGraphError, OutOfIDsError,
     node::{Node, NodeId},
 };
 use raylib::prelude::*;
@@ -43,25 +43,20 @@ impl WireId {
     /// Returns [`None`] if [`Self::INVALID`] would have been returned.
     /// Does not increment if `self` is [`Self::INVALID`].
     #[inline]
-    pub const fn step(&mut self) -> Option<Self> {
+    pub const fn step(&mut self) -> Result<Self, OutOfIDsError> {
         const INVALID: WireId = WireId::INVALID;
         match *self {
-            INVALID => None,
+            INVALID => Err(OutOfIDsError),
             id => {
                 self.0 += 1;
-                Some(id)
+                Ok(id)
             }
         }
     }
 
     #[inline]
-    pub fn next() -> Option<Self> {
+    pub fn next() -> Result<Self, OutOfIDsError> {
         NEXT_WIRE_ID.lock().step()
-    }
-
-    #[inline]
-    pub fn iter() -> std::iter::FromFn<fn() -> Option<Self>> {
-        std::iter::from_fn(Self::next)
     }
 }
 
@@ -159,6 +154,18 @@ impl Wire {
     #[inline]
     pub const fn dst(&self) -> &NodeId {
         &self.dst
+    }
+
+    #[inline]
+    pub fn state(&self, graph: &Graph) -> Result<bool, NotOfGraphError> {
+        if graph.wires.contains_key(&self.id) {
+            Ok(graph
+                .node(&self.src)
+                .expect("invariant broken: no wire should ever have an invalid/out-of-date input or output node")
+                .state)
+        } else {
+            Err(NotOfGraphError)
+        }
     }
 
     #[inline]

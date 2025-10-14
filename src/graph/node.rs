@@ -1,4 +1,4 @@
-use crate::ivec::IVec2;
+use crate::{graph::OutOfIDsError, ivec::IVec2};
 use serde_derive::{Deserialize, Serialize};
 use std::sync::nonpoison::Mutex;
 
@@ -47,25 +47,20 @@ impl NodeId {
     /// Returns [`None`] if [`Self::INVALID`] would have been returned.
     /// Does not increment if `self` is [`Self::INVALID`].
     #[inline]
-    pub const fn step(&mut self) -> Option<Self> {
+    pub const fn step(&mut self) -> Result<Self, OutOfIDsError> {
         const INVALID: NodeId = NodeId::INVALID;
         match *self {
-            INVALID => None,
+            INVALID => Err(OutOfIDsError),
             id => {
                 self.0 += 1;
-                Some(id)
+                Ok(id)
             }
         }
     }
 
     #[inline]
-    pub fn next() -> Option<Self> {
+    pub fn next() -> Result<Self, OutOfIDsError> {
         NEXT_NODE_ID.lock().step()
-    }
-
-    #[inline]
-    pub fn iter() -> std::iter::FromFn<fn() -> Option<Self>> {
-        std::iter::from_fn(Self::next)
     }
 }
 

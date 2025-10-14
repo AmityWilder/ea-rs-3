@@ -52,10 +52,10 @@ impl Serialize for Graph {
                         wire.elbow,
                         self.1
                             .get(&wire.src)
-                            .fatal("wire src should always be valid"),
+                            .expect("wire src should always be valid"),
                         self.1
                             .get(&wire.dst)
-                            .fatal("wire dst should always be valid"),
+                            .expect("wire dst should always be valid"),
                     ))?;
                 }
                 seq.end()
@@ -218,15 +218,11 @@ impl<'de> Deserialize<'de> for GraphList {
                     .size_hint()
                     .map(|n| FxHashMap::with_capacity_and_hasher(n, FxBuildHasher))
                     .unwrap_or_default();
-                let mut next_graph_id = GraphId(0);
                 while let Some(mut value) = seq.next_element::<Graph>()? {
-                    value.id = next_graph_id.step().fatal("out of graph IDs");
+                    value.id = GraphId::next().fatal_unwrap();
                     graphs.insert(value.id, Arc::new(RwLock::new(value)));
                 }
-                Ok(GraphList {
-                    graphs,
-                    next_graph_id,
-                })
+                Ok(GraphList { graphs })
             }
         }
 

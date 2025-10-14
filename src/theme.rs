@@ -1,6 +1,7 @@
 use crate::{
     attempt,
     console::attempt::*,
+    graph::node::Ntd,
     icon_sheets::{ButtonIconSheetId, ButtonIconSheets, NodeIconSheetSets},
     logln,
     ui::{Orientation, Padding, Visibility},
@@ -13,6 +14,11 @@ use std::{
     path::{Path, PathBuf},
     sync::LazyLock,
 };
+use thiserror::Error;
+
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+#[error("assets must be (re)loaded before accessing")]
+pub struct UnloadedAssetError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct SerdeColor {
@@ -540,7 +546,8 @@ impl std::ops::Deref for ThemeButtonIcons {
     fn deref(&self) -> &Self::Target {
         self.sheets
             .as_ref()
-            .fatal("icons must be reloaded before accessing")
+            .ok_or(UnloadedAssetError)
+            .fatal_unwrap()
     }
 }
 
@@ -549,7 +556,8 @@ impl std::ops::DerefMut for ThemeButtonIcons {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.sheets
             .as_mut()
-            .fatal("icons must be reloaded before accessing")
+            .ok_or(UnloadedAssetError)
+            .fatal_unwrap()
     }
 }
 
@@ -684,7 +692,8 @@ impl std::ops::Deref for ThemeNodeIcons {
     fn deref(&self) -> &Self::Target {
         self.sheetsets
             .as_ref()
-            .fatal("icons must be reloaded before accessing")
+            .ok_or(UnloadedAssetError)
+            .fatal_unwrap()
     }
 }
 
@@ -693,7 +702,8 @@ impl std::ops::DerefMut for ThemeNodeIcons {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.sheetsets
             .as_mut()
-            .fatal("icons must be reloaded before accessing")
+            .ok_or(UnloadedAssetError)
+            .fatal_unwrap()
     }
 }
 
@@ -764,8 +774,8 @@ impl ThemeNodeIcons {
                 "32x",
                 include_bytes!("../assets/nodeicons/32x.png"),
             )?,
-        })
-        .success("node icon sheets loaded");
+        });
+        logln!(Success, "node icon sheets loaded");
         Ok(())
     }
 }
@@ -867,18 +877,18 @@ impl From<ThemeLoader> for Theme {
             blueprints_background: value
                 .blueprints_background
                 .map_or(base.blueprints_background, Into::into),
-            resistance: [
-                value.resistance0.map_or(base.resistance[0], Into::into),
-                value.resistance1.map_or(base.resistance[1], Into::into),
-                value.resistance2.map_or(base.resistance[2], Into::into),
-                value.resistance3.map_or(base.resistance[3], Into::into),
-                value.resistance4.map_or(base.resistance[4], Into::into),
-                value.resistance5.map_or(base.resistance[5], Into::into),
-                value.resistance6.map_or(base.resistance[6], Into::into),
-                value.resistance7.map_or(base.resistance[7], Into::into),
-                value.resistance8.map_or(base.resistance[8], Into::into),
-                value.resistance9.map_or(base.resistance[9], Into::into),
-            ],
+            resistance: NtdColors([
+                value.resistance0.map_or(base.resistance.0[0], Into::into),
+                value.resistance1.map_or(base.resistance.0[1], Into::into),
+                value.resistance2.map_or(base.resistance.0[2], Into::into),
+                value.resistance3.map_or(base.resistance.0[3], Into::into),
+                value.resistance4.map_or(base.resistance.0[4], Into::into),
+                value.resistance5.map_or(base.resistance.0[5], Into::into),
+                value.resistance6.map_or(base.resistance.0[6], Into::into),
+                value.resistance7.map_or(base.resistance.0[7], Into::into),
+                value.resistance8.map_or(base.resistance.0[8], Into::into),
+                value.resistance9.map_or(base.resistance.0[9], Into::into),
+            ]),
             general_font: value.general_font.unwrap_or(base.general_font),
             title_font: value.title_font.unwrap_or(base.title_font),
             properties_header_font: value
@@ -938,16 +948,16 @@ impl From<Theme> for ThemeLoader {
             dead_link: Some(value.dead_link.into()),
             caution: Some(value.caution.into()),
             blueprints_background: Some(value.blueprints_background.into()),
-            resistance0: Some(value.resistance[0].into()),
-            resistance1: Some(value.resistance[1].into()),
-            resistance2: Some(value.resistance[2].into()),
-            resistance3: Some(value.resistance[3].into()),
-            resistance4: Some(value.resistance[4].into()),
-            resistance5: Some(value.resistance[5].into()),
-            resistance6: Some(value.resistance[6].into()),
-            resistance7: Some(value.resistance[7].into()),
-            resistance8: Some(value.resistance[8].into()),
-            resistance9: Some(value.resistance[9].into()),
+            resistance0: Some(value.resistance.0[0].into()),
+            resistance1: Some(value.resistance.0[1].into()),
+            resistance2: Some(value.resistance.0[2].into()),
+            resistance3: Some(value.resistance.0[3].into()),
+            resistance4: Some(value.resistance.0[4].into()),
+            resistance5: Some(value.resistance.0[5].into()),
+            resistance6: Some(value.resistance.0[6].into()),
+            resistance7: Some(value.resistance.0[7].into()),
+            resistance8: Some(value.resistance.0[8].into()),
+            resistance9: Some(value.resistance.0[9].into()),
             general_font: Some(value.general_font),
             title_font: Some(value.title_font),
             properties_header_font: Some(value.properties_header_font),
@@ -966,6 +976,23 @@ impl From<Theme> for ThemeLoader {
             node_icons: Some(value.node_icons),
             button_icons: Some(value.button_icons),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NtdColors(pub [Color; 10]);
+
+impl std::ops::Index<Ntd> for NtdColors {
+    type Output = Color;
+
+    fn index(&self, index: Ntd) -> &Self::Output {
+        &self.0[index as usize]
+    }
+}
+
+impl std::ops::IndexMut<Ntd> for NtdColors {
+    fn index_mut(&mut self, index: Ntd) -> &mut Self::Output {
+        &mut self.0[index as usize]
     }
 }
 
@@ -992,7 +1019,7 @@ pub struct Theme {
     pub dead_link: Color,
     pub caution: Color,
     pub blueprints_background: Color,
-    pub resistance: [Color; 10],
+    pub resistance: NtdColors,
     pub general_font: ThemeFont,
     pub title_font: ThemeFont,
     pub properties_header_font: ThemeFont,
@@ -1079,7 +1106,7 @@ impl Theme {
             dead_link: Color::HAUNTINGWHITE,
             caution: Color::CAUTIONYELLOW,
             blueprints_background: Color::new(10, 15, 30, 255),
-            resistance: [
+            resistance: NtdColors([
                 Color::BLACK,
                 Color::BROWN,
                 Color::RED,
@@ -1090,7 +1117,7 @@ impl Theme {
                 Color::PURPLE,
                 Color::GRAY,
                 Color::WHITE,
-            ],
+            ]),
             general_font: ThemeFont::default(),
             title_font: ThemeFont::default(),
             properties_header_font: ThemeFont {
@@ -1293,16 +1320,16 @@ impl std::ops::Index<ColorId> for Theme {
             ColorId::DeadLink => &self.dead_link,
             ColorId::Caution => &self.caution,
             ColorId::BlueprintsBackground => &self.blueprints_background,
-            ColorId::Resistance0 => &self.resistance[0],
-            ColorId::Resistance1 => &self.resistance[1],
-            ColorId::Resistance2 => &self.resistance[2],
-            ColorId::Resistance3 => &self.resistance[3],
-            ColorId::Resistance4 => &self.resistance[4],
-            ColorId::Resistance5 => &self.resistance[5],
-            ColorId::Resistance6 => &self.resistance[6],
-            ColorId::Resistance7 => &self.resistance[7],
-            ColorId::Resistance8 => &self.resistance[8],
-            ColorId::Resistance9 => &self.resistance[9],
+            ColorId::Resistance0 => &self.resistance.0[0],
+            ColorId::Resistance1 => &self.resistance.0[1],
+            ColorId::Resistance2 => &self.resistance.0[2],
+            ColorId::Resistance3 => &self.resistance.0[3],
+            ColorId::Resistance4 => &self.resistance.0[4],
+            ColorId::Resistance5 => &self.resistance.0[5],
+            ColorId::Resistance6 => &self.resistance.0[6],
+            ColorId::Resistance7 => &self.resistance.0[7],
+            ColorId::Resistance8 => &self.resistance.0[8],
+            ColorId::Resistance9 => &self.resistance.0[9],
         }
     }
 }
@@ -1331,16 +1358,16 @@ impl std::ops::IndexMut<ColorId> for Theme {
             ColorId::DeadLink => &mut self.dead_link,
             ColorId::Caution => &mut self.caution,
             ColorId::BlueprintsBackground => &mut self.blueprints_background,
-            ColorId::Resistance0 => &mut self.resistance[0],
-            ColorId::Resistance1 => &mut self.resistance[1],
-            ColorId::Resistance2 => &mut self.resistance[2],
-            ColorId::Resistance3 => &mut self.resistance[3],
-            ColorId::Resistance4 => &mut self.resistance[4],
-            ColorId::Resistance5 => &mut self.resistance[5],
-            ColorId::Resistance6 => &mut self.resistance[6],
-            ColorId::Resistance7 => &mut self.resistance[7],
-            ColorId::Resistance8 => &mut self.resistance[8],
-            ColorId::Resistance9 => &mut self.resistance[9],
+            ColorId::Resistance0 => &mut self.resistance.0[0],
+            ColorId::Resistance1 => &mut self.resistance.0[1],
+            ColorId::Resistance2 => &mut self.resistance.0[2],
+            ColorId::Resistance3 => &mut self.resistance.0[3],
+            ColorId::Resistance4 => &mut self.resistance.0[4],
+            ColorId::Resistance5 => &mut self.resistance.0[5],
+            ColorId::Resistance6 => &mut self.resistance.0[6],
+            ColorId::Resistance7 => &mut self.resistance.0[7],
+            ColorId::Resistance8 => &mut self.resistance.0[8],
+            ColorId::Resistance9 => &mut self.resistance.0[9],
         }
     }
 }
@@ -1380,11 +1407,11 @@ impl AsRef<ffi::Font> for OptionalFont {
     #[inline]
     fn as_ref(&self) -> &ffi::Font {
         match self {
-            Self::Unloaded => None,
-            Self::Strong(font) => Some(font.as_ref()),
-            Self::Weak(font) => Some(font.as_ref()),
+            Self::Unloaded => Err(UnloadedAssetError),
+            Self::Strong(font) => Ok(font.as_ref()),
+            Self::Weak(font) => Ok(font.as_ref()),
         }
-        .fatal("font must be loaded before using")
+        .fatal_unwrap()
     }
 }
 
@@ -1392,11 +1419,11 @@ impl AsMut<ffi::Font> for OptionalFont {
     #[inline]
     fn as_mut(&mut self) -> &mut ffi::Font {
         match self {
-            Self::Unloaded => None,
-            Self::Strong(font) => Some(font.as_mut()),
-            Self::Weak(font) => Some(font.as_mut()),
+            Self::Unloaded => Err(UnloadedAssetError),
+            Self::Strong(font) => Ok(font.as_mut()),
+            Self::Weak(font) => Ok(font.as_mut()),
         }
-        .fatal("font must be loaded before using")
+        .fatal_unwrap()
     }
 }
 
