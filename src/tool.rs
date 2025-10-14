@@ -229,7 +229,7 @@ impl Create {
                     .fatal("current node should always be valid")
                     .position()
                     .as_vec2()
-                    + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                    + GRID_EXTENT,
                 tab.screen_to_world(input.cursor),
                 toolpane.elbow,
                 theme.foreground,
@@ -446,7 +446,7 @@ impl Edit {
         }
 
         if let Some(EditDragging { temp_pos, id: _ }) = self.target.as_mut() {
-            *temp_pos = cursor_world_pos - rvec2(GRID_SIZE / 2, GRID_SIZE / 2);
+            *temp_pos = cursor_world_pos - GRID_EXTENT;
         }
 
         _is_dirty
@@ -474,17 +474,17 @@ impl Edit {
                             .fatal("wire src should always be valid")
                             .position()
                             .as_vec2()
-                            + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
-                        *temp_pos + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                            + GRID_EXTENT,
+                        *temp_pos + GRID_EXTENT,
                     ),
                     Flow::Output => (
-                        *temp_pos + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                        *temp_pos + GRID_EXTENT,
                         graph
                             .node(wire.dst())
                             .fatal("wire dst should always be valid")
                             .position()
                             .as_vec2()
-                            + rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                            + GRID_EXTENT,
                     ),
                     Flow::Loop => {
                         todo!()
@@ -516,7 +516,7 @@ impl Edit {
                 wire.draw(
                     d,
                     graph,
-                    rvec2(GRID_SIZE / 2, GRID_SIZE / 2),
+                    GRID_EXTENT,
                     match flow {
                         Flow::Input => theme.input,
                         Flow::Output => theme.output,

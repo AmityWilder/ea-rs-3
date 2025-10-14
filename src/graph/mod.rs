@@ -22,6 +22,7 @@ use std::{
 };
 use thiserror::Error;
 
+pub mod blueprint;
 pub mod eag;
 pub mod node;
 pub mod wire;
@@ -112,6 +113,7 @@ pub struct Graph {
     nodes: FxHashMap<NodeId, Node>,
     wires: FxHashMap<WireId, Wire>,
     node_grid: FxHashMap<IVec2, NodeId>,
+    named_nodes: FxHashMap<NodeId, String>,
     eval_order: Vec<NodeId>,
     eval_order_dict: FxHashMap<NodeId, (usize, usize)>,
     is_eval_order_dirty: bool,
@@ -201,6 +203,7 @@ impl Graph {
             nodes: FxHashMap::default(),
             wires: FxHashMap::default(),
             node_grid: FxHashMap::default(),
+            named_nodes: FxHashMap::default(),
             eval_order: Vec::new(),
             eval_order_dict: FxHashMap::default(),
             is_eval_order_dirty: false,
@@ -264,7 +267,6 @@ impl Graph {
         gate: Gate,
         position: IVec2,
     ) -> Result<&mut Node, AlreadyExistsError<&mut Node>> {
-        let id = NodeId::next().fatal("out of IDs");
         let grid_pos = Self::world_to_grid(position);
         if let Some(&existing) = self.node_grid.get(&grid_pos) {
             logln!(
@@ -275,6 +277,7 @@ impl Graph {
             );
             Err(AlreadyExistsError(&mut self[&existing]))
         } else {
+            let id = NodeId::next().fatal("out of IDs");
             self.node_grid.insert(grid_pos, id);
             let node = self
                 .nodes
@@ -426,6 +429,12 @@ impl Graph {
                 (false, true) => Some((wire, Flow::Input)),
                 (false, false) => None,
             })
+    }
+
+    /// Not all nodes have names
+    #[inline]
+    pub fn name<'a>(&'a self, node: &NodeId) -> Option<&'a str> {
+        self.named_nodes.get(node).map(String::as_str)
     }
 
     /// Returns [`None`] if the start or end of the wire is not in the graph.
@@ -751,6 +760,7 @@ mod tests {
             nodes,
             wires,
             node_grid: FxHashMap::default(),
+            named_nodes: FxHashMap::default(),
             eval_order: Vec::new(),
             eval_order_dict: FxHashMap::default(),
             is_eval_order_dirty: true,

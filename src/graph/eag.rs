@@ -169,7 +169,7 @@ impl From<GraphTemplate> for Graph {
         }: GraphTemplate,
     ) -> Self {
         Self {
-            id: GraphId(0),
+            id: GraphId::next().fatal_unwrap(),
             node_grid: nodes
                 .values()
                 .map(|node| (node.position, *node.id()))
@@ -177,6 +177,7 @@ impl From<GraphTemplate> for Graph {
             nodes,
             wires,
             eval_order: Vec::default(),
+            named_nodes: FxHashMap::default(),
             eval_order_dict: FxHashMap::default(),
             is_eval_order_dirty: true,
         }
