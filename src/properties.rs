@@ -186,7 +186,7 @@ fn gate_data(gate: &Gate) -> (ButtonIconId, &'static str, &'static str) {
         ),
         Gate::Led { .. } => (
             ButtonIconId::Led,
-            "Led",
+            "LED",
             "Like Or, but in Inspect mode, fills its cell with the color of the NTD value when true.",
         ),
         Gate::Delay => (
