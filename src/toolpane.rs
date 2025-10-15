@@ -1,14 +1,13 @@
 use crate::{
+    config::{input::Inputs, theme::Theme},
     console::{GateRef, ToolRef, attempt::*, rich_text::ColorRef},
     graph::{
         node::{Gate, GateId, Ntd},
         wire::Elbow,
     },
     icon_sheets::{ButtonIconId, ButtonIconSheetId},
-    input::Inputs,
     ivec::Bounds,
     logln,
-    theme::Theme,
     tool::{Tool, ToolId},
     ui::{Orientation, Panel, PanelContent, Visibility},
 };

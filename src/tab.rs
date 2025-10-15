@@ -1,9 +1,9 @@
 use crate::{
     GRID_SIZE, IVec2, Theme,
+    config::input::Inputs,
     console::attempt::*,
     graph::{Graph, id::NodeId},
     icon_sheets::NodeIconSheetSetId,
-    input::Inputs,
     ivec::{AsIVec2, Bounds},
     toolpane::ToolPane,
     ui::Panel,

@@ -1,5 +1,6 @@
 use crate::{
     GRID_EXTENT, GRID_SIZE,
+    config::{input::Inputs, theme::Theme},
     console::attempt::*,
     graph::{
         Graph,
@@ -8,10 +9,8 @@ use crate::{
         wire::{Elbow, Flow, Wire},
     },
     icon_sheets::NodeIconSheetId,
-    input::Inputs,
     ivec::{AsIVec2, IVec2},
     tab::EditorTab,
-    theme::Theme,
     toolpane::ToolPane,
 };
 use arrayvec::ArrayString;

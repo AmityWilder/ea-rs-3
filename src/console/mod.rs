@@ -1,5 +1,9 @@
 use crate::{
     GRID_SIZE,
+    config::{
+        input::Inputs,
+        theme::{ColorId, Theme},
+    },
     console::attempt::*,
     graph::{
         Graph, GraphList,
@@ -7,10 +11,8 @@ use crate::{
         node::{Gate, Node},
         wire::Wire,
     },
-    input::Inputs,
     ivec::{AsIVec2, IBounds, IRect, IVec2},
     tab::TabList,
-    theme::{ColorId, Theme},
     tool::ToolId,
     toolpane::{ButtonAction, ToolPane},
     ui::{Panel, PanelContent},
