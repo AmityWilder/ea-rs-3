@@ -3,7 +3,8 @@ use crate::{
     console::attempt::*,
     graph::{
         Graph,
-        node::{Gate, GateId, GateInstance, NodeId},
+        id::NodeId,
+        node::{Gate, GateId, GateInstance},
         wire::{Elbow, Flow, Wire},
     },
     icon_sheets::NodeIconSheetId,

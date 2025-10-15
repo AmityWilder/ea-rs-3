@@ -2,8 +2,9 @@ use crate::{
     console::attempt::*,
     graph::{
         Graph, GraphId, GraphList,
-        node::{Node, NodeId},
-        wire::{Wire, WireId},
+        id::{NodeId, WireId},
+        node::Node,
+        wire::Wire,
     },
     ivec::IVec2,
 };

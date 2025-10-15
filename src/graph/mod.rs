@@ -2,12 +2,13 @@ use crate::{
     GRID_SIZE,
     console::{GateRef, NodeRef, PositionRef, WireRef, attempt::*},
     graph::{
-        node::{Gate, Node, NodeId},
-        wire::{Elbow, Flow, Wire, WireId},
+        node::{Gate, Node},
+        wire::{Elbow, Flow, Wire},
     },
     ivec::IVec2,
     logln,
 };
+use id::{GraphId, NodeId, WireId};
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde_derive::Deserialize;
 use std::{
@@ -15,79 +16,20 @@ use std::{
         VecDeque,
         hash_map::{Keys, Values},
     },
-    sync::{
-        Arc,
-        nonpoison::{Mutex, RwLock},
-    },
+    iter::*,
+    sync::{Arc, nonpoison::RwLock},
 };
 use thiserror::Error;
 
 pub mod blueprint;
 pub mod eag;
+pub mod id;
 pub mod node;
 pub mod wire;
 
 #[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
-#[error("out of IDs")]
-pub struct OutOfIDsError;
-
-#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
 #[error("nodes should not be moved without updating their position in node_grid")]
 pub struct NodeGridDesyncError;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct GraphId(u32);
-
-static NEXT_GRAPH_ID: Mutex<GraphId> = Mutex::new(GraphId(0));
-
-/// Defaults to [`Self::INVALID`]
-impl Default for GraphId {
-    fn default() -> Self {
-        Self::INVALID
-    }
-}
-
-impl std::fmt::Display for GraphId {
-    #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "g{:x}", self.0)
-    }
-}
-
-impl std::str::FromStr for GraphId {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.strip_prefix('g')
-            .ok_or(())
-            .and_then(|x| u32::from_str_radix(x, 16).map_err(|_| ()))
-            .map(Self)
-    }
-}
-
-impl GraphId {
-    pub const INVALID: Self = Self(!0);
-
-    /// Returns the current value and increments `self`.
-    /// Returns [`None`] if [`Self::INVALID`] would have been returned.
-    /// Does not increment if `self` is [`Self::INVALID`].
-    #[inline]
-    pub const fn step(&mut self) -> Result<Self, OutOfIDsError> {
-        const INVALID: GraphId = GraphId::INVALID;
-        match *self {
-            INVALID => Err(OutOfIDsError),
-            id => {
-                self.0 += 1;
-                Ok(id)
-            }
-        }
-    }
-
-    #[inline]
-    pub fn next() -> Result<Self, OutOfIDsError> {
-        NEXT_GRAPH_ID.lock().step()
-    }
-}
 
 macro_rules! dbg_ord_prinln {
     ($($bindings:pat),*$(,)? => $($args:tt)*) => {{
@@ -195,6 +137,8 @@ impl<T> std::ops::DerefMut for AlreadyExistsError<T> {
         &mut self.0
     }
 }
+
+type WiresOf<'a, F> = FilterMap<Values<'a, WireId, Wire>, F>;
 
 impl Graph {
     pub fn new(id: GraphId) -> Self {
@@ -410,17 +354,26 @@ impl Graph {
     }
 
     #[inline]
-    pub fn inputs_to<'a>(&'a self, node: &NodeId) -> impl Iterator<Item = &'a Wire> {
+    pub fn inputs_to<'a>(
+        &'a self,
+        node: &NodeId,
+    ) -> Filter<Values<'a, WireId, Wire>, impl FnMut(&&'a Wire) -> bool> {
         self.wires.values().filter(move |wire| &wire.dst == node)
     }
 
     #[inline]
-    pub fn outputs_from<'a>(&'a self, node: &NodeId) -> impl Iterator<Item = &'a Wire> {
+    pub fn outputs_from<'a>(
+        &'a self,
+        node: &NodeId,
+    ) -> Filter<Values<'a, WireId, Wire>, impl FnMut(&&'a Wire) -> bool> {
         self.wires.values().filter(move |wire| &wire.src == node)
     }
 
     #[inline]
-    pub fn wires_of<'a>(&'a self, node: &NodeId) -> impl Iterator<Item = (&'a Wire, Flow)> {
+    pub fn wires_of<'a>(
+        &'a self,
+        node: &NodeId,
+    ) -> WiresOf<'a, impl FnMut(&'a Wire) -> Option<(&'a Wire, Flow)>> {
         self.wires
             .values()
             .filter_map(move |wire| match (&wire.src == node, &wire.dst == node) {
@@ -472,8 +425,7 @@ impl Graph {
     #[inline]
     pub fn inputless_nodes(
         &self,
-    ) -> std::iter::Filter<std::iter::Copied<Keys<'_, NodeId, Node>>, impl FnMut(&NodeId) -> bool>
-    {
+    ) -> Filter<Copied<Keys<'_, NodeId, Node>>, impl FnMut(&NodeId) -> bool> {
         let input_taking = FxHashSet::from_iter(self.wires.values().map(|wire| wire.dst));
         self.nodes
             .keys()
@@ -484,8 +436,7 @@ impl Graph {
     #[inline]
     pub fn outputless_nodes(
         &self,
-    ) -> std::iter::Filter<std::iter::Copied<Keys<'_, NodeId, Node>>, impl FnMut(&NodeId) -> bool>
-    {
+    ) -> Filter<Copied<Keys<'_, NodeId, Node>>, impl FnMut(&NodeId) -> bool> {
         let output_giving = FxHashSet::from_iter(self.wires.values().map(|wire| wire.src));
         self.nodes
             .keys()
@@ -737,24 +688,14 @@ mod tests {
         nodes: impl IntoIterator<Item = (NodeId, Gate)>,
         wires: impl IntoIterator<Item = (WireId, (NodeId, NodeId))>,
     ) -> Graph {
-        let mut next_node_id = NodeId(0);
-        let mut next_wire_id = WireId(0);
         let nodes = nodes
             .into_iter()
-            .map(|(id, gate)| {
-                next_node_id.0 = id.0.max(next_node_id.0);
-                (id, Node::new(id, gate, IVec2::default(), false))
-            })
+            .map(|(id, gate)| (id, Node::new(id, gate, IVec2::default(), false)))
             .collect();
         let wires = wires
             .into_iter()
-            .map(|(id, (src, dst))| {
-                next_wire_id.0 = id.0.max(next_wire_id.0);
-                (id, Wire::new(id, Elbow::default(), src, dst))
-            })
+            .map(|(id, (src, dst))| (id, Wire::new(id, Elbow::default(), src, dst)))
             .collect();
-        _ = next_node_id.step();
-        _ = next_wire_id.step();
         Graph {
             id,
             nodes,
@@ -891,6 +832,7 @@ mod tests {
             $({$gate:expr} $id:ident;)*
             // wires
             $($src:ident -> $dst:ident;)*
+            $(
             // expected eval order
             [$(($({$($ord:ident),*}),*)),*];
             // optional message
@@ -905,17 +847,19 @@ mod tests {
                     $(($($eval_args:tt)*))?
                 )?
             )*
+            )?
         ) => {
             {
                 use Gate::*;
-                let mut next_node_id = NodeId(0);
-                let mut next_wire_id = WireId(0);
-                let [$($id),*] = std::array::from_fn(|_| next_node_id.step().unwrap());
+                let mut next_node_id = 0..;
+                let mut next_wire_id = 0..;
+                let [$($id),*] = std::array::from_fn(|_| NodeId(next_node_id.next().unwrap()));
                 let mut g = gen_graph(
                     GraphId(0),
                     [$(($id, $gate)),*],
-                    [$(($src, $dst)),*].map(|x| (next_wire_id.step().unwrap(), x)),
+                    [$(($src, $dst)),*].map(|x| (WireId(next_wire_id.next().unwrap()), x)),
                 );
+                $(
                 // order
                 g.refresh_eval_order();
                 assert_eq!(
@@ -943,6 +887,7 @@ mod tests {
                         $($($eval_args)*)?
                     );)?
                 )*
+                )?
                 // return
                 (g, [$($id),*])
             }
