@@ -1,16 +1,16 @@
 use crate::{
     GRID_EXTENT, GRID_SIZE,
+    config::{input::Inputs, theme::Theme},
     console::attempt::*,
     graph::{
-        Graph, OutOfIDsError,
-        node::{Gate, GateId, GateInstance, Node, NodeId},
+        Graph,
+        id::{NodeId, OutOfIDsError},
+        node::{Gate, GateId, GateInstance, Node},
         wire::{Elbow, Flow, Wire},
     },
     icon_sheets::NodeIconSheetId,
-    input::Inputs,
     ivec::{AsIVec2, Bounds, IBounds, IVec2},
     tab::EditorTab,
-    theme::Theme,
     toolpane::ToolPane,
 };
 use arrayvec::ArrayString;

@@ -639,14 +639,14 @@ impl ThemeButtonIcons {
                 thread,
                 self.x16_path.as_ref(),
                 "16x",
-                include_bytes!("../assets/icons16x.png"),
+                include_bytes!("../../assets/icons16x.png"),
             )?,
             x32: load_sheet(
                 rl,
                 thread,
                 self.x32_path.as_ref(),
                 "32x",
-                include_bytes!("../assets/icons32x.png"),
+                include_bytes!("../../assets/icons32x.png"),
             )?,
         });
         logln!(Success, "Button icon sheets loaded.");
@@ -758,21 +758,21 @@ impl ThemeNodeIcons {
                 thread,
                 self.basic8x_path.as_ref(),
                 "8x",
-                include_bytes!("../assets/nodeicons/8x.png"),
+                include_bytes!("../../assets/nodeicons/8x.png"),
             )?,
             x16: load_sheet(
                 rl,
                 thread,
                 self.basic16x_path.as_ref(),
                 "16x",
-                include_bytes!("../assets/nodeicons/16x.png"),
+                include_bytes!("../../assets/nodeicons/16x.png"),
             )?,
             x32: load_sheet(
                 rl,
                 thread,
                 self.basic32x_path.as_ref(),
                 "32x",
-                include_bytes!("../assets/nodeicons/32x.png"),
+                include_bytes!("../../assets/nodeicons/32x.png"),
             )?,
         });
         logln!(Success, "node icon sheets loaded");

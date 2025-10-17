@@ -1,64 +1,10 @@
 use super::{
-    Graph, NotOfGraphError, OutOfIDsError,
-    node::{Node, NodeId},
+    Graph, NotOfGraphError,
+    id::{NodeId, WireId},
+    node::Node,
 };
 use raylib::prelude::*;
 use serde_derive::{Deserialize, Serialize};
-use std::sync::nonpoison::Mutex;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct WireId(pub(super) u128);
-
-static NEXT_WIRE_ID: Mutex<WireId> = Mutex::new(WireId(0));
-
-/// Defaults to [`Self::INVALID`]
-impl Default for WireId {
-    fn default() -> Self {
-        Self::INVALID
-    }
-}
-
-impl std::fmt::Display for WireId {
-    #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "w{:x}", self.0)
-    }
-}
-
-impl std::str::FromStr for WireId {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.strip_prefix('w')
-            .ok_or(())
-            .and_then(|x| u128::from_str_radix(x, 16).map_err(|_| ()))
-            .map(Self)
-    }
-}
-
-impl WireId {
-    pub const INVALID: Self = Self(!0);
-
-    /// Returns the current value and increments `self`.
-    /// Returns [`None`] if [`Self::INVALID`] would have been returned.
-    /// Does not increment if `self` is [`Self::INVALID`].
-    #[inline]
-    pub const fn step(&mut self) -> Result<Self, OutOfIDsError> {
-        const INVALID: WireId = WireId::INVALID;
-        match *self {
-            INVALID => Err(OutOfIDsError),
-            id => {
-                self.0 += 1;
-                Ok(id)
-            }
-        }
-    }
-
-    #[inline]
-    pub fn next() -> Result<Self, OutOfIDsError> {
-        NEXT_WIRE_ID.lock().step()
-    }
-}
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,

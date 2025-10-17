@@ -1,9 +1,11 @@
 use crate::{
+    config::{
+        input::Inputs,
+        theme::{Theme, ThemeFont},
+    },
     graph::node::{Gate, Node},
     icon_sheets::{ButtonIconId, ButtonIconSheetId},
-    input::Inputs,
     ivec::Bounds,
-    theme::{Theme, ThemeFont},
     tool::Tool,
     ui::{Panel, PanelContent},
 };

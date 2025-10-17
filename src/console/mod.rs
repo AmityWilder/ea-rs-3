@@ -1,15 +1,18 @@
 use crate::{
     GRID_SIZE,
+    config::{
+        input::Inputs,
+        theme::{ColorId, Theme},
+    },
     console::attempt::*,
     graph::{
-        Graph, GraphId, GraphList,
-        node::{Gate, Node, NodeId},
-        wire::{Wire, WireId},
+        Graph, GraphList,
+        id::{GraphId, NodeId, WireId},
+        node::{Gate, Node},
+        wire::Wire,
     },
-    input::Inputs,
     ivec::{AsIVec2, IBounds, IRect, IVec2},
     tab::TabList,
-    theme::{ColorId, Theme},
     tool::ToolId,
     toolpane::{ButtonAction, ToolPane},
     ui::{Panel, PanelContent},
@@ -24,6 +27,7 @@ use std::{
         nonpoison::{Mutex, RwLock, RwLockReadGuard},
     },
 };
+use thiserror::Error;
 
 /// UNDER CONSTRUCTION
 pub mod attempt;
@@ -399,17 +403,22 @@ impl std::fmt::Display for HyperRef {
     }
 }
 
-impl FromStr for HyperRef {
-    type Err = ();
+#[derive(Debug, Error)]
+#[error("no matching hyperref format")]
+pub struct ParseHyperRefError;
 
+impl FromStr for HyperRef {
+    type Err = ParseHyperRefError;
+
+    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse()
-            .map(Self::Gate)
-            .or_else(|()| s.parse().map(Self::Tool))
-            .or_else(|()| s.parse().map(Self::Position))
-            .or_else(|()| s.parse().map(Self::Graph))
-            .or_else(|()| s.parse().map(Self::Node))
-            .or_else(|()| s.parse().map(Self::Wire))
+        (s.parse().ok().map(Self::Gate))
+            .or_else(|| s.parse().ok().map(Self::Tool))
+            .or_else(|| s.parse().ok().map(Self::Position))
+            .or_else(|| s.parse().ok().map(Self::Graph))
+            .or_else(|| s.parse().ok().map(Self::Node))
+            .or_else(|| s.parse().ok().map(Self::Wire))
+            .ok_or(ParseHyperRefError)
     }
 }
 

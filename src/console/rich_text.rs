@@ -1,4 +1,4 @@
-use crate::theme::{ColorId, Theme};
+use crate::config::theme::{ColorId, Theme};
 use raylib::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

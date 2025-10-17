@@ -2,13 +2,12 @@
 #![deny(clippy::missing_safety_doc, clippy::undocumented_unsafe_blocks)]
 
 use crate::{
-    config::Config,
+    config::{Config, theme::Theme},
     console::{Console, attempt::*},
     graph::{GraphList, node::Gate, wire::Elbow},
     ivec::{Bounds, IVec2},
     properties::PropertiesPanel,
     tab::{EditorTab, Tab, TabList},
-    theme::Theme,
     tool::Tool,
     toolpane::ToolPane,
     ui::{Anchoring, ExactSizing, NcSizing, Padding, Panel, PanelContent, Sizing},
@@ -25,11 +24,9 @@ mod config;
 mod console;
 mod graph;
 mod icon_sheets;
-mod input;
 mod ivec;
 mod properties;
 mod tab;
-mod theme;
 mod tool;
 mod toolpane;
 mod ui;

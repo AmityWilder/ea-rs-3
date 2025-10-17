@@ -1,4 +1,7 @@
-use crate::{input::Inputs, ivec::Bounds, theme::Theme};
+use crate::{
+    config::{input::Inputs, theme::Theme},
+    ivec::Bounds,
+};
 use raylib::prelude::*;
 use serde_derive::{Deserialize, Serialize};
 
