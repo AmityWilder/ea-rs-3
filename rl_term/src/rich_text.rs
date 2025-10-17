@@ -1,4 +1,3 @@
-use crate::theme::{ColorId, Theme};
 use raylib::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,114 +14,22 @@ impl std::fmt::Display for RichStrError {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ColorRef {
-    Theme(ColorId),
-    Exact(Color),
-}
+pub trait InlineColor: std::str::FromStr {
+    type Pattern: std::str::pattern::Pattern;
 
-impl std::fmt::Display for ColorRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ColorRef::Theme(id) => write!(f, "{id}"),
-            ColorRef::Exact(Color { r, g, b, a }) => write!(f, "rgba({r},{g},{b},{a})"),
-        }
-    }
-}
-
-impl std::str::FromStr for ColorRef {
-    type Err = RichStrError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.strip_prefix("rgba(") {
-            Some(s) => match s.strip_suffix(')') {
-                Some(s) => {
-                    let mut it = s.splitn(4, ',');
-                    it.next()
-                        .and_then(|x| x.parse().ok())
-                        .zip(it.next().and_then(|x| x.parse().ok()))
-                        .zip(it.next().and_then(|x| x.parse().ok()))
-                        .zip(it.next().and_then(|x| x.parse().ok()))
-                        .ok_or(RichStrError::InvalidEscapeCode)
-                        .map(|(((r, g), b), a)| Self::Exact(Color::new(r, g, b, a)))
-                }
-                None => Err(RichStrError::InvalidEscapeCode),
-            },
-            None => s
-                .parse::<ColorId>()
-                .map(Self::Theme)
-                .map_err(|_| RichStrError::InvalidEscapeCode),
-        }
-    }
-}
-
-impl ColorRef {
-    #[inline]
-    pub fn get(self, theme: &Theme) -> Color {
-        match self {
-            Self::Theme(id) => theme[id],
-            Self::Exact(color) => color,
-        }
-    }
-}
-
-impl From<ColorId> for ColorRef {
-    #[inline]
-    fn from(value: ColorId) -> Self {
-        Self::Theme(value)
-    }
-}
-
-impl From<Color> for ColorRef {
-    #[inline]
-    fn from(value: Color) -> Self {
-        Self::Exact(value)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ColorAct {
-    #[default]
-    Pop,
-    Repl(ColorRef),
-    Push(ColorRef),
-}
-
-impl std::fmt::Display for ColorAct {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ColorAct::Pop => write!(f, "\x1B{{pop}}"),
-            ColorAct::Repl(c) => write!(f, "\x1B{{{c}}}"),
-            ColorAct::Push(c) => write!(f, "\x1B{{push:{c}}}"),
-        }
-    }
-}
-
-impl std::str::FromStr for ColorAct {
-    type Err = RichStrError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s == "pop" {
-            Ok(Self::Pop)
-        } else {
-            let (c, wrapper): (&str, fn(ColorRef) -> Self) = s
-                .strip_prefix("push:")
-                .map_or((s, Self::Repl), |c| (c, Self::Push));
-            c.parse().map(wrapper)
-        }
-    }
+    fn pattern() -> Self::Pattern;
 }
 
 #[derive(Debug, Clone)]
-pub struct RichStrIter<'a> {
-    color_stack: Vec<ColorRef>,
+pub struct RichStrIter<'a, T> {
+    color_stack: Vec<T>,
     string: &'a str,
 }
 
 impl std::error::Error for RichStrError {}
 
-impl<'a> Iterator for RichStrIter<'a> {
-    type Item = Result<(Option<ColorRef>, &'a str), RichStrError>;
+impl<'a, T> Iterator for RichStrIter<'a, T> {
+    type Item = Result<(Option<T>, &'a str), RichStrError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut s = self.string;

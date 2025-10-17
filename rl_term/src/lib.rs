@@ -1,10 +1,218 @@
+use arrayvec::ArrayString;
+use nom::{
+    IResult, Parser,
+    bytes::complete::{is_not, tag},
+    character::{char, complete::u8},
+    combinator::fail,
+    multi::{many0, separated_list1},
+    sequence::{delimited, preceded},
+};
 use raylib::prelude::*;
-use rich_text::{ColorAct, ColorRef, RichStr, RichString};
 
-pub mod rich_text;
+// pub mod attempt;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[repr(u32)]
+enum ColorItem {
+    #[default]
+    Reset = 0,
+    Bold = 1,
+    Dim = 2,
+    Underline = 4,
+    ResetBoldDim = 22,
+    ResetUnderline = 24,
+
+    ForegroundBlack = 30,
+    ForegroundRed = 31,
+    ForegroundGreen = 32,
+    ForegroundYellow = 33,
+    ForegroundBlue = 34,
+    ForegroundMagenta = 35,
+    ForegroundCyan = 36,
+    ForegroundWhite = 37,
+    TruecolorForeground(u8, u8, u8), // 38
+    ResetForeground = 39,
+
+    BackgroundBlack = 40,
+    BackgroundRed = 41,
+    BackgroundGreen = 42,
+    BackgroundYellow = 43,
+    BackgroundBlue = 44,
+    BackgroundMagenta = 45,
+    BackgroundCyan = 46,
+    BackgroundWhite = 47,
+    TruecolorBackground(u8, u8, u8), // 48
+    ResetBackground = 49,
+
+    ForegroundBrightBlack = 90,
+    ForegroundBrightRed = 91,
+    ForegroundBrightGreen = 92,
+    ForegroundBrightYellow = 93,
+    ForegroundBrightBlue = 94,
+    ForegroundBrightMagenta = 95,
+    ForegroundBrightCyan = 96,
+    ForegroundBrightWhite = 97,
+
+    BackgroundBrightBlack = 100,
+    BackgroundBrightRed = 101,
+    BackgroundBrightGreen = 102,
+    BackgroundBrightYellow = 103,
+    BackgroundBrightBlue = 104,
+    BackgroundBrightMagenta = 105,
+    BackgroundBrightCyan = 106,
+    BackgroundBrightWhite = 107,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Style {
+    bold: bool,
+    underline: bool,
+    background: Option<Color>,
+    foreground: Option<Color>,
+}
+
+impl FromIterator<ColorItem> for Style {
+    fn from_iter<T: IntoIterator<Item = ColorItem>>(iter: T) -> Self {
+        let mut style = Style::default();
+        for item in iter {
+            match item {
+                ColorItem::Reset => style = Style::default(),
+                ColorItem::Bold => style.bold = true,
+                ColorItem::Dim => todo!(),
+                ColorItem::Underline => style.underline = true,
+                ColorItem::ResetBoldDim => style.bold = false,
+                ColorItem::ResetUnderline => style.underline = false,
+
+                ColorItem::ForegroundBlack => style.foreground = Some(Color::BLACK),
+                ColorItem::ForegroundRed => style.foreground = Some(Color::RED),
+                ColorItem::ForegroundGreen => style.foreground = Some(Color::GREEN),
+                ColorItem::ForegroundYellow => style.foreground = Some(Color::YELLOW),
+                ColorItem::ForegroundBlue => style.foreground = Some(Color::BLUE),
+                ColorItem::ForegroundMagenta => style.foreground = Some(Color::MAGENTA),
+                ColorItem::ForegroundCyan => style.foreground = Some(Color::CYAN),
+                ColorItem::ForegroundWhite => style.foreground = Some(Color::WHITE),
+                ColorItem::TruecolorForeground(r, g, b) => {
+                    style.foreground = Some(Color::new(r, g, b, 255))
+                }
+                ColorItem::ResetForeground => style.foreground = None,
+
+                ColorItem::BackgroundBlack => style.background = Some(Color::BLACK),
+                ColorItem::BackgroundRed => style.background = Some(Color::RED),
+                ColorItem::BackgroundGreen => style.background = Some(Color::GREEN),
+                ColorItem::BackgroundYellow => style.background = Some(Color::YELLOW),
+                ColorItem::BackgroundBlue => style.background = Some(Color::BLUE),
+                ColorItem::BackgroundMagenta => style.background = Some(Color::MAGENTA),
+                ColorItem::BackgroundCyan => style.background = Some(Color::CYAN),
+                ColorItem::BackgroundWhite => style.background = Some(Color::WHITE),
+                ColorItem::TruecolorBackground(r, g, b) => {
+                    style.background = Some(Color::new(r, g, b, 255))
+                }
+                ColorItem::ResetBackground => style.background = None,
+
+                ColorItem::ForegroundBrightBlack => style.foreground = Some(Color::BLACK),
+                ColorItem::ForegroundBrightRed => style.foreground = Some(Color::RED),
+                ColorItem::ForegroundBrightGreen => style.foreground = Some(Color::GREEN),
+                ColorItem::ForegroundBrightYellow => style.foreground = Some(Color::YELLOW),
+                ColorItem::ForegroundBrightBlue => style.foreground = Some(Color::BLUE),
+                ColorItem::ForegroundBrightMagenta => style.foreground = Some(Color::MAGENTA),
+                ColorItem::ForegroundBrightCyan => style.foreground = Some(Color::CYAN),
+                ColorItem::ForegroundBrightWhite => style.foreground = Some(Color::WHITE),
+
+                ColorItem::BackgroundBrightBlack => style.background = Some(Color::BLACK),
+                ColorItem::BackgroundBrightRed => style.background = Some(Color::RED),
+                ColorItem::BackgroundBrightGreen => style.background = Some(Color::GREEN),
+                ColorItem::BackgroundBrightYellow => style.background = Some(Color::YELLOW),
+                ColorItem::BackgroundBrightBlue => style.background = Some(Color::BLUE),
+                ColorItem::BackgroundBrightMagenta => style.background = Some(Color::MAGENTA),
+                ColorItem::BackgroundBrightCyan => style.background = Some(Color::CYAN),
+                ColorItem::BackgroundBrightWhite => style.background = Some(Color::WHITE),
+            }
+        }
+        style
+    }
+}
+
+fn color_item(input: &str) -> IResult<&str, ColorItem> {
+    let (input, byte) = u8(input)?;
+    match byte {
+        0 => Ok((input, ColorItem::Reset)),
+        1 => Ok((input, ColorItem::Bold)),
+        2 => Ok((input, ColorItem::Dim)),
+        4 => Ok((input, ColorItem::Underline)),
+        22 => Ok((input, ColorItem::ResetBoldDim)),
+        24 => Ok((input, ColorItem::ResetUnderline)),
+
+        30 => Ok((input, ColorItem::ForegroundBlack)),
+        31 => Ok((input, ColorItem::ForegroundRed)),
+        32 => Ok((input, ColorItem::ForegroundGreen)),
+        33 => Ok((input, ColorItem::ForegroundYellow)),
+        34 => Ok((input, ColorItem::ForegroundBlue)),
+        35 => Ok((input, ColorItem::ForegroundMagenta)),
+        36 => Ok((input, ColorItem::ForegroundCyan)),
+        37 => Ok((input, ColorItem::ForegroundWhite)),
+        38 => {
+            let (input, (r, g, b)) = (
+                preceded(char(';'), u8),
+                preceded(char(';'), u8),
+                preceded(char(';'), u8),
+            )
+                .parse(input)?;
+            Ok((input, ColorItem::TruecolorForeground(r, g, b)))
+        }
+        39 => Ok((input, ColorItem::ResetForeground)),
+
+        40 => Ok((input, ColorItem::BackgroundBlack)),
+        41 => Ok((input, ColorItem::BackgroundRed)),
+        42 => Ok((input, ColorItem::BackgroundGreen)),
+        43 => Ok((input, ColorItem::BackgroundYellow)),
+        44 => Ok((input, ColorItem::BackgroundBlue)),
+        45 => Ok((input, ColorItem::BackgroundMagenta)),
+        46 => Ok((input, ColorItem::BackgroundCyan)),
+        47 => Ok((input, ColorItem::BackgroundWhite)),
+        48 => {
+            let (input, (r, g, b)) = (
+                preceded(char(';'), u8),
+                preceded(char(';'), u8),
+                preceded(char(';'), u8),
+            )
+                .parse(input)?;
+            Ok((input, ColorItem::TruecolorBackground(r, g, b)))
+        }
+        49 => Ok((input, ColorItem::ResetBackground)),
+
+        90 => Ok((input, ColorItem::ForegroundBrightBlack)),
+        91 => Ok((input, ColorItem::ForegroundBrightRed)),
+        92 => Ok((input, ColorItem::ForegroundBrightGreen)),
+        93 => Ok((input, ColorItem::ForegroundBrightYellow)),
+        94 => Ok((input, ColorItem::ForegroundBrightBlue)),
+        95 => Ok((input, ColorItem::ForegroundBrightMagenta)),
+        96 => Ok((input, ColorItem::ForegroundBrightCyan)),
+        97 => Ok((input, ColorItem::ForegroundBrightWhite)),
+
+        100 => Ok((input, ColorItem::BackgroundBrightBlack)),
+        101 => Ok((input, ColorItem::BackgroundBrightRed)),
+        102 => Ok((input, ColorItem::BackgroundBrightGreen)),
+        103 => Ok((input, ColorItem::BackgroundBrightYellow)),
+        104 => Ok((input, ColorItem::BackgroundBrightBlue)),
+        105 => Ok((input, ColorItem::BackgroundBrightMagenta)),
+        106 => Ok((input, ColorItem::BackgroundBrightCyan)),
+        107 => Ok((input, ColorItem::BackgroundBrightWhite)),
+
+        _ => fail().parse(input),
+    }
+}
+
+fn style(input: &str) -> IResult<&str, Style> {
+    let (input, items) = separated_list1(char(';'), color_item).parse(input)?;
+    Ok((input, Style::from_iter(items)))
+}
+
+fn style_escaped(input: &str) -> IResult<&str, Style> {
+    delimited(tag("\x1b["), style, char('m')).parse(input)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub enum LogType {
+pub enum LogLevel {
     #[default]
     Info,
     Debug,
@@ -18,52 +226,38 @@ pub enum LogType {
     Fatal,
 }
 
-impl std::fmt::Display for LogType {
+impl std::fmt::Display for LogLevel {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LogType::Info => "info",
-            LogType::Debug => "debug",
-            LogType::Attempt => "attempt",
-            LogType::Success => "success",
-            LogType::Warning => "warning",
-            LogType::Error => "error",
-            LogType::Fatal => "fatal",
+            LogLevel::Info => "info",
+            LogLevel::Debug => "debug",
+            LogLevel::Attempt => "attempt",
+            LogLevel::Success => "success",
+            LogLevel::Warning => "warning",
+            LogLevel::Error => "error",
+            LogLevel::Fatal => "fatal",
         }
         .fmt(f)
     }
 }
 
-#[derive(Debug)]
-pub struct Console {
-    content: RichString,
-    receiver: String,
+#[derive(Debug, Default)]
+pub struct Terminal<const CAP: usize> {
+    content: ArrayString<CAP>,
     pub bottom_offset: f64,
 }
 
-impl Console {
-    #[inline]
-    fn content_size<T: AsRef<ffi::Font>>(
-        &self,
-        _font: T,
-        _font_size: f32,
-        _spacing: f32,
-    ) -> Vector2 {
-        Vector2::zero() // TODO
-    }
-}
-
-impl Console {
-    pub fn new(capacity: usize) -> Self {
-        (Self {
-            content: RichString::with_capacity(capacity),
-            receiver,
+impl<const CAP: usize> Terminal<CAP> {
+    pub fn new() -> Self {
+        Self {
+            content: ArrayString::new(),
             bottom_offset: 0.0,
-        },)
+        }
     }
 
     /// NOTE: You will need to append with newline
-    fn push_log(&mut self, text: &str) {
+    pub fn push(&mut self, text: &str) {
         if text.is_empty() {
             return;
         }
@@ -77,8 +271,11 @@ impl Console {
                         !self.content.is_empty(),
                         "if `line` exceeds capacity all by itself, this branch shouldn't have been reached"
                     );
-                    match self.content.find('\n') {
-                        Some(n) => self.content.replace_range(..n + '\n'.len_utf8(), ""),
+                    match self.content.find('\n').map(|n| n + '\n'.len_utf8()) {
+                        Some(n) => {
+                            unsafe { self.content.as_bytes_mut() }.rotate_left(n);
+                            self.content.truncate(self.content.len() - n);
+                        }
                         None => self.content.clear(),
                     }
                 }
@@ -93,20 +290,23 @@ impl Console {
     }
 
     #[inline]
-    pub const fn content_str(&self) -> &RichStr {
-        self.content.as_rich_str()
+    pub fn content_str(&self) -> &str {
+        self.content.as_str()
     }
 
     #[inline]
-    pub fn displayable_lines(&self, theme: &Theme) -> usize {
-        ((self.panel.content_bounds(theme).height()
-            + /* Off by one otherwise */ theme.console_font.line_spacing)
-            / theme.console_font.line_height()) as usize
+    pub fn displayable_lines(height: f32, font_size: f32, line_spacing: f32) -> usize {
+        ((height + /* Off by one otherwise */ line_spacing) / (font_size + line_spacing)) as usize
     }
 
-    pub fn visible_content(&self, theme: &Theme) -> impl Iterator<Item = (ColorRef, &str)> {
+    pub fn visible_content(
+        &self,
+        height: f32,
+        font_size: f32,
+        line_spacing: f32,
+    ) -> impl Iterator<Item = (Style, &str)> {
         const MAX_ROW: f64 = (usize::MAX as f64).next_down();
-        let mut last_color = ColorRef::Theme(ColorId::Foreground);
+        let lines = Self::displayable_lines(height, font_size, line_spacing);
         self.content
             .split_inclusive('\n')
             .skip(
@@ -114,141 +314,52 @@ impl Console {
                     .lines()
                     .count()
                     .saturating_sub(self.bottom_offset.trunc().clamp(0.0, MAX_ROW) as usize)
-                    .saturating_sub(self.displayable_lines(theme)),
+                    .saturating_sub(lines),
             )
-            .take(self.displayable_lines(theme))
-            .flat_map(|line| RichStr::new(line).iter())
-            .map(move |item| match item {
-                Ok((color, text)) => {
-                    if let Some(color) = color {
-                        last_color = color;
-                    }
-                    (last_color, text)
-                }
-                Err(e) => panic!("{e}"),
+            .take(lines)
+            .flat_map(|line| {
+                many0((style_escaped, is_not(&['\x1b'][..])))
+                    .parse(line)
+                    .map(|(_, x)| x)
+                    .unwrap_or_else(|e| panic!("{e}"))
             })
     }
 
-    pub fn update_recv(&mut self) {
-        self.push_log(self.receiver.try_iter().collect::<String>().as_str());
-    }
-
-    pub fn tick(&mut self, theme: &Theme, input: &Inputs, graphs: &GraphList) {
-        self.bottom_offset = (self.bottom_offset + input.scroll_console as f64).clamp(
-            0.0,
-            self.content_str()
-                .lines()
-                .count()
-                .saturating_sub(self.displayable_lines(theme)) as f64,
-        );
-
-        let Vector2 { mut x, mut y } = self.panel.content_bounds(theme).min;
+    /// Only draws the text content, not the container
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw(
+        &self,
+        d: &mut impl RaylibDraw,
+        font: &Font,
+        font_size: f32,
+        spacing: f32,
+        line_spacing: f32,
+        default_color: Color,
+        bounds: Rectangle,
+    ) {
+        let mut x = bounds.x;
         let left = x;
-        for (_, text) in self.visible_content(theme) {
-            let text_size = theme.console_font.measure_text(text);
-            if Rectangle::new(x, y, text_size.x, text_size.y)
-                .check_collision_point_rec(input.cursor)
-                && let Ok(hyper_ref) = text.parse::<HyperRef>()
-            {
-                match hyper_ref {
-                    HyperRef::Gate(_gate_ref) => {
-                        // TODO
-                    }
-
-                    HyperRef::Tool(_tool_ref) => {
-                        // TODO
-                    }
-
-                    HyperRef::Position(_position_ref) => {
-                        // TODO
-                    }
-
-                    HyperRef::Graph(graph_ref) => {
-                        graph_ref.deref_with(graphs, |_g, _borrow| {
-                            // TODO
-                        });
-                    }
-
-                    HyperRef::Node(node_ref) => {
-                        node_ref.deref_with(graphs, |_g, _borrow, _node| {
-                            // TODO
-                        });
-                    }
-
-                    HyperRef::Wire(wire_ref) => {
-                        wire_ref.deref_with(graphs, |_g, _borrow, _wire| {
-                            // TODO
-                        });
-                    }
-                }
-            }
-            if text.ends_with('\n') {
-                y += theme.console_font.line_height();
-                x = left;
+        let mut y = bounds.y;
+        for (style, text) in self.visible_content(bounds.height, font_size, line_spacing) {
+            d.draw_text_ex(
+                font,
+                &self.content,
+                Vector2::new(x, y),
+                font_size,
+                spacing,
+                style.foreground.unwrap_or(default_color),
+            );
+            let (prev_lines, last_line) = match text.rsplit_once('\n') {
+                Some((prev, last)) => (prev.lines().count(), last),
+                None => (0, text),
+            };
+            let size = font.measure_text(last_line, font_size, spacing);
+            if prev_lines != 0 {
+                y += prev_lines as f32 * (font_size + line_spacing);
+                x = left + size.x;
             } else {
-                x += theme.console_font.measure_text(text).x;
+                x += size.x;
             }
         }
-    }
-
-    pub fn draw<D>(
-        &self,
-        d: &mut D,
-        theme: &Theme,
-        input: &Inputs,
-        graphs: &GraphList,
-        tabs: &TabList,
-        toolpane: &ToolPane,
-    ) where
-        D: RaylibDraw,
-    {
-        self.panel.draw(d, theme, move |d, bounds, theme| {
-            let mut x = bounds.min.x;
-            let mut y = bounds.max.y
-                - self.displayable_lines(theme) as f32 * theme.console_font.line_height();
-            let left = x;
-            for (color, text) in self.visible_content(theme) {
-                let size = theme.console_font.measure_text(text);
-                let hyper_rec = IRect::new(x as i32, y as i32, size.x as i32, size.y as i32);
-                let is_live = if let Ok(hr) = text.parse::<HyperRef>() {
-                    let is_live = match hr {
-                        HyperRef::Gate(_) => Some(()),
-                        HyperRef::Tool(_) => Some(()),
-                        HyperRef::Position(_) => Some(()),
-                        HyperRef::Graph(graph_ref) => graph_ref.deref_with(graphs, |_, _| {}),
-                        HyperRef::Node(node_ref) => node_ref.deref_with(graphs, |_, _, _| {}),
-                        HyperRef::Wire(wire_ref) => wire_ref.deref_with(graphs, |_, _, _| {}),
-                    }
-                    .is_some();
-
-                    if is_live
-                        && IBounds::from(hyper_rec).contains(input.cursor.as_ivec2())
-                        && let Ok(hr) = text.parse::<HyperRef>()
-                    {
-                        hr.draw_link(d, hyper_rec, theme, graphs, tabs, toolpane);
-                    }
-
-                    Some(is_live)
-                } else {
-                    None
-                };
-                theme.console_font.draw_text(
-                    d,
-                    text,
-                    rvec2(x, y),
-                    if is_live.is_none_or(|x| x) {
-                        color.get(theme)
-                    } else {
-                        theme.dead_link
-                    },
-                );
-                if text.ends_with('\n') {
-                    y += theme.console_font.line_height();
-                    x = left;
-                } else {
-                    x += size.x;
-                }
-            }
-        });
     }
 }

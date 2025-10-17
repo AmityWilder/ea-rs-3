@@ -4,4 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+arrayvec = "0.7.6"
+nom = "8.0.0"
 raylib = "5.5.1"
+ext-trait = "2.0.1"

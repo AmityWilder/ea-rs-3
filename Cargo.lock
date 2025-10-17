@@ -484,6 +484,9 @@ dependencies = [
 name = "rl_term"
 version = "0.1.0"
 dependencies = [
+ "arrayvec",
+ "ext-trait",
+ "nom 8.0.0",
  "raylib",
 ]
 
