@@ -5,7 +5,7 @@ use crate::{
         node::{Gate, Node, NodeId},
         wire::{Elbow, Flow, Wire, WireId},
     },
-    ivec::IVec2,
+    ivec::{IBounds, IVec2},
     logln,
 };
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -104,6 +104,50 @@ macro_rules! dbg_ord_prinln {
         #[cfg(feature = "dbg_order_algorithm")]
         println!($($args)*);
     }};
+}
+
+#[derive(Debug, Clone)]
+enum NodesIn<'a> {
+    ByNode {
+        iter: Values<'a, NodeId, Node>,
+        bounds: IBounds,
+    },
+    ByPos {
+        iter: std::ops::Range<i32>,
+        width: i32,
+        graph: &'a Graph,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct NodesInIter<'a>(NodesIn<'a>);
+
+impl<'a> Iterator for NodesInIter<'a> {
+    type Item = &'a Node;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0 {
+            NodesIn::ByNode {
+                ref mut iter,
+                ref bounds,
+            } => iter.find(|node| bounds.contains(Graph::world_to_grid(node.position))),
+
+            NodesIn::ByPos {
+                ref mut iter,
+                width,
+                graph,
+            } => iter.find_map(|i| graph.node_at(IVec2::new(i % width, i / width))),
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match &self.0 {
+            NodesIn::ByNode { iter, .. } => iter.size_hint(),
+            NodesIn::ByPos { iter, .. } => iter.size_hint(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -239,6 +283,24 @@ impl Graph {
             Some(&id) => Some(&mut self[&id]),
             None => None,
         }
+    }
+
+    #[inline]
+    pub fn nodes_in(&mut self, grid_rec: IBounds) -> NodesInIter<'_> {
+        NodesInIter(
+            if usize::try_from(grid_rec.area()).unwrap() > self.nodes.len() {
+                NodesIn::ByNode {
+                    iter: self.nodes.values(),
+                    bounds: grid_rec,
+                }
+            } else {
+                NodesIn::ByPos {
+                    iter: 0..grid_rec.area(),
+                    width: grid_rec.width(),
+                    graph: self,
+                }
+            },
+        )
     }
 
     #[inline]

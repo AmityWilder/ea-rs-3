@@ -9,7 +9,7 @@ use crate::{
     ui::Panel,
 };
 use raylib::prelude::*;
-use rustc_hash::FxHashSet;
+use rustc_hash::FxHashMap;
 use std::sync::{Weak, nonpoison::RwLock};
 
 #[derive(Debug)]
@@ -18,8 +18,8 @@ pub struct EditorTab {
     zoom_exp: f32,
     grid: RenderTexture2D,
     dirty: bool,
+    pub selection: FxHashMap<NodeId, u8>,
     pub graph: Weak<RwLock<Graph>>,
-    pub selection: FxHashSet<NodeId>,
 }
 
 impl EditorTab {
@@ -36,8 +36,8 @@ impl EditorTab {
             zoom_exp: 0.0,
             grid,
             dirty: true,
+            selection: FxHashMap::default(),
             graph,
-            selection: FxHashSet::default(),
         })
     }
 
@@ -193,6 +193,7 @@ impl EditorTab {
                 toolpane.gate,
                 toolpane.elbow,
                 input,
+                &mut self.selection,
                 &mut graph,
                 cursor_world_pos,
                 snapped_cursor_world_pos,

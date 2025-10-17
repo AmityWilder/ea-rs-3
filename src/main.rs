@@ -279,20 +279,20 @@ fn main() {
         } else if std::ptr::eq(focused_panel, &properties.panel) {
             properties.tick(&theme, |properties, bounds, theme| {
                 let mut y = bounds.min.y;
-                if let Tool::Edit(tool::Edit {
-                    target: Some(tool::EditDragging { id, .. }),
-                }) = &toolpane.tool
-                    && let Some(Tab::Editor(tab)) = tabs.focused_tab()
-                    && let Some(graph) = tab.graph.upgrade()
-                {
-                    let mut borrow = graph.write();
-                    if let Ok(node) = borrow
-                        .node_mut(id)
-                        .error("edit target should always be valid")
-                    {
-                        y = properties.tick_section(&mut rl, &thread, theme, &input, y, node);
-                    }
-                }
+                // if let Tool::Edit(tool::Edit {
+                //     target: Some(tool::EditDragging { selected: id, .. }),
+                // }) = &toolpane.tool
+                //     && let Some(Tab::Editor(tab)) = tabs.focused_tab()
+                //     && let Some(graph) = tab.graph.upgrade()
+                // {
+                //     let mut borrow = graph.write();
+                //     if let Ok(node) = borrow
+                //         .node_mut(id)
+                //         .error("edit target should always be valid")
+                //     {
+                //         y = properties.tick_section(&mut rl, &thread, theme, &input, y, node);
+                //     }
+                // }
                 y = properties.tick_section(&mut rl, &thread, theme, &input, y, &mut toolpane.tool);
                 y = properties.tick_section(&mut rl, &thread, theme, &input, y, &mut toolpane.gate);
                 _ = y;
@@ -303,8 +303,7 @@ fn main() {
             if let Some(tab) = tabs.focused_tab_mut() {
                 match tab {
                     Tab::Editor(tab) => {
-                        let is_dirty = tab.tick(&mut toolpane, &input);
-                        if is_dirty {
+                        if tab.tick(&mut toolpane, &input) {
                             // refresh immediately on change
                             next_eval_tick = Instant::now();
                         }
@@ -388,17 +387,17 @@ fn main() {
         {
             properties.draw(&mut d, &theme, |properties, d, bounds, theme| {
                 let mut y = bounds.min.y;
-                if let Tool::Edit(tool::Edit {
-                    target: Some(tool::EditDragging { id, .. }),
-                }) = &toolpane.tool
-                    && let Some(Tab::Editor(tab)) = tabs.focused_tab()
-                    && let Some(graph) = tab.graph.upgrade()
-                {
-                    let borrow = graph.read();
-                    if let Ok(node) = borrow.node(id).error("edit target should be valid") {
-                        y = properties.draw_section(d, theme, bounds, y, node);
-                    }
-                }
+                // if let Tool::Edit(tool::Edit {
+                //     target: Some(tool::EditDragging { selected: id, .. }),
+                // }) = &toolpane.tool
+                //     && let Some(Tab::Editor(tab)) = tabs.focused_tab()
+                //     && let Some(graph) = tab.graph.upgrade()
+                // {
+                //     let borrow = graph.read();
+                //     if let Ok(node) = borrow.node(id).error("edit target should be valid") {
+                //         y = properties.draw_section(d, theme, bounds, y, node);
+                //     }
+                // }
                 y = properties.draw_section(d, theme, bounds, y, &toolpane.tool);
                 y = properties.draw_section(d, theme, bounds, y, &toolpane.gate);
                 _ = y;

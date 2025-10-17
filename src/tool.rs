@@ -2,19 +2,20 @@ use crate::{
     GRID_EXTENT, GRID_SIZE,
     console::attempt::*,
     graph::{
-        Graph,
-        node::{Gate, GateId, GateInstance, NodeId},
+        Graph, OutOfIDsError,
+        node::{Gate, GateId, GateInstance, Node, NodeId},
         wire::{Elbow, Flow, Wire},
     },
     icon_sheets::NodeIconSheetId,
     input::Inputs,
-    ivec::{AsIVec2, IVec2},
+    ivec::{AsIVec2, Bounds, IBounds, IVec2},
     tab::EditorTab,
     theme::Theme,
     toolpane::ToolPane,
 };
 use arrayvec::ArrayString;
 use raylib::prelude::*;
+use rustc_hash::FxHashMap;
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
@@ -57,12 +58,12 @@ impl std::str::FromStr for ToolId {
 
 impl ToolId {
     #[inline]
-    pub const fn init(self) -> Tool {
+    pub fn init(self) -> Tool {
         match self {
-            ToolId::Create => Tool::Create(Create::new()),
-            ToolId::Erase => Tool::Erase(Erase::new()),
-            ToolId::Edit => Tool::Edit(Edit::new()),
-            ToolId::Interact => Tool::Interact(Interact::new()),
+            ToolId::Create => Tool::Create(Create::default()),
+            ToolId::Erase => Tool::Erase(Erase::default()),
+            ToolId::Edit => Tool::Edit(Edit::default()),
+            ToolId::Interact => Tool::Interact(Interact::default()),
         }
     }
 }
@@ -138,10 +139,6 @@ pub struct Create {
 }
 
 impl Create {
-    pub const fn new() -> Self {
-        Self { current_node: None }
-    }
-
     pub fn tick(
         &mut self,
         toolpane_gate: Gate,
@@ -244,7 +241,9 @@ impl Create {
                 node.gate().as_gate().id(),
                 sheet_and_width,
                 theme.background,
-                tab.selection.contains(node.id()).then_some(theme.interact),
+                tab.selection
+                    .contains_key(node.id())
+                    .then_some(theme.interact),
                 if node.state() {
                     theme.active
                 } else {
@@ -316,10 +315,6 @@ impl Create {
 pub struct Erase {}
 
 impl Erase {
-    pub const fn new() -> Self {
-        Self {}
-    }
-
     pub fn tick(
         &mut self,
         input: &Inputs,
@@ -362,7 +357,9 @@ impl Erase {
                 node.gate().as_gate().id(),
                 sheet_and_width,
                 theme.background,
-                tab.selection.contains(node.id()).then_some(theme.interact),
+                tab.selection
+                    .contains_key(node.id())
+                    .then_some(theme.interact),
                 if node.state() {
                     theme.active
                 } else {
@@ -398,58 +395,106 @@ impl Erase {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct EditDragging {
-    pub temp_pos: Vector2,
-    pub id: NodeId,
+pub enum EditDragging {
+    Marquee { start: Vector2 },
+    Translate { start: Vector2 },
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Edit {
-    pub target: Option<EditDragging>,
+    pub dragging: Option<EditDragging>,
 }
 
 impl Edit {
-    pub const fn new() -> Self {
-        Self { target: None }
-    }
-
+    #[allow(clippy::too_many_arguments)]
     pub fn tick(
         &mut self,
         toolpane_gate: Gate,
         input: &Inputs,
+        selection: &mut FxHashMap<NodeId, u8>,
         graph: &mut Graph,
         cursor_world_pos: Vector2,
         snapped_cursor_world_pos: IVec2,
     ) -> bool {
-        let mut _is_dirty = false;
+        let mut is_dirty = false;
 
+        // set gate
         if input.secondary.is_starting()
             && let Some(node) = graph.node_mut_at(Graph::world_to_grid(snapped_cursor_world_pos))
         {
             *node.gate_mut() = GateInstance::from_gate(toolpane_gate);
+            is_dirty = true;
         }
 
-        if input.primary.is_starting()
-            && let Some(node) = graph.node_at(Graph::world_to_grid(snapped_cursor_world_pos))
-        {
-            self.target = Some(EditDragging {
-                temp_pos: Vector2::default(),
-                id: *node.id(),
-            });
+        // begin dragging
+        if input.primary.is_starting() {
+            if let Some(node) = graph.node_at(Graph::world_to_grid(snapped_cursor_world_pos)) {
+                // translate nodes
+                if !selection.contains_key(node.id()) {
+                    // replace selection
+                    selection.clear();
+                    selection.insert(*node.id(), 0);
+                }
+
+                self.dragging = Some(EditDragging::Translate {
+                    start: cursor_world_pos,
+                });
+            } else {
+                // create marquee
+                self.dragging = Some(EditDragging::Marquee {
+                    start: cursor_world_pos,
+                });
+            }
         }
+
+        // finish dragging
         if input.primary.is_ending()
-            && let Some(EditDragging { temp_pos: _, id }) = self.target.take()
+            && let Some(dragging) = &self.dragging
         {
-            graph
-                .translate_node(&id, snapped_cursor_world_pos)
-                .issue_error("edit mode target node should be valid");
+            match *dragging {
+                EditDragging::Marquee { start } => {
+                    // add overlapping nodes to selection and store rectangle for visuals
+                    let bounds = Bounds::minmax_points(start, cursor_world_pos);
+
+                    let grid_bounds = IBounds::new(
+                        Graph::world_to_grid(bounds.min.as_ivec2()),
+                        Graph::world_to_grid(bounds.max.as_ivec2()),
+                    );
+
+                    let max_group_id = selection.values().copied().max().unwrap_or(0);
+                    let group_id = max_group_id
+                        .checked_add(1)
+                        .ok_or(OutOfIDsError)
+                        .error("failed to create new group")
+                        .err_info("appending new selection to last group")
+                        .unwrap_or(max_group_id);
+
+                    selection.extend(
+                        graph
+                            .nodes_in(grid_bounds)
+                            .map(Node::id)
+                            .copied()
+                            .zip(std::iter::repeat(group_id)),
+                    );
+                }
+
+                EditDragging::Translate { start } => {
+                    // move all selected
+                    let delta = cursor_world_pos - start;
+                    let idelta = delta.as_ivec2().snap(GRID_SIZE.into());
+
+                    for id in selection.keys() {
+                        if let Ok(node) = graph.node(id).error("all selected nodes should be valid")
+                        {
+                            graph.translate_node(id, node.position() + idelta).unwrap(/* covered by if let Ok() */);
+                        }
+                    }
+                }
+            }
+            self.dragging = None;
         }
 
-        if let Some(EditDragging { temp_pos, id: _ }) = self.target.as_mut() {
-            *temp_pos = cursor_world_pos - GRID_EXTENT;
-        }
-
-        _is_dirty
+        is_dirty
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -463,51 +508,96 @@ impl Edit {
         tab: &EditorTab,
         sheet_and_width: Option<(&Texture2D, i32)>,
     ) {
+        let cursor_world_pos = tab.screen_to_world(input.cursor);
+
+        let mut selection_groups: [Option<(Bounds, bool)>; _] = [None; u8::MAX as usize];
+        for (id, &group) in &tab.selection {
+            if let Ok(node) = graph.node(id).error("all selected nodes should be valid") {
+                let pos = node.position().as_vec2();
+                let item = Bounds::new(pos, pos + rvec2(GRID_SIZE, GRID_SIZE));
+                let bounds = &mut selection_groups[group as usize];
+                if let Some((bounds, multiple)) = bounds {
+                    bounds.include_bounds(item);
+                    *multiple = true;
+                } else {
+                    *bounds = Some((item, false));
+                }
+            }
+        }
+        for bounds in selection_groups.into_iter().filter_map(|x| match x {
+            Some((x, true)) => Some(x),
+            _ => None,
+        }) {
+            d.draw_rectangle_rec(Rectangle::from(bounds), theme.interact.alpha(0.2));
+        }
+
         draw_wires(d, graph, theme.active, theme.foreground);
 
-        if let Some(EditDragging { temp_pos, id }) = &self.target {
-            for (wire, flow) in graph.wires_of(id) {
-                let (start_pos, end_pos) = match flow {
-                    Flow::Input => (
-                        graph
-                            .node(wire.src())
-                            .fatal("wire src should always be valid")
-                            .position()
-                            .as_vec2()
-                            + GRID_EXTENT,
-                        *temp_pos + GRID_EXTENT,
-                    ),
-                    Flow::Output => (
-                        *temp_pos + GRID_EXTENT,
-                        graph
-                            .node(wire.dst())
-                            .fatal("wire dst should always be valid")
-                            .position()
-                            .as_vec2()
-                            + GRID_EXTENT,
-                    ),
-                    Flow::Loop => {
-                        todo!()
-                    }
-                };
-                Wire::draw_immediate(d, start_pos, end_pos, wire.elbow, theme.special);
+        if let Some(dragging) = &self.dragging {
+            match dragging {
+                EditDragging::Marquee { start } => {
+                    d.draw_rectangle_rec(
+                        Rectangle::from(Bounds::minmax_points(*start, cursor_world_pos)),
+                        theme.interact.alpha(0.2),
+                    );
+                }
+
+                EditDragging::Translate { start: _ } => {
+                    // for id in &self.selection_nodes {
+                    //     for (wire, flow) in graph.wires_of(id) {
+                    //         let (start_pos, end_pos) = match flow {
+                    //             Flow::Input => (
+                    //                 graph
+                    //                     .node(wire.src())
+                    //                     .fatal("wire src should always be valid")
+                    //                     .position()
+                    //                     .as_vec2()
+                    //                     + GRID_EXTENT,
+                    //                 *temp_pos + GRID_EXTENT,
+                    //             ),
+                    //             Flow::Output => (
+                    //                 *temp_pos + GRID_EXTENT,
+                    //                 graph
+                    //                     .node(wire.dst())
+                    //                     .fatal("wire dst should always be valid")
+                    //                     .position()
+                    //                     .as_vec2()
+                    //                     + GRID_EXTENT,
+                    //             ),
+                    //             Flow::Loop => {
+                    //                 todo!()
+                    //             }
+                    //         };
+                    //         Wire::draw_immediate(d, start_pos, end_pos, wire.elbow, theme.special);
+                    //     }
+                    //     let node = graph.node(id).fatal("node being dragged should be valid");
+                    //     let rec = Rectangle {
+                    //         x: temp_pos.x,
+                    //         y: temp_pos.y,
+                    //         width: GRID_SIZE.into(),
+                    //         height: GRID_SIZE.into(),
+                    //     };
+                    //     let color = theme.special;
+                    //     if let Some((sheet, icon_width)) = sheet_and_width {
+                    //         let gate_id = node.gate().as_gate().id();
+                    //         let cell = gate_id.icon_cell_irec(NodeIconSheetId::Basic, icon_width);
+                    //         d.draw_texture_pro(
+                    //             sheet,
+                    //             cell.as_rec(),
+                    //             rec,
+                    //             Vector2::zero(),
+                    //             0.0,
+                    //             color,
+                    //         );
+                    //     } else {
+                    //         d.draw_rectangle_rec(rec, color);
+                    //     }
+                    // }
+                }
             }
-            let node = graph.node(id).fatal("node being dragged should be valid");
-            let rec = Rectangle {
-                x: temp_pos.x,
-                y: temp_pos.y,
-                width: GRID_SIZE.into(),
-                height: GRID_SIZE.into(),
-            };
-            let color = theme.special;
-            if let Some((sheet, icon_width)) = sheet_and_width {
-                let gate_id = node.gate().as_gate().id();
-                let cell = gate_id.icon_cell_irec(NodeIconSheetId::Basic, icon_width);
-                d.draw_texture_pro(sheet, cell.as_rec(), rec, Vector2::zero(), 0.0, color);
-            } else {
-                d.draw_rectangle_rec(rec, color);
-            }
-        } else if let Some(hovered) = graph.node_at(Graph::world_to_grid(
+        }
+
+        if let Some(hovered) = graph.node_at(Graph::world_to_grid(
             tab.screen_to_world(input.cursor)
                 .as_ivec2()
                 .snap(GRID_SIZE.into()),
@@ -527,21 +617,45 @@ impl Edit {
             }
         }
 
+        let translate_delta = if let Some(EditDragging::Translate { start }) = self.dragging {
+            Some(cursor_world_pos - start)
+        } else {
+            None
+        };
         for node in graph.nodes_iter() {
+            let is_selected = tab.selection.contains_key(node.id());
+            let base_color = if node.state() {
+                theme.active
+            } else {
+                theme.foreground
+            };
+            let (alpha, highlight) = match (is_selected, translate_delta.is_some()) {
+                (true, true) => (Some(0.25), None),
+                (true, false) => (None, Some(theme.interact)),
+                (false, _) => (None, None),
+            };
             draw_node(
                 d,
                 node.position().as_vec2(),
                 node.gate().as_gate().id(),
                 sheet_and_width,
                 theme.background,
-                tab.selection.contains(node.id()).then_some(theme.interact),
-                if node.state() {
-                    theme.active
-                } else {
-                    theme.foreground
-                },
+                highlight,
+                alpha.map_or(base_color, |a| base_color.alpha(a)),
                 ntd_color(*node.gate(), theme),
             );
+            if is_selected && let Some(delta) = translate_delta {
+                draw_node(
+                    d,
+                    node.position().as_vec2() + delta,
+                    node.gate().as_gate().id(),
+                    sheet_and_width,
+                    theme.background,
+                    Some(theme.interact),
+                    base_color,
+                    ntd_color(*node.gate(), theme),
+                );
+            }
         }
 
         if let Some(node) = graph.node_at(Graph::world_to_grid(
@@ -573,10 +687,6 @@ impl Edit {
 pub struct Interact {}
 
 impl Interact {
-    pub const fn new() -> Self {
-        Self {}
-    }
-
     pub fn tick(
         &mut self,
         input: &Inputs,
@@ -758,11 +868,13 @@ impl Tool {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn tick(
         &mut self,
         toolpane_gate: Gate,
         toolpane_elbow: Elbow,
         input: &Inputs,
+        selection: &mut FxHashMap<NodeId, u8>,
         graph: &mut Graph,
         cursor_world_pos: Vector2,
         snapped_cursor_world_pos: IVec2,
@@ -782,6 +894,7 @@ impl Tool {
             Tool::Edit(tool) => tool.tick(
                 toolpane_gate,
                 input,
+                selection,
                 graph,
                 cursor_world_pos,
                 snapped_cursor_world_pos,

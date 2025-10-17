@@ -14,6 +14,7 @@ pub struct Inputs {
     pub parallel: Event,
     pub zoom: f32,
     pub scroll_console: f32,
+    /// screenspace
     pub cursor: Vector2,
     pub pan: Vector2,
     pub or_gate_hotkey: Event,

@@ -1,3 +1,4 @@
+use ext_trait::extension;
 use raylib::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -32,9 +33,78 @@ impl From<Rectangle> for Bounds {
     }
 }
 
+impl Extend<Vector2> for Bounds {
+    #[inline]
+    fn extend<T: IntoIterator<Item = Vector2>>(&mut self, iter: T) {
+        for p in iter {
+            self.include_point(p);
+        }
+    }
+}
+
+impl Extend<Self> for Bounds {
+    #[inline]
+    fn extend<T: IntoIterator<Item = Self>>(&mut self, iter: T) {
+        for item in iter {
+            self.include_bounds(item);
+        }
+    }
+}
+
 impl Bounds {
     pub const fn new(min: Vector2, max: Vector2) -> Self {
         Self { min, max }
+    }
+
+    #[inline]
+    pub const fn minmax_points(p1: Vector2, p2: Vector2) -> Self {
+        let (xmin, xmax) = if p1.x < p2.x {
+            (p1.x, p2.x)
+        } else {
+            (p2.x, p1.x)
+        };
+        let (ymin, ymax) = if p1.y < p2.y {
+            (p1.y, p2.y)
+        } else {
+            (p2.y, p1.y)
+        };
+        Self {
+            min: Vector2 { x: xmin, y: ymin },
+            max: Vector2 { x: xmax, y: ymax },
+        }
+    }
+
+    #[inline]
+    pub const fn include_point(&mut self, p: Vector2) {
+        if p.x < self.min.x {
+            self.min.x = p.x;
+        }
+        if p.y < self.min.y {
+            self.min.y = p.y;
+        }
+        if p.x > self.max.x {
+            self.max.x = p.x;
+        }
+        if p.y > self.max.y {
+            self.max.y = p.y;
+        }
+    }
+
+    #[inline]
+    pub const fn include_bounds(&mut self, other: Self) {
+        debug_assert!(other.min.x <= other.max.x && other.min.y <= other.max.y);
+        if other.min.x < self.min.x {
+            self.min.x = other.min.x;
+        }
+        if other.min.y < self.min.y {
+            self.min.y = other.min.y;
+        }
+        if other.max.x > self.max.x {
+            self.max.x = other.max.x;
+        }
+        if other.max.y > self.max.y {
+            self.max.y = other.max.y;
+        }
     }
 
     #[inline]
@@ -87,6 +157,13 @@ impl std::ops::Add for IVec2 {
     }
 }
 
+impl std::iter::Sum for IVec2 {
+    #[inline]
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.reduce(|acc, e| acc + e).unwrap_or_default()
+    }
+}
+
 impl std::ops::AddAssign for IVec2 {
     #[inline]
     fn add_assign(&mut self, rhs: Self) {
@@ -122,6 +199,13 @@ impl std::ops::Mul for IVec2 {
             x: self.x * rhs.x,
             y: self.y * rhs.y,
         }
+    }
+}
+
+impl std::iter::Product for IVec2 {
+    #[inline]
+    fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.reduce(|acc, e| acc * e).unwrap_or(Self::new(1, 1))
     }
 }
 
@@ -234,11 +318,8 @@ impl std::hash::Hash for IVec2 {
     }
 }
 
-pub trait AsIVec2 {
-    fn as_ivec2(&self) -> IVec2;
-}
-
-impl AsIVec2 for Vector2 {
+#[extension(pub trait AsIVec2)]
+impl Vector2 {
     #[inline]
     fn as_ivec2(&self) -> IVec2 {
         IVec2::from_vec2(*self)
@@ -252,6 +333,10 @@ impl IVec2 {
 
     pub const fn zero() -> Self {
         Self { x: 0, y: 0 }
+    }
+
+    pub const fn one() -> Self {
+        Self { x: 1, y: 1 }
     }
 
     #[inline]
@@ -270,6 +355,7 @@ impl IVec2 {
         }
     }
 
+    #[inline]
     pub const fn snap(self, grid_size: i32) -> Self {
         let x = self.x; // + self.x.signum() * grid_size / 2;
         let y = self.y; // + self.y.signum() * grid_size / 2;
@@ -289,11 +375,8 @@ pub struct IRect {
 }
 
 #[allow(dead_code, reason = "reflexivity with as_rect()")]
-pub trait AsIRect {
-    fn as_irect(&self) -> IRect;
-}
-
-impl AsIRect for Rectangle {
+#[extension(pub trait AsIRect)]
+impl Rectangle {
     #[inline]
     fn as_irect(&self) -> IRect {
         IRect {
@@ -355,23 +438,64 @@ impl From<IRect> for IBounds {
     }
 }
 
+impl Extend<IVec2> for IBounds {
+    #[inline]
+    fn extend<T: IntoIterator<Item = IVec2>>(&mut self, iter: T) {
+        for IVec2 { x, y } in iter {
+            if x < self.min.x {
+                self.min.x = x;
+            }
+            if y < self.min.y {
+                self.min.y = y;
+            }
+            if x > self.max.x {
+                self.max.x = x;
+            }
+            if y > self.max.y {
+                self.max.y = y;
+            }
+        }
+    }
+}
+
+impl Extend<Self> for IBounds {
+    #[inline]
+    fn extend<T: IntoIterator<Item = Self>>(&mut self, iter: T) {
+        for Self { min, max } in iter {
+            debug_assert!(min.x <= max.x && min.y <= max.y);
+            if min.x < self.min.x {
+                self.min.x = min.x;
+            }
+            if min.y < self.min.y {
+                self.min.y = min.y;
+            }
+            if max.x > self.max.x {
+                self.max.x = max.x;
+            }
+            if max.y > self.max.y {
+                self.max.y = max.y;
+            }
+        }
+    }
+}
+
 impl IBounds {
     pub const fn new(min: IVec2, max: IVec2) -> Self {
         Self { min, max }
     }
 
     #[inline]
-    pub fn y(&self) -> std::ops::RangeInclusive<i32> {
+    pub const fn y(&self) -> std::ops::RangeInclusive<i32> {
         self.min.y..=self.max.y
     }
 
     #[inline]
-    pub fn x(&self) -> std::ops::RangeInclusive<i32> {
+    pub const fn x(&self) -> std::ops::RangeInclusive<i32> {
         self.min.x..=self.max.x
     }
 
     #[inline]
-    pub fn contains(&self, p: IVec2) -> bool {
+    pub const fn contains(&self, p: IVec2) -> bool {
         self.min.x <= p.x && p.x < self.max.x && self.min.y <= p.y && p.y < self.max.y
     }
 
@@ -383,5 +507,10 @@ impl IBounds {
     #[inline]
     pub const fn height(&self) -> i32 {
         self.max.y - self.min.y
+    }
+
+    #[inline]
+    pub const fn area(&self) -> i32 {
+        self.width() * self.height()
     }
 }

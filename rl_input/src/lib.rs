@@ -265,11 +265,14 @@ pub trait Source {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
 pub enum Event {
+    #[serde(rename = "up")]
     Inactive,
+    #[serde(rename = "pressed")]
     Starting,
+    #[serde(rename = "down")]
     Active,
+    #[serde(rename = "released")]
     Ending,
 }
 
@@ -496,7 +499,7 @@ pub enum BoolSource {
         src: AxisSource,
         #[serde(with = "OrderingDef")]
         cmp: std::cmp::Ordering,
-        val: f32,
+        val: AxisSource,
     },
     All(Box<[Self]>),
     Any(Box<[Self]>),
@@ -509,9 +512,10 @@ impl Source for BoolSource {
     fn get(&mut self, rl: &RaylibHandle) -> bool {
         match self {
             Self::Event { what, when } => what.get(rl).is(*when),
-            Self::Compare { src, cmp, val } => {
-                src.get(rl).partial_cmp(val).is_some_and(|x| x == *cmp)
-            }
+            Self::Compare { src, cmp, val } => src
+                .get(rl)
+                .partial_cmp(&val.get(rl))
+                .is_some_and(|x| x == *cmp),
             Self::All(items) => items.iter_mut().all(|item| item.get(rl)),
             Self::Any(items) => items.iter_mut().any(|item| item.get(rl)),
             Self::Not(item) => !item.get(rl),
